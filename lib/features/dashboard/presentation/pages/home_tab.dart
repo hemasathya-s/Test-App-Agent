@@ -55,10 +55,13 @@ class HomeTab extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    child: const CircleAvatar(
-                      radius: 20,
-                      backgroundColor: Colors.white,
-                      child: Icon(Icons.person_rounded, color: Colors.black),
+                    child: InkWell(
+                      onTap: () => context.push('/profile'),
+                      child: const CircleAvatar(
+                        radius: 20,
+                        backgroundColor: Colors.white,
+                        child: Icon(Icons.person_rounded, color: Colors.black),
+                      ),
                     ),
                   ),
                 ],

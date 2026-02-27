@@ -17,11 +17,11 @@ class OrderItem {
     this.isRemoved = false,
   });
 
-  OrderItem copyWith({int? quantity, bool? isRemoved}) {
+  OrderItem copyWith({String? name, double? price, int? quantity, bool? isRemoved}) {
     return OrderItem(
       id: id,
-      name: name,
-      price: price,
+      name: name ?? this.name,
+      price: price ?? this.price,
       quantity: quantity ?? this.quantity,
       isNew: isNew,
       isRemoved: isRemoved ?? this.isRemoved,
@@ -78,20 +78,33 @@ class OrderModificationController
       name: name,
       price: price,
       isNew: true,
+      quantity: 1,
     );
     state = state.copyWith(items: [...state.items, newItem]);
+  }
+
+  void replaceItem(String id, String newName, double newPrice) {
+    state = state.copyWith(
+      items: state.items
+          .map((i) => i.id == id ? i.copyWith(name: newName, price: newPrice, quantity: 1, isRemoved: false) : i)
+          .toList(),
+    );
   }
 
   void removeItem(String id) {
     state = state.copyWith(
       items: state.items
-          .map((i) => i.id == id ? i.copyWith(isRemoved: true) : i)
+          .map((i) => i.id == id ? i.copyWith(isRemoved: true, quantity: 0) : i)
           .toList(),
     );
   }
 
   void updateQuantity(String id, int qty) {
-    if (qty <= 0) return;
+    if (qty < 0) return;
+    if (qty == 0) {
+      removeItem(id);
+      return;
+    }
     state = state.copyWith(
       items: state.items
           .map((i) => i.id == id ? i.copyWith(quantity: qty) : i)
