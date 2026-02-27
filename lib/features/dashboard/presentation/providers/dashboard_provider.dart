@@ -1,28 +1,34 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 class DashboardState {
   final int currentTabIndex;
   final bool isAvailable;
+  final Set<String> acceptedJobIds;
 
   const DashboardState({
     this.currentTabIndex = 0,
     this.isAvailable = false,
+    this.acceptedJobIds = const {},
   });
 
   DashboardState copyWith({
     int? currentTabIndex,
     bool? isAvailable,
+    Set<String>? acceptedJobIds,
   }) {
     return DashboardState(
       currentTabIndex: currentTabIndex ?? this.currentTabIndex,
       isAvailable: isAvailable ?? this.isAvailable,
+      acceptedJobIds: acceptedJobIds ?? this.acceptedJobIds,
     );
   }
 }
 
-class DashboardController extends StateNotifier<DashboardState> {
-  DashboardController() : super(const DashboardState());
+class DashboardController extends Notifier<DashboardState> {
+  @override
+  DashboardState build() {
+    return const DashboardState();
+  }
 
   void setTabIndex(int index) {
     state = state.copyWith(currentTabIndex: index);
@@ -31,8 +37,14 @@ class DashboardController extends StateNotifier<DashboardState> {
   void toggleAvailability(bool value) {
     state = state.copyWith(isAvailable: value);
   }
+
+  void acceptJob(String jobId) {
+    state = state.copyWith(
+      acceptedJobIds: {...state.acceptedJobIds, jobId},
+    );
+  }
 }
 
-final dashboardProvider = StateNotifierProvider<DashboardController, DashboardState>((ref) {
+final dashboardProvider = NotifierProvider<DashboardController, DashboardState>(() {
   return DashboardController();
 });

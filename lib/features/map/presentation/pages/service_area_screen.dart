@@ -12,7 +12,7 @@ class ServiceAreaScreen extends StatefulWidget {
 }
 
 class _ServiceAreaScreenState extends State<ServiceAreaScreen> {
-  double _radius = 15.0; // km
+  final double _radius = 15.0; // km - now fixed as it's view only
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +20,7 @@ class _ServiceAreaScreenState extends State<ServiceAreaScreen> {
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         title: Text(
-          'Define Service Zone',
+          'Service Zone',
           style: GoogleFonts.outfit(
             color: AppTheme.textPrimary,
             fontWeight: FontWeight.w600,
@@ -32,14 +32,6 @@ class _ServiceAreaScreenState extends State<ServiceAreaScreen> {
            icon: const Icon(Icons.close, color: Colors.black),
            onPressed: () => context.pop(),
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              setState(() => _radius = 15.0);
-            },
-            child: const Text('Reset', style: TextStyle(color: AppTheme.primaryColor)),
-          )
-        ],
       ),
       body: Stack(
         children: [
@@ -66,7 +58,7 @@ class _ServiceAreaScreenState extends State<ServiceAreaScreen> {
             ),
           ),
           
-          // Controls Sheet
+          // Info Sheet (View Only)
           Positioned(
             bottom: 0,
             left: 0,
@@ -102,42 +94,15 @@ class _ServiceAreaScreenState extends State<ServiceAreaScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  Slider(
-                    value: _radius,
-                    min: 1,
-                    max: 50,
-                    divisions: 49,
-                    activeColor: AppTheme.primaryColor,
-                    onChanged: (val) {
-                      setState(() => _radius = val);
-                    },
-                  ),
                   const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('1 km', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
-                      Text('50 km', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () {
-                       context.pop();
-                       ScaffoldMessenger.of(context).showSnackBar(
-                         SnackBar(content: Text('Service zone updated to ${_radius.toInt()} km')),
-                       );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryColor,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                  Text(
+                    'This is your current active service area.',
+                    style: GoogleFonts.outfit(
+                      color: AppTheme.textSecondary,
+                      fontSize: 14,
                     ),
-                    child: const Text('Save Service Zone'),
                   ),
+                  const SizedBox(height: 16),
                 ],
               ),
             ),

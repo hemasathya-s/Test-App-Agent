@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/mock_map_widget.dart';
 import '../providers/job_provider.dart';
+import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 
 class NewJobRequestScreen extends ConsumerWidget {
   const NewJobRequestScreen({super.key});
@@ -136,34 +137,26 @@ class NewJobRequestScreen extends ConsumerWidget {
                                   borderRadius: BorderRadius.circular(16),
                                 ),
                               ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(
-                                    Icons.close,
-                                    color: AppTheme.textPrimary,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Decline',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppTheme.textPrimary,
-                                    ),
-                                  ),
-                                ],
+                              child: Text(
+                                'Decline',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textPrimary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ),
-                          const SizedBox(width: 16),
+                          const SizedBox(width: 12),
                           Expanded(
                             child: ElevatedButton(
                               onPressed: () {
+                                // Mark as accepted in dashboard state
+                                ref.read(dashboardProvider.notifier).acceptJob('Ac Repair & Service');
+                                
                                 controller.acceptJob();
-                                context.pushReplacement(
-                                  '/job-details',
-                                ); // Go to job details flow
+                                context.pop(); // Return to home
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppTheme.primaryColor,
@@ -175,23 +168,13 @@ class NewJobRequestScreen extends ConsumerWidget {
                                 ),
                                 elevation: 0,
                               ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    'Accept Job',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  const Icon(
-                                    Icons.check_circle,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
-                                ],
+                              child: Text(
+                                'Accept',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ),

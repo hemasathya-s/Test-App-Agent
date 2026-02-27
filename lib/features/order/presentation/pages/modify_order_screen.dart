@@ -13,6 +13,15 @@ class ModifyOrderScreen extends ConsumerWidget {
     final state = ref.watch(orderModificationProvider);
     final controller = ref.read(orderModificationProvider.notifier);
 
+    // Mock Product List
+    final products = [
+      {'name': 'Deep Cleaning (3h)', 'price': 90.0},
+      {'name': 'AC Servicing (Split)', 'price': 45.0},
+      {'name': 'Water Purifier Filter', 'price': 25.0},
+      {'name': 'Kitchen Sink Unclogging', 'price': 35.0},
+      {'name': 'Furniture Polish', 'price': 55.0},
+    ];
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -125,9 +134,14 @@ class ModifyOrderScreen extends ConsumerWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Text(
-                      'Clear all',
-                      style: GoogleFonts.outfit(color: AppTheme.primaryColor),
+                    GestureDetector(
+                      onTap: () {
+                         // Logic to clear items can go here
+                      },
+                      child: Text(
+                        'Clear all',
+                        style: GoogleFonts.outfit(color: AppTheme.primaryColor),
+                      ),
                     ),
                   ],
                 ),
@@ -243,39 +257,49 @@ class ModifyOrderScreen extends ConsumerWidget {
                       ),
                     ),
 
-                // Add Item Button
-                InkWell(
-                  onTap: () {
-                    // Mock Add Item
-                    controller.addItem('Deep Cleaning (3h)', 90.0);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: AppTheme.primaryColor,
-                        style: BorderStyle.solid,
-                      ), // dashed border hard to do with standard Border
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.add_circle,
-                          color: AppTheme.primaryColor,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Add another item',
-                          style: GoogleFonts.outfit(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.primaryColor,
+                // Product Dropdown Selection
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppTheme.primaryColor),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<Map<String, dynamic>>(
+                      hint: Row(
+                        children: [
+                          const Icon(Icons.add_circle, color: AppTheme.primaryColor),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Add Item from List',
+                            style: GoogleFonts.outfit(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.primaryColor,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                      isExpanded: true,
+                      icon: const Icon(Icons.arrow_drop_down, color: AppTheme.primaryColor),
+                      items: products.map((product) {
+                        return DropdownMenuItem<Map<String, dynamic>>(
+                          value: product,
+                          child: Text(
+                            '${product['name']} - \$${product['price']}',
+                            style: GoogleFonts.outfit(),
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          controller.addItem(
+                            val['name'] as String,
+                            val['price'] as double,
+                          );
+                        }
+                      },
                     ),
                   ),
                 ),
@@ -388,54 +412,63 @@ class ModifyOrderScreen extends ConsumerWidget {
                       borderSide: BorderSide(color: Colors.grey.shade300),
                     ),
                   ),
-                  onChanged: controller.setNote,
                 ),
-
-                const SizedBox(height: 32),
-                ElevatedButton(
-                  onPressed: () {
-                    context.push('/modification-summary');
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                    minimumSize: const Size(double.infinity, 56),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
-                  child: Text(
-                    'Request Approval',
-                    style: GoogleFonts.outfit(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
+                const SizedBox(height: 100), // Bottom padding
               ],
             ),
           ),
         ],
       ),
+      bottomSheet: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -5),
+            ),
+          ],
+        ),
+        child: ElevatedButton(
+          onPressed: () {
+            // Logic to submit changes
+            context.pop();
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.primaryColor,
+            minimumSize: const Size(double.infinity, 56),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          child: Text(
+            'Submit for Approval',
+            style: GoogleFonts.outfit(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildQtyBtn(
-    IconData icon,
-    VoidCallback onTap, {
-    bool isColor = false,
-  }) {
-    return InkWell(
+  Widget _buildQtyBtn(IconData icon, VoidCallback onTap, {bool isColor = false}) {
+    return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           color: isColor ? AppTheme.primaryColor : Colors.grey[100],
-          shape: BoxShape.circle,
+          borderRadius: BorderRadius.circular(6),
         ),
         child: Icon(
           icon,
           size: 20,
-          color: isColor ? Colors.white : Colors.black,
+          color: isColor ? Colors.white : AppTheme.textPrimary,
         ),
       ),
     );

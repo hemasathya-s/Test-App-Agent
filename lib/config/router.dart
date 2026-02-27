@@ -42,6 +42,10 @@ final router = GoRouter(
       builder: (context, state) => const NavigationScreen(),
     ),
     GoRoute(
+      path: '/agent-tracking',
+      builder: (context, state) => const NavigationScreen(),
+    ),
+    GoRoute(
       path: '/checklist',
       builder: (context, state) => const ServiceChecklistScreen(),
     ),

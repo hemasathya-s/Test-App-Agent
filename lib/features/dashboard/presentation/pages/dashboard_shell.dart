@@ -30,20 +30,20 @@ class DashboardShell extends ConsumerWidget {
           const InventoryScreen(),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          showModalBottomSheet(
-            context: context,
-            backgroundColor: Colors.transparent,
-            isScrollControlled: true,
-            builder: (context) => const SosBottomSheet(),
-          );
-        },
-        backgroundColor: Colors.red,
-        elevation: 4,
-        shape: const CircleBorder(),
-        child: const Icon(Icons.sos_rounded, color: Colors.white, size: 28),
-      ),
+      // floatingActionButton: FloatingActionButton(
+      //   onPressed: () {
+      //     showModalBottomSheet(
+      //       context: context,
+      //       backgroundColor: Colors.transparent,
+      //       isScrollControlled: true,
+      //       builder: (context) => const SosBottomSheet(),
+      //     );
+      //   },
+      //   backgroundColor: Colors.red,
+      //   elevation: 4,
+      //   shape: const CircleBorder(),
+      //   child: const Icon(Icons.sos_rounded, color: Colors.white, size: 28),
+      // ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
 
 class SlotManagementScreen extends StatefulWidget {
@@ -11,309 +10,219 @@ class SlotManagementScreen extends StatefulWidget {
 }
 
 class _SlotManagementScreenState extends State<SlotManagementScreen> {
-  DateTime _selectedDate = DateTime.now();
-  
-  // Mock Slots Data
-  final Map<DateTime, List<String>> _slots = {};
-
-  @override
-  void initState() {
-    super.initState();
-    // Seed some mock data
-    final today = DateTime.now();
-    _slots[DateTime(today.year, today.month, today.day)] = ['09:00 AM - 12:00 PM', '02:00 PM - 06:00 PM'];
-  }
-
-  List<String> get _currentSlots {
-    final key = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
-    return _slots[key] ?? [];
-  }
+  // Mock Scheduled Slots Data (Representing Accepted Orders)
+  final List<Map<String, String>> _scheduledSlots = [
+    {
+      'service': 'AC Repair & Service',
+      'time': '09:00 AM - 12:00 PM',
+      'status': 'Upcoming',
+    },
+    {
+      'service': 'Washing Machine Fix',
+      'time': '02:00 PM - 04:00 PM',
+      'status': 'Upcoming',
+    },
+    {
+      'service': 'Refrigerator Checkup',
+      'time': '05:00 PM - 07:00 PM',
+      'status': 'Upcoming',
+    },
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.surfaceColor,
+      backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
         title: Text(
-          'Manage Slots',
+          'Accepted Orders',
           style: GoogleFonts.outfit(
             color: AppTheme.textPrimary,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
           ),
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
+        surfaceTintColor: Colors.transparent,
       ),
       body: Column(
         children: [
-          _buildCalendarStrip(),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(24),
+          // Simplified & Elegant Header
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(30),
+                bottomRight: Radius.circular(30),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 15,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text(
+                  'Overview',
+                  style: GoogleFonts.outfit(
+                    fontSize: 14,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 8),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      'Working Hours',
+                      '${_scheduledSlots.length}',
+                      style: GoogleFonts.outfit(
+                        fontSize: 40,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.primaryColor,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Active Bookings',
                       style: GoogleFonts.outfit(
                         fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w600,
                         color: AppTheme.textPrimary,
                       ),
                     ),
-                    Text(
-                      '${_currentSlots.length} slots added',
-                      style: GoogleFonts.outfit(
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
                   ],
-                ),
-                const SizedBox(height: 16),
-                if (_currentSlots.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 48.0),
-                    child: Center(
-                      child: Text(
-                        'No slots added for this day.',
-                        style: GoogleFonts.outfit(color: AppTheme.textSecondary),
-                      ),
-                    ),
-                  )
-                else
-                  ..._currentSlots.map((slot) => _buildSlotCard(slot)),
-                
-                const SizedBox(height: 24),
-                OutlinedButton.icon(
-                  onPressed: _showAddSlotDialog,
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    side: BorderSide(color: AppTheme.primaryColor, width: 1.5),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  icon: const Icon(Icons.add_circle_outline, color: AppTheme.primaryColor),
-                  label: Text(
-                    'Add New Slot',
-                    style: GoogleFonts.outfit(
-                      color: AppTheme.primaryColor,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
                 ),
               ],
             ),
           ),
-        ],
-      ),
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, -4),
+          
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+              itemCount: _scheduledSlots.length,
+              itemBuilder: (context, index) {
+                final slot = _scheduledSlots[index];
+                return _buildOrderCard(slot);
+              },
             ),
-          ],
-        ),
-        child: ElevatedButton(
-          onPressed: () {
-            // Mock Save Logic
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Availability saved successfully!')),
-            );
-          },
-          style: ElevatedButton.styleFrom(
-             backgroundColor: AppTheme.primaryColor,
-             padding: const EdgeInsets.symmetric(vertical: 16),
-             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
-          child: const Text('Save Changes'),
-        ),
-      ),
-    );
-  }
-  
-  Widget _buildCalendarStrip() {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: SizedBox(
-        height: 90,
-        child: ListView.builder(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: 14, // Next 2 weeks
-          itemBuilder: (context, index) {
-            final date = DateTime.now().add(Duration(days: index));
-            final isSelected = date.day == _selectedDate.day && date.month == _selectedDate.month;
-            
-            return GestureDetector(
-              onTap: () => setState(() => _selectedDate = date),
-              child: Container(
-                margin: const EdgeInsets.only(right: 12),
-                width: 64,
-                decoration: BoxDecoration(
-                  color: isSelected ? AppTheme.primaryColor : Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: isSelected ? AppTheme.primaryColor : Colors.grey.shade200,
-                  ),
-                  boxShadow: isSelected ? [
-                    BoxShadow(
-                      color: AppTheme.primaryColor.withOpacity(0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
-                    )
-                  ] : null,
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      DateFormat('E').format(date),
-                      style: GoogleFonts.outfit(
-                        color: isSelected ? Colors.white : AppTheme.textSecondary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      date.day.toString(),
-                      style: GoogleFonts.outfit(
-                        color: isSelected ? Colors.white : AppTheme.textPrimary,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildSlotCard(String slot) {
+  Widget _buildOrderCard(Map<String, String> slot) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade100),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(Icons.access_time_filled, color: AppTheme.primaryColor, size: 20),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              slot,
-              style: GoogleFonts.outfit(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.edit_outlined, color: AppTheme.textSecondary),
-            onPressed: () {
-              // Edit mock logic
-            },
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
-    );
-  }
-
-  void _showAddSlotDialog() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Add New Slot',
-              style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildTimePickerField('Start Time', '09:00 AM'),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildTimePickerField('End Time', '12:00 PM'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () {
-                // Mock Add Logic
-                final key = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
-                setState(() {
-                  if (_slots[key] == null) _slots[key] = [];
-                  _slots[key]!.add('01:00 PM - 03:00 PM'); // Logic hardcoded for demo
-                });
-                Navigator.pop(context);
-              },
-              child: const Text('Add Slot'),
-            ),
-            const SizedBox(height: 24),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTimePickerField(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade50,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade200),
-          ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: IntrinsicHeight(
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(value, style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
-              const Icon(Icons.keyboard_arrow_down, size: 20),
+              // Visual Accent Line
+              Container(
+                width: 6,
+                color: AppTheme.primaryColor,
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryColor.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: const Icon(
+                          Icons.calendar_today_rounded,
+                          color: AppTheme.primaryColor,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    slot['service'] ?? '',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE3F2FD),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    slot['status'] ?? 'Upcoming',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF1E88E5),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Icon(Icons.access_time_rounded, size: 16, color: Colors.grey.shade400),
+                                const SizedBox(width: 6),
+                                Text(
+                                  slot['time'] ?? '',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 14,
+                                    color: AppTheme.textSecondary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 }
