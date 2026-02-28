@@ -23,8 +23,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     await Future.delayed(const Duration(seconds: 2));
     if (mounted) {
       // Navigate to Login (or Home if already logged in - logic to be added later)
-      // context.go('/login');
-      context.go('/home');
+      context.go('/login');
     }
   }
 
