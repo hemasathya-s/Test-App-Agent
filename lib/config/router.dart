@@ -13,6 +13,7 @@ import '../features/jobs/presentation/pages/service_checklist_screen.dart';
 import '../features/order/presentation/pages/modify_order_screen.dart';
 import '../features/order/presentation/pages/modification_summary_screen.dart';
 import '../features/order/presentation/pages/approval_waiting_screen.dart';
+import '../features/order/presentation/pages/request_tracking_screen.dart';
 import '../features/orders/presentation/pages/orders_history_screen.dart';
 
 final router = GoRouter(
@@ -61,6 +62,10 @@ final router = GoRouter(
     GoRoute(
       path: '/approval-waiting',
       builder: (context, state) => const ApprovalWaitingScreen(),
+    ),
+    GoRoute(
+      path: '/request-tracking',
+      builder: (context, state) => const RequestTrackingScreen(),
     ),
     GoRoute(
       path: '/orders',

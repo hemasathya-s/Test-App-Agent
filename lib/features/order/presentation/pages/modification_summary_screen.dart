@@ -110,7 +110,7 @@ class ModificationSummaryScreen extends ConsumerWidget {
                                 ),
                               ),
                               Text(
-                                '\$${item.price.toStringAsFixed(2)}',
+                                '₹${item.price.toStringAsFixed(2)}',
                                 style: GoogleFonts.outfit(color: Colors.grey),
                               ),
                             ],
@@ -185,7 +185,7 @@ class ModificationSummaryScreen extends ConsumerWidget {
                                 ),
                               ),
                               Text(
-                                '\$${item.price.toStringAsFixed(2)}',
+                                '₹${item.price.toStringAsFixed(2)}',
                                 style: GoogleFonts.outfit(
                                   color: AppTheme.textSecondary,
                                 ),
@@ -263,7 +263,7 @@ class ModificationSummaryScreen extends ConsumerWidget {
                       style: GoogleFonts.outfit(color: AppTheme.textSecondary),
                     ),
                     Text(
-                      '\$${state.newTotal.toStringAsFixed(2)}',
+                      '₹${state.newTotal.toStringAsFixed(2)}',
                       style: GoogleFonts.outfit(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -279,8 +279,16 @@ class ModificationSummaryScreen extends ConsumerWidget {
 
           ElevatedButton(
             onPressed: () {
-              controller.requestApproval();
+              controller.submitRequest();
+              // Navigate to waiting screen as per correct flow
               context.push('/approval-waiting');
+              
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Modification request sent to customer'),
+                  backgroundColor: AppTheme.primaryColor,
+                ),
+              );
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primaryColor,

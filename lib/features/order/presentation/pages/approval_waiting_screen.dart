@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../widgets/modification_status_sheet.dart';
 
 class ApprovalWaitingScreen extends ConsumerStatefulWidget {
   const ApprovalWaitingScreen({super.key});
@@ -16,15 +17,38 @@ class _ApprovalWaitingScreenState extends ConsumerState<ApprovalWaitingScreen> {
   @override
   void initState() {
     super.initState();
-    // Simulate approval delay
-    Future.delayed(const Duration(seconds: 3), () {
+    debugPrint('TEST LOG: ApprovalWaitingScreen initialized. Timer starting...');
+    
+    // Simulate approval delay (4 seconds)
+    Future.delayed(const Duration(seconds: 4), () {
       if (mounted) {
-        // Show success and pop back to job/home
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Changes approved by customer!')),
-        );
-        context.go('/job-details'); // Back to valid flow
+        debugPrint('TEST LOG: Timer finished. Triggering approval simulation.');
+        _onStatusReceived(true); // Simulate Approval for demo
       }
+    });
+  }
+
+  void _onStatusReceived(bool approved) {
+    debugPrint('TEST LOG: Processing status receipt. Approved: $approved');
+    
+    // 1. Pop the waiting screen
+    context.pop();
+
+    // 2. Show the Status Bottom Sheet
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ModificationStatusSheet(
+        isApproved: approved,
+        message: approved
+            ? "The customer has agreed to the new items and prices. You can now proceed with the service."
+            : "The customer declined the changes. Please stick to the original order requirements.",
+      ),
+    ).then((_) {
+      debugPrint('TEST LOG: Status sheet dismissed. Navigating back to Job Details.');
+      // 3. After the sheet is dismissed, navigate back
+      context.go('/job-details');
     });
   }
 
@@ -33,7 +57,13 @@ class _ApprovalWaitingScreenState extends ConsumerState<ApprovalWaitingScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        leading: const SizedBox(), // Disable back button to lock state
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.black),
+          onPressed: () {
+            debugPrint('TEST LOG: Agent manually closed waiting screen.');
+            context.pop();
+          },
+        ),
         elevation: 0,
         backgroundColor: Colors.white,
       ),
@@ -75,7 +105,6 @@ class _ApprovalWaitingScreenState extends ConsumerState<ApprovalWaitingScreen> {
             ),
             const SizedBox(height: 48),
 
-            // Disclaimer/Info
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 40),
               child: Row(

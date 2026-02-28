@@ -41,7 +41,10 @@ class HomeTab extends ConsumerWidget {
                     child: _buildHeaderIcon(Icons.sos),
                   ),
                   const SizedBox(width: 10),
-                  _buildNotificationIcon(),
+                  GestureDetector(
+                    onTap: () => context.push('/request-tracking'),
+                    child: _buildNotificationIcon(),
+                  ),
                   const SizedBox(width: 10),
                   Container(
                     decoration: BoxDecoration(

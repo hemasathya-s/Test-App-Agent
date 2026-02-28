@@ -156,7 +156,7 @@ class ModifyOrderScreen extends ConsumerWidget {
                     .where((i) => !i.isRemoved)
                     .map(
                       (item) => Container(
-                        margin: const EdgeInsets.only(bottom:24),
+                        margin: const EdgeInsets.only(bottom: 24),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(16),
@@ -211,7 +211,7 @@ class ModifyOrderScreen extends ConsumerWidget {
                                             const SizedBox(height: 4),
                                             if (item.quantity > 0)
                                             Text(
-                                              '\₹${(item.price * item.quantity).toStringAsFixed(2)}',
+                                              '₹${(item.price * item.quantity).toStringAsFixed(2)}',
                                               style: GoogleFonts.outfit(
                                                 fontSize: 18,
                                                 fontWeight: FontWeight.bold,
@@ -222,12 +222,12 @@ class ModifyOrderScreen extends ConsumerWidget {
                                         ),
                                       ),
                                       
-                                      // 3. Conditional Quantity buttons (Right side, but moved slightly down to avoid X)
+                                      // 3. Conditional Quantity buttons
                                       if (item.quantity >= 1)
                                         Column(
                                           mainAxisAlignment: MainAxisAlignment.center,
                                           children: [
-                                            const SizedBox(height: 24), // Space for the X icon above
+                                            const SizedBox(height: 24),
                                             Container(
                                               decoration: BoxDecoration(
                                                 color: Colors.grey[50],
@@ -270,9 +270,7 @@ class ModifyOrderScreen extends ConsumerWidget {
                                         ),
                                     ],
                                   ),
-                                  
-                                  // const SizedBox(height: 16),
-                                  // const Divider(height: 1),
+
                                   const SizedBox(height: 16),
 
                                   // 4. Bottom replace item dropdown
@@ -399,6 +397,7 @@ class ModifyOrderScreen extends ConsumerWidget {
                 const SizedBox(height: 8),
                 TextField(
                   maxLines: 3,
+                  onChanged: (val) => controller.setNote(val),
                   decoration: InputDecoration(
                     hintText:
                         'Add a note for the approver explaining why this change is necessary...',
@@ -435,6 +434,7 @@ class ModifyOrderScreen extends ConsumerWidget {
         ),
         child: ElevatedButton(
           onPressed: () {
+            controller.submitRequest(); // Record the request in history
             Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const ApprovalWaitingScreen()),
