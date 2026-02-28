@@ -2,21 +2,36 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:urban_agent_app/core/model/slot_availability.dart';
+import 'package:urban_agent_app/core/model/order_details.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../providers/job_provider.dart';
 
 class JobDetailsScreen extends ConsumerWidget {
-  const JobDetailsScreen({super.key});
+  final SlotAvailability? slot;
+
+  const JobDetailsScreen({super.key, this.slot});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.read(jobProvider.notifier);
+    final order = slot?.orderDetails;
+    final customerName = order?.customerName ?? 'Unknown Customer';
+    final customerEmail = order?.userDetails?.email ?? '';
+    final customerMobile = order?.customerNumber ?? '';
+    final orderId = slot?.orderId ?? 'N/A';
+    final address = order?.address ?? 'No address provided';
+    final items = order?.items ?? [];
+    final totalPrice = order?.totalPrice ?? '0.00';
+    final date = slot?.date ?? 'N/A';
+    final timeSlot = '${slot?.etaStartTime ?? ""} - ${slot?.etaEndTime ?? ""}';
 
     return Scaffold(
       backgroundColor: AppTheme.surfaceColor,
       appBar: AppBar(
         title: Text(
-          'Job #12345',
+          'Job #$orderId',
           style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
@@ -24,7 +39,7 @@ class JobDetailsScreen extends ConsumerWidget {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => context.pop(),
+          onPressed: () => Navigator.pop(context),
         ),
       ),
       body: Column(
@@ -35,12 +50,18 @@ class JobDetailsScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(24),
             child: Row(
               children: [
-                const CircleAvatar(
-                  radius: 30,
-                  backgroundImage: NetworkImage(
-                    'https://i.pravatar.cc/150?img=5',
-                  ), // Mock Image
-                  backgroundColor: Colors.grey,
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.person_rounded,
+                    size: 36,
+                    color: AppTheme.primaryColor,
+                  ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -48,23 +69,18 @@ class JobDetailsScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Jane Doe',
+                        customerName,
                         style: GoogleFonts.outfit(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      Row(
-                        children: [
-                          const Icon(Icons.star, color: Colors.amber, size: 16),
-                          const SizedBox(width: 4),
-                          Text(
-                            '4.8 (12 jobs)',
-                            style: GoogleFonts.outfit(
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                        ],
+                      Text(
+                        customerEmail,
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          color: AppTheme.textSecondary,
+                        ),
                       ),
                     ],
                   ),
@@ -76,14 +92,14 @@ class JobDetailsScreen extends ConsumerWidget {
                         Icons.phone,
                         color: AppTheme.successColor,
                       ),
-                      onPressed: () {}, // Mock Call
+                      onPressed: () => _makePhoneCall(customerMobile),
                     ),
                     IconButton(
                       icon: const Icon(
                         Icons.message,
                         color: AppTheme.primaryColor,
                       ),
-                      onPressed: () {}, // Mock Chat
+                      onPressed: () => _sendSMS(customerMobile),
                     ),
                   ],
                 ),
@@ -106,31 +122,43 @@ class JobDetailsScreen extends ConsumerWidget {
                   ),
                   child: Column(
                     children: [
-                      _buildDetailRow(
-                        Icons.cleaning_services,
-                        'Service',
-                        'Deep Cleaning (3h)',
-                      ),
-                      const Divider(height: 24),
+                      // List each item in the order
+                      ...items.map((item) {
+                        return Column(
+                          children: [
+                            _buildDetailRow(
+                              Icons.build_circle_outlined,
+                              'Service/Product',
+                              '${item.itemDetails?.name ?? "Unknown"} (x${item.quantity ?? 1})',
+                            ),
+                            const Divider(height: 24),
+                          ],
+                        );
+                      }).toList(),
+                      
                       _buildDetailRow(
                         Icons.calendar_today,
                         'Date & Time',
-                        'Today, 02:30 PM',
+                        '$date, $timeSlot',
                       ),
                       const Divider(height: 24),
                       _buildDetailRow(
                         Icons.location_on,
                         'Address',
-                        '4521 Elm Street, Apt 4B',
+                        address,
                       ),
                       const Divider(height: 24),
-                      _buildDetailRow(Icons.attach_money, 'Payout', '\$85.00'),
+                      _buildDetailRow(
+                        Icons.payments_outlined,
+                        'Total Payout',
+                        '₹ $totalPrice',
+                      ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 24),
 
-                _buildSectionHeader('Requirements'),
+                _buildSectionHeader('Status Info'),
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -140,9 +168,9 @@ class JobDetailsScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildCheckItem('Bring Vacuum Cleaner'),
-                      _buildCheckItem('Wear Mask & Gloves'),
-                      _buildCheckItem('Take Photos before start'),
+                      _buildStatusItem('Order Status', order?.orderStatus ?? 'N/A'),
+                      _buildStatusItem('Payment Status', order?.paymentStatus ?? 'N/A'),
+                      _buildStatusItem('Approval', order?.agentApproval ?? 'N/A'),
                     ],
                   ),
                 ),
@@ -151,49 +179,61 @@ class JobDetailsScreen extends ConsumerWidget {
           ),
 
           // Action Bar
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
-            ),
-            child: SafeArea(
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  controller.startNavigation();
-                  context.push('/navigation');
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+      Container(
+        padding: const EdgeInsets.all(24),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(color: Colors.black12, blurRadius: 10),
+          ],
+        ),
+        child: SafeArea(
+          child: Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    controller.startNavigation();
+                    context.push('/navigation');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    minimumSize: const Size(0, 56), // FIXED
+                  ),
+                  icon: const Icon(Icons.navigation, color: Colors.white),
+                  label: Text(
+                    'Get Directions',
+                    style: GoogleFonts.outfit(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
-                icon: const Icon(Icons.navigation, color: Colors.white),
+              ),
+
+              const SizedBox(width: 12),
+
+              TextButton.icon(
+                key: const Key('modify_order_btn'),
+                icon: const Icon(Icons.edit_note, color: AppTheme.primaryColor),
                 label: Text(
-                  'Get Directions',
+                  'Modify Order',
                   style: GoogleFonts.outfit(
-                    fontSize: 18,
                     fontWeight: FontWeight.bold,
+                    color: AppTheme.primaryColor,
                   ),
                 ),
+                onPressed: () => context.push('/modify-order'),
               ),
-            ),
+            ],
           ),
-          TextButton.icon(
-            key: const Key('modify_order_btn'), // For easier finding
-            icon: const Icon(Icons.edit_note, color: AppTheme.primaryColor),
-            label: Text(
-              'Modify Order',
-              style: GoogleFonts.outfit(
-                fontWeight: FontWeight.bold,
-                color: AppTheme.primaryColor,
-              ),
-            ),
-            onPressed: () => context.push('/modify-order'),
-          ),
-          const SizedBox(height: 12),
+        ),
+      )
         ],
       ),
     );
@@ -243,20 +283,54 @@ class JobDetailsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildCheckItem(String text) {
+  Widget _buildStatusItem(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Icon(
-            Icons.check_circle_outline,
-            size: 18,
-            color: AppTheme.successColor,
+          Text(
+            label,
+            style: GoogleFonts.outfit(fontSize: 14, color: AppTheme.textSecondary),
           ),
-          const SizedBox(width: 12),
-          Text(text, style: GoogleFonts.outfit(fontSize: 16)),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              value,
+              style: GoogleFonts.outfit(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.primaryColor,
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
+
+  Future<void> _makePhoneCall(String phoneNumber) async {
+    final Uri launchUri = Uri(
+      scheme: 'tel',
+      path: phoneNumber,
+    );
+    if (await canLaunchUrl(launchUri)) {
+      await launchUrl(launchUri);
+    }
+  }
+
+  Future<void> _sendSMS(String phoneNumber) async {
+    final Uri launchUri = Uri(
+      scheme: 'sms',
+      path: phoneNumber,
+    );
+    if (await canLaunchUrl(launchUri)) {
+      await launchUrl(launchUri);
+    }
+  }
 }
+

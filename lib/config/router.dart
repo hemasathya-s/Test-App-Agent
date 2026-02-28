@@ -1,4 +1,5 @@
 import 'package:go_router/go_router.dart';
+import '../core/model/slot_availability.dart';
 import '../features/auth/presentation/pages/splash_screen.dart';
 import '../features/auth/presentation/pages/login_screen.dart';
 import '../features/auth/presentation/pages/permissions_screen.dart';
@@ -35,7 +36,9 @@ final router = GoRouter(
     ),
     GoRoute(
       path: '/job-details',
-      builder: (context, state) => const JobDetailsScreen(),
+      builder: (context, state) => JobDetailsScreen(
+        slot: state.extra as SlotAvailability?,
+      ),
     ),
     GoRoute(
       path: '/navigation',
