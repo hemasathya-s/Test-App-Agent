@@ -26,6 +26,7 @@ class OrderDetails {
   final String? assignedAgentId;
   final dynamic startingAgentCoordinates;
   final String? zoneId;
+  final List<dynamic>? serviceModifications;
   final bool? isActive;
 
   OrderDetails({
@@ -54,6 +55,7 @@ class OrderDetails {
     this.assignedAgentId,
     this.startingAgentCoordinates,
     this.zoneId,
+    this.serviceModifications,
     this.isActive,
   });
 
@@ -92,6 +94,7 @@ class OrderDetails {
       assignedAgentId: json['assigned_agent_id'],
       startingAgentCoordinates: json['starting_agent_coordinates'],
       zoneId: json['zone_id'],
+      serviceModifications: json['service_modifications'],
       isActive: json['is_active'],
     );
   }
@@ -123,6 +126,7 @@ class OrderDetails {
       'assigned_agent_id': assignedAgentId,
       'starting_agent_coordinates': startingAgentCoordinates,
       'zone_id': zoneId,
+      'service_modifications': serviceModifications,
       'is_active': isActive,
     };
   }
@@ -302,6 +306,8 @@ class FullDetails {
   final List<dynamic>? media;
   final dynamic inventory;
   final List<dynamic>? children;
+  final dynamic parent;
+  final String? parentName;
   final String? createdAt;
   final String? updatedAt;
 
@@ -326,7 +332,7 @@ class FullDetails {
     this.inventory,
     this.children,
     this.createdAt,
-    this.updatedAt,
+    this.updatedAt, this.parent, this.parentName,
   });
 
   factory FullDetails.fromJson(Map<String, dynamic> json) {
@@ -375,6 +381,8 @@ class FullDetails {
       media: json['media'],
       inventory: json['inventory'],
       children: json['children'],
+      parent: json['parent'],
+      parentName: json['parent_name'],
       createdAt: json['created_at'],
       updatedAt: json['updated_at'],
     );
@@ -401,6 +409,8 @@ class FullDetails {
       'media': media,
       'inventory': inventory,
       'children': children,
+      'parent': parent,
+      'parent_name': parentName,
       'created_at': createdAt,
       'updated_at': updatedAt,
     };

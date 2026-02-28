@@ -1,4 +1,5 @@
 import 'package:go_router/go_router.dart';
+import '../core/model/order_details.dart';
 import '../core/model/slot_availability.dart';
 import '../features/auth/presentation/pages/splash_screen.dart';
 import '../features/auth/presentation/pages/login_screen.dart';
@@ -36,9 +37,15 @@ final router = GoRouter(
     ),
     GoRoute(
       path: '/job-details',
-      builder: (context, state) => JobDetailsScreen(
-        slot: state.extra as SlotAvailability?,
-      ),
+      builder: (context, state) {
+        final extra = state.extra;
+        if (extra is SlotAvailability) {
+          return JobDetailsScreen(slot: extra);
+        } else if (extra is OrderDetails) {
+          return JobDetailsScreen(order: extra);
+        }
+        return const JobDetailsScreen();
+      },
     ),
     GoRoute(
       path: '/navigation',
