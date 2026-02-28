@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
+import 'apiservices.dart';
 
 class TrackingService {
   static final TrackingService _instance = TrackingService._internal();
@@ -11,84 +12,79 @@ class TrackingService {
 
   Timer? _timer;
   bool _isTracking = false;
+  bool _isOnline = false; // Internal state to track active status
+
+  void setOnlineStatus(bool online) {
+    _isOnline = online;
+    debugPrint("[TRACKING] Agent status set to: ${online ? 'ONLINE' : 'OFFLINE'}");
+    if (!online) {
+      debugPrint("[TRACKING] Offline: Data sharing suspended.");
+    }
+  }
 
   Future<void> startTracking() async {
     if (_isTracking) return;
     _isTracking = true;
-
-    // Check permissions
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      _isTracking = false;
-      return;
-    }
-
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        _isTracking = false;
-        return;
-      }
-    }
     
-    if (permission == LocationPermission.deniedForever) {
-      _isTracking = false;
-      return;
-    }
+    debugPrint("[TRACKING] Background tracking service running.");
 
-    // Start periodic timer
-    _timer = Timer.periodic(const Duration(seconds: 60), (timer) {
+    try {
+      // Periodic timer every 60 seconds
+      _timer = Timer.periodic(const Duration(seconds: 60), (timer) {
+        _sendLocationUpdate();
+      });
+      
       _sendLocationUpdate();
-    });
-    
-    // Send immediate update
-    _sendLocationUpdate();
-  }
-
-  void stopTracking() {
-    _timer?.cancel();
-    _isTracking = false;
+    } catch (e) {
+      debugPrint("[TRACKING] Start Error: $e");
+      _isTracking = false;
+    }
   }
 
   Future<void> _sendLocationUpdate() async {
+    // REQUIREMENT: Only share to backend if agent is ONLINE
+    if (!_isOnline) {
+      debugPrint(" TRACKING] Skip update: Agent is currently OFFLINE.");
+      return;
+    }
+
     try {
+      final String token = ApiService.accessToken;
+      if (token.isEmpty) return;
+
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );
+      
+      debugPrint("[TRACKING] SHARING: Lat: ${position.latitude}, Lng: ${position.longitude}");
 
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('access_token');
-
-      if (token == null) return;
+      final String url = '${ApiService.baseUrl}/api/tracking/log/';
 
       final response = await http.post(
-        Uri.parse('https://your-api-base-url.com/api/tracking/log/'),
+        Uri.parse(url),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
-          "latitude": position.latitude.toString(),
-          "longitude": position.longitude.toString(),
-          "accuracy": position.accuracy.toString(),
-          "speed": position.speed.toString(),
-          "heading": position.heading.toString(),
-          "battery_level": 0, // Battery level requires additional plugin
+          "latitude": position.latitude,
+          "longitude": position.longitude,
+          "timestamp": DateTime.now().toIso8601String(),
           "is_mock_location": position.isMocked,
         }),
       );
 
-      if (response.statusCode == 200) {
-        print('Location tracked successfully');
-      } else {
-        print('Failed to track location: ${response.body}');
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        debugPrint('[TRACKING] SUCCESS: Backend updated.');
       }
     } catch (e) {
-      print('Error tracking location: $e');
+      debugPrint('[TRACKING] ERROR: $e');
     }
+  }
+
+  void stopTracking() {
+    _timer?.cancel();
+    _isTracking = false;
+    debugPrint("[TRACKING] Service stopped.");
   }
 }

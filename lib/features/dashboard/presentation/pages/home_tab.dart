@@ -4,6 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/services/apiservices.dart';
+import '../../../../core/services/tracking_service.dart';
+import '../../../orders/presentation/pages/orders_history_screen.dart';
 import '../providers/dashboard_provider.dart';
 import '../widgets/sos_bottom_sheet.dart';
 import 'agent_verification_screen.dart';
@@ -41,25 +44,24 @@ class HomeTab extends ConsumerWidget {
                     child: _buildHeaderIcon(Icons.sos),
                   ),
                   const SizedBox(width: 10),
-                  GestureDetector(
-                    onTap: () => context.push('/request-tracking'),
-                    child: _buildNotificationIcon(),
-                  ),
+                  _buildNotificationIcon(),
                   const SizedBox(width: 10),
-                  Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: InkWell(
-                      onTap: () => context.push('/profile'),
+                  GestureDetector(
+                    onTap:(){
+                      Navigator.push(context,MaterialPageRoute(builder: (context)=>const OrdersHistoryScreen()));
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
                       child: const CircleAvatar(
                         radius: 20,
                         backgroundColor: Colors.white,
@@ -235,15 +237,14 @@ class HomeTab extends ConsumerWidget {
     return GestureDetector(
       onTap: () async {
         if (!state.isAvailable) {
-          final result = await Navigator.of(context).push<bool>(
-            MaterialPageRoute(
-              builder: (ctx) => const AgentVerificationScreen(),
-            ),
-          );
-          if (result == true) {
-            controller.toggleAvailability(true);
+          // GOING ONLINE logic
+          final isNowActive = await ApiService.toggleActiveStatus();
+          if (isNowActive != null) {
+            controller.toggleAvailability(isNowActive);
+            TrackingService().setOnlineStatus(isNowActive);
           }
         } else {
+          // GOING OFFLINE logic - show dialog first
           final shouldTurnOff = await showDialog<bool>(
             context: context,
             builder: (ctx) => AlertDialog(
@@ -280,7 +281,11 @@ class HomeTab extends ConsumerWidget {
           );
 
           if (shouldTurnOff == true) {
-            controller.toggleAvailability(false);
+            final isNowActive = await ApiService.toggleActiveStatus();
+            if (isNowActive != null) {
+              controller.toggleAvailability(isNowActive);
+              TrackingService().setOnlineStatus(isNowActive);
+            }
           }
         }
       },
@@ -478,15 +483,7 @@ class HomeTab extends ConsumerWidget {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () {
-                      context.push(
-                        '/agent-tracking',
-                        extra: {
-                          'destination': const LatLng(13.0418, 80.2337), // T Nagar
-                          'customerName': 'Rahul',
-                          'customerPhone': '9876543210',
-                          'orderId': 'ORD123',
-                        },
-                      );
+                      context.push('/agent-tracking');
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
