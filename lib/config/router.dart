@@ -5,6 +5,7 @@ import '../features/auth/presentation/pages/splash_screen.dart';
 import '../features/auth/presentation/pages/login_screen.dart';
 import '../features/auth/presentation/pages/permissions_screen.dart';
 import '../features/auth/presentation/pages/kyc_status_screen.dart';
+import '../features/dashboard/presentation/pages/AgentProfilePage.dart';
 import '../features/dashboard/presentation/pages/dashboard_shell.dart';
 import '../features/map/presentation/pages/service_area_screen.dart';
 import '../features/jobs/presentation/pages/new_job_request_screen.dart';
@@ -14,6 +15,7 @@ import '../features/jobs/presentation/pages/service_checklist_screen.dart';
 import '../features/order/presentation/pages/modify_order_screen.dart';
 import '../features/order/presentation/pages/modification_summary_screen.dart';
 import '../features/order/presentation/pages/approval_waiting_screen.dart';
+import '../features/order/presentation/pages/request_tracking_screen.dart';
 import '../features/orders/presentation/pages/orders_history_screen.dart';
 
 final router = GoRouter(
@@ -61,7 +63,13 @@ final router = GoRouter(
     ),
     GoRoute(
       path: '/modify-order',
-      builder: (context, state) => const ModifyOrderScreen(),
+      builder: (context, state) {
+        final extra = state.extra;
+        if (extra is OrderDetails) {
+          return ModifyOrderScreen(order: extra);
+        }
+        return const ModifyOrderScreen();
+      },
     ),
     GoRoute(
       path: '/modification-summary',
@@ -72,8 +80,16 @@ final router = GoRouter(
       builder: (context, state) => const ApprovalWaitingScreen(),
     ),
     GoRoute(
+      path: '/request-tracking',
+      builder: (context, state) => const RequestTrackingScreen(),
+    ),
+    GoRoute(
       path: '/orders',
       builder: (context, state) => const OrdersHistoryScreen(),
+    ),
+    GoRoute(
+      path: '/profile',
+      builder: (context, state) => const AgentProfilePage(),
     ),
   ],
 );

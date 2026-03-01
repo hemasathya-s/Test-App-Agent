@@ -5,12 +5,14 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:http/http.dart' as http;
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/services/api_service.dart';
 import '../providers/job_provider.dart';
 
 class NavigationScreen extends ConsumerStatefulWidget {
@@ -23,9 +25,10 @@ class NavigationScreen extends ConsumerStatefulWidget {
 class _NavigationScreenState extends ConsumerState<NavigationScreen> {
   GoogleMapController? _mapController;
   final String apiKey = "AIzaSyBtciSghWgfoM4B2-Ews_QjM3azDYz4ZWY";
+  final ApiService _apiService = ApiService();
 
-  final LatLng riderStart = const LatLng(13.0656, 80.1610); // Maduravoyal
-  final LatLng destination = const LatLng(13.0418, 80.2337); // T Nagar
+  LatLng? riderStart;
+  LatLng? destination;
 
   LatLng? riderPosition;
   double riderRotation = 0;
@@ -37,18 +40,80 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
 
   bool isArrived = false;
   bool isLoading = true;
+  bool isStarted = false;
   
   String eta = "--";
   String distanceText = "--";
+  String destinationName = "Destination";
 
   BitmapDescriptor? _navigationIcon;
+  StreamSubscription<Position>? _positionStream;
 
   @override
   void initState() {
     super.initState();
-    riderPosition = riderStart;
-    _createNavigationIcon();
-    fetchRoute();
+    _initializeNavigation();
+  }
+
+  @override
+  void dispose() {
+    _positionStream?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _initializeNavigation() async {
+    setState(() => isLoading = true);
+    
+    try {
+      // 1. Get Current Location of the Agent
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      riderStart = LatLng(position.latitude, position.longitude);
+      riderPosition = riderStart;
+
+      // 2. Fetch destination from My Slots API
+      final slots = await _apiService.getMySlots();
+      if (slots.isNotEmpty) {
+        final activeSlot = slots.firstWhere(
+          (s) => s['status'] == 'PENDING' || s['status'] == 'ACCEPTED',
+          orElse: () => slots.first,
+        );
+
+        try {
+          final details = activeSlot['order_details'];
+          
+          if (details is Map) {
+            // Case 1: JSON Object { "lat": ..., "lng": ... }
+            double lat = double.parse(details['lat']?.toString() ?? '13.0418');
+            double lng = double.parse(details['lng']?.toString() ?? '80.2337');
+            destination = LatLng(lat, lng);
+          } else if (details is String && details.contains(',')) {
+            // Case 2: Comma separated string "lat,lng"
+            final parts = details.split(',');
+            destination = LatLng(double.parse(parts[0].trim()), double.parse(parts[1].trim()));
+          } else {
+            // Fallback: Check for specific lat/lng fields in the slot itself
+            double lat = double.tryParse(activeSlot['lat']?.toString() ?? '') ?? 13.0418;
+            double lng = double.tryParse(activeSlot['lng']?.toString() ?? '') ?? 80.2337;
+            destination = LatLng(lat, lng);
+          }
+          
+          destinationName = activeSlot['slot_name'] ?? "Job Location";
+        } catch (e) {
+          debugPrint("Parsing Error: $e");
+          destination = const LatLng(13.0418, 80.2337);
+        }
+      } else {
+        destination = const LatLng(13.0418, 80.2337);
+      }
+
+      await _createNavigationIcon();
+      await fetchRoute();
+    } catch (e) {
+      debugPrint("Error initializing navigation: $e");
+      setState(() => isLoading = false);
+    }
   }
 
   Future<void> _createNavigationIcon() async {
@@ -62,10 +127,10 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
 
     final Path path = Path();
-    path.moveTo(size / 2, 0); // Top tip
-    path.lineTo(size * 0.9, size); // Bottom right
-    path.lineTo(size / 2, size * 0.75); // Inner indent
-    path.lineTo(size * 0.1, size); // Bottom left
+    path.moveTo(size / 2, 0); 
+    path.lineTo(size * 0.9, size); 
+    path.lineTo(size / 2, size * 0.75); 
+    path.lineTo(size * 0.1, size); 
     path.close();
 
     canvas.save();
@@ -94,10 +159,12 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
   }
 
   Future<void> fetchRoute() async {
+    if (riderPosition == null || destination == null) return;
+
     final url =
         "https://maps.googleapis.com/maps/api/directions/json?"
-        "origin=${riderStart.latitude},${riderStart.longitude}"
-        "&destination=${destination.latitude},${destination.longitude}"
+        "origin=${riderPosition!.latitude},${riderPosition!.longitude}"
+        "&destination=${destination!.latitude},${destination!.longitude}"
         "&key=$apiKey";
 
     try {
@@ -119,20 +186,18 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
 
       setState(() => isLoading = false);
       _updateUI();
-      _startMovement();
     } catch (e) {
       debugPrint("Error fetching route: $e");
     }
   }
 
   void _updateUI() {
-    if (riderPosition == null || remainingPoints.isEmpty) return;
+    if (riderPosition == null || destination == null) return;
 
-    // To implement "hiding the line as it moves", we create a path that
-    // starts exactly at the rider's current position and continues through the rest of the route.
+    // Connect current position to the remaining route points
     final List<LatLng> activePath = [
       riderPosition!,
-      ...remainingPoints.skip(1),
+      ...remainingPoints,
     ];
 
     polylines = {
@@ -140,7 +205,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
         polylineId: const PolylineId("route"),
         points: activePath,
         color: const Color(0xFF2196F3),
-        width: 8,
+        width: 7,
         jointType: JointType.round,
         startCap: Cap.roundCap,
         endCap: Cap.roundCap,
@@ -158,45 +223,49 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
       ),
       Marker(
         markerId: const MarkerId("destination"),
-        position: destination,
+        position: destination!,
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        infoWindow: InfoWindow(title: destinationName),
       ),
     };
 
     if (mounted) setState(() {});
   }
 
-  void _startMovement() async {
-    for (int i = 0; i < routePoints.length - 1; i++) {
-      if (!mounted) return;
-      LatLng start = routePoints[i];
-      LatLng end = routePoints[i + 1];
+  void _startTracking() {
+    if (isStarted) return;
+    setState(() => isStarted = true);
 
-      await _animateBetween(start, end);
-      
-      if (remainingPoints.isNotEmpty) {
-        remainingPoints.removeAt(0);
+    const LocationSettings locationSettings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 5,
+    );
+
+    _positionStream = Geolocator.getPositionStream(locationSettings: locationSettings).listen(
+      (Position position) {
+        if (!mounted) return;
+
+        LatLng newPos = LatLng(position.latitude, position.longitude);
+        
+        // Recalculate route if we've deviated more than 100m from the next point
+        if (remainingPoints.isNotEmpty) {
+           double distanceToNext = _calculateDistance(newPos, remainingPoints.first);
+           if (distanceToNext > 100) {
+             riderPosition = newPos;
+             fetchRoute(); // Auto-recalculate
+             return;
+           }
+        }
+
+        if (riderPosition != null) {
+          riderRotation = _calculateBearing(riderPosition!, newPos);
+        }
+        
+        riderPosition = newPos;
+
+        _updateRemainingPoints(newPos);
         _updateUI();
-      }
-    }
-  }
 
-  Future<void> _animateBetween(LatLng start, LatLng end) async {
-    riderRotation = _calculateBearing(start, end);
-    const int steps = 150; 
-    
-    for (int i = 0; i <= steps; i++) {
-      if (!mounted) return;
-      double t = i / steps;
-      double lat = start.latitude + (end.latitude - start.latitude) * t;
-      double lng = start.longitude + (end.longitude - start.longitude) * t;
-
-      riderPosition = LatLng(lat, lng);
-      
-      // Update UI every step to hide the blue line precisely as the rider moves
-      _updateUI();
-
-      if (i % 15 == 0) {
         _mapController?.animateCamera(
           CameraUpdate.newCameraPosition(
             CameraPosition(
@@ -207,10 +276,38 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
             ),
           ),
         );
+      },
+    );
+  }
+
+  void _updateRemainingPoints(LatLng currentPos) {
+    if (remainingPoints.isEmpty) return;
+    
+    int closestIndex = -1;
+    double minDistance = double.infinity;
+
+    // Check next few points to see which one we are closest to
+    for (int i = 0; i < min(remainingPoints.length, 5); i++) {
+      double d = _calculateDistance(currentPos, remainingPoints[i]);
+      if (d < minDistance) {
+        minDistance = d;
+        closestIndex = i;
       }
-      
-      await Future.delayed(const Duration(milliseconds: 150));
     }
+
+    // If we've reached or passed a point, remove it from the list
+    if (closestIndex != -1 && minDistance < 30) {
+      remainingPoints.removeRange(0, closestIndex + 1);
+    }
+  }
+
+  double _calculateDistance(LatLng p1, LatLng p2) {
+    var p = 0.017453292519943295;
+    var c = cos;
+    var a = 0.5 - c((p2.latitude - p1.latitude) * p) / 2 +
+        c(p1.latitude * p) * c(p2.latitude * p) *
+            (1 - c((p2.longitude - p1.longitude) * p)) / 2;
+    return 12742 * asin(sqrt(a)) * 1000; // meters
   }
 
   double _calculateBearing(LatLng start, LatLng end) {
@@ -237,7 +334,11 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
           : Stack(
               children: [
                 GoogleMap(
-                  initialCameraPosition: CameraPosition(target: riderStart, zoom: 17, tilt: 45),
+                  initialCameraPosition: CameraPosition(
+                    target: riderPosition ?? const LatLng(0, 0),
+                    zoom: 17,
+                    tilt: 45,
+                  ),
                   markers: markers,
                   polylines: polylines,
                   zoomControlsEnabled: false,
@@ -246,7 +347,6 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
                   onMapCreated: (controller) => _mapController = controller,
                 ),
 
-                // Top Status Bar
                 Positioned(
                   top: 50,
                   left: 20,
@@ -254,7 +354,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFCCCDE1),
+                      color: const Color(0xFF4A4E69), // Changed to a more professional color
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10)],
                     ),
@@ -283,7 +383,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
                                 ),
                               ),
                               Text(
-                                "Heading to T Nagar",
+                                "Heading to $destinationName",
                                 style: GoogleFonts.outfit(color: Colors.white70, fontSize: 14),
                               ),
                             ],
@@ -294,7 +394,6 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
                   ),
                 ),
 
-                // Bottom Panel
                 Positioned(
                   bottom: 0,
                   left: 0,
@@ -341,29 +440,51 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
                           ],
                         ),
                         const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              jobController.arriveAtLocation();
-                              context.pushReplacement('/checklist');
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFFFA726),
-                              padding: const EdgeInsets.symmetric(vertical: 18),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                              elevation: 0,
+                        if (!isStarted)
+                           SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: _startTracking,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primaryColor,
+                                padding: const EdgeInsets.symmetric(vertical: 18),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                                elevation: 0,
+                              ),
+                              child: Text(
+                                'Get Started',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 18, 
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
-                            child: Text(
-                              'Arrived at Location',
-                              style: GoogleFonts.outfit(
-                                fontSize: 18, 
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                          )
+                        else
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: () {
+                                jobController.arriveAtLocation();
+                                context.pushReplacement('/checklist');
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFFFA726),
+                                padding: const EdgeInsets.symmetric(vertical: 18),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                                elevation: 0,
+                              ),
+                              child: Text(
+                                'Arrived at Location',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 18, 
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                           ),
-                        ),
                       ],
                     ),
                   ),

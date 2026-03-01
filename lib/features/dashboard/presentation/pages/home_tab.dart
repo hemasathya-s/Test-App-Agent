@@ -45,29 +45,25 @@ class HomeTab extends ConsumerWidget {
                     child: _buildHeaderIcon(Icons.sos),
                   ),
                   const SizedBox(width: 10),
-                  _buildNotificationIcon(),
-                  const SizedBox(width: 10),
                   GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => OrdersHistoryScreen(),
+                    onTap: () => context.push('/request-tracking'),
+                    child: _buildNotificationIcon(),
+                  ),
+                  const SizedBox(width: 10),
+                  Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
                         ),
-                      );
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
+                      ],
+                    ),
+                    child: InkWell(
+                      onTap: () => context.push('/profile'),
                       child: const CircleAvatar(
                         radius: 20,
                         backgroundColor: Colors.white,

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'service_modification.dart';
 
 class OrderDetails {
   final String? id;
@@ -26,7 +27,7 @@ class OrderDetails {
   final String? assignedAgentId;
   final dynamic startingAgentCoordinates;
   final String? zoneId;
-  final List<dynamic>? serviceModifications;
+  final List<ServiceModification>? serviceModifications;
   final bool? isActive;
 
   OrderDetails({
@@ -94,7 +95,11 @@ class OrderDetails {
       assignedAgentId: json['assigned_agent_id'],
       startingAgentCoordinates: json['starting_agent_coordinates'],
       zoneId: json['zone_id'],
-      serviceModifications: json['service_modifications'],
+      serviceModifications: json['service_modifications'] != null
+          ? (json['service_modifications'] as List)
+              .map((m) => ServiceModification.fromJson(m as Map<String, dynamic>))
+              .toList()
+          : null,
       isActive: json['is_active'],
     );
   }
@@ -126,7 +131,7 @@ class OrderDetails {
       'assigned_agent_id': assignedAgentId,
       'starting_agent_coordinates': startingAgentCoordinates,
       'zone_id': zoneId,
-      'service_modifications': serviceModifications,
+      'service_modifications': serviceModifications?.map((m) => m.toJson()).toList(),
       'is_active': isActive,
     };
   }
