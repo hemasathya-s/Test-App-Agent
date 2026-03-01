@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../Model/AgentRegistrationRequest.dart';
 import '../../Model/AuthResponse.dart';
+import '../../Model/AgentProfileResponse.dart';
 
 class ApiService
 {
@@ -368,6 +370,190 @@ class ApiService
     }
   }
 
+  Future<ApiResponse<AgentProfileResponse>> getAgentProfile() async {
+    try {
+      final response = await _authorizedRequest((token) => http.get(
+            Uri.parse('$_baseUrl/api/user/my-details'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'accept': 'application/json',
+            },
+          ));
+
+      print('📡 Get Profile [${response.statusCode}]: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        return ApiResponse(
+          isSuccess: true,
+          data: AgentProfileResponse.fromJson(json),
+        );
+      }
+
+      final json = jsonDecode(response.body);
+      return ApiResponse(
+        isSuccess: false,
+        error: json['message']?.toString() ?? 'Failed to fetch profile',
+      );
+    } catch (e) {
+      print('❌ getAgentProfile error: $e');
+      return ApiResponse(isSuccess: false, error: e.toString());
+    }
+  }
+
+  /// PUT /api/user/agent/{userId}
+  Future<AgentApiResult<bool>> updateAgentProfile(
+      String userId,
+      Map<String, dynamic> updatedData, {
+        File? profileImage,
+      }) async {
+    try {
+      print('✏️ Updating agent profile: $userId');
+      print('✏️ Data: $updatedData');
+
+      final token = await _getAccessToken();
+      if (token == null) {
+        return AgentApiResult.failure('Not authenticated. Please login again.');
+      }
+
+      final uri = Uri.parse('$_baseUrl/api/user/agent/$userId');
+      
+      // We use MultipartRequest if an image is provided, otherwise a standard PUT
+      if (profileImage != null) {
+        final request = http.MultipartRequest('PUT', uri)
+          ..headers.addAll({
+            'accept': 'application/json',
+            'Authorization': 'Bearer $token',
+          });
+
+        // Add text fields
+        updatedData.forEach((key, value) {
+          request.fields[key] = value.toString();
+        });
+
+        // Add profile image
+        final ext = _fileExtension(profileImage.path);
+        request.files.add(await http.MultipartFile.fromPath(
+          'profile_image',
+          profileImage.path,
+          contentType: http.MediaType('image', ext),
+        ));
+
+        print('📡 Sending Multipart PUT to: $uri');
+        final streamedResponse = await request.send().timeout(const Duration(seconds: 300));
+        final response = await http.Response.fromStream(streamedResponse);
+        return _handleUpdateResponse(response);
+      } else {
+        // Standard JSON PUT
+        final response = await http.put(
+          uri,
+          headers: {
+            'accept': 'application/json',
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode(updatedData),
+        ).timeout(const Duration(seconds: 30));
+        return _handleUpdateResponse(response);
+      }
+    } on SocketException {
+      return AgentApiResult.failure('No internet connection');
+    } on TimeoutException {
+      return AgentApiResult.failure('Request timed out. Please try again.');
+    } catch (e, stack) {
+      print('❌ updateAgentProfile error: $e\n$stack');
+      return AgentApiResult.failure('Something went wrong. Please try again.');
+    }
+  }
+
+  AgentApiResult<bool> _handleUpdateResponse(http.Response response) {
+    print('✏️ Update Profile Status: ${response.statusCode}');
+    
+    if (response.statusCode == 200 || response.statusCode == 204) {
+      return AgentApiResult.success(true);
+    }
+
+    if (response.body.isEmpty) {
+      return AgentApiResult.failure('Server returned status ${response.statusCode} with no body');
+    }
+
+    // Safe JSON decoding
+    dynamic json;
+    try {
+      json = jsonDecode(response.body);
+    } catch (e) {
+      print('❌ Failed to decode response: ${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}');
+      return AgentApiResult.failure('Server error (${response.statusCode}). Please contact support.');
+    }
+
+    // Parse Django/DRF error formats
+    String errorMsg = 'Update failed (${response.statusCode})';
+    if (json is Map) {
+      if (json['message'] != null) {
+        errorMsg = json['message'].toString();
+      } else if (json['detail'] != null) {
+        errorMsg = json['detail'].toString();
+      } else if (json['errors'] != null) {
+        final errors = json['errors'];
+        if (errors is List && errors.isNotEmpty) {
+          errorMsg = errors.first.toString();
+        } else if (errors is Map && errors.isNotEmpty) {
+          final key = errors.keys.first;
+          final val = errors[key];
+          errorMsg = val is List ? '$key: ${val.first}' : '$key: $val';
+        }
+      } else if (json.isNotEmpty) {
+        final key = json.keys.first;
+        final val = json[key];
+        errorMsg = val is List ? '$key: ${val.first}' : '$key: $val';
+      }
+    }
+
+    print('❌ Update Error: $errorMsg');
+    return AgentApiResult.failure(errorMsg);
+  }
+
+  Future<AgentApiResult<bool>> logoutUser() async {
+    try {
+      final userId = await getUserId();
+      final accessToken = await _getAccessToken();
+
+      if (accessToken == null || userId == null || userId.isEmpty) {
+        // Even if session is missing, we ensure local tokens are cleared
+        await AuthResponse.clearTokens();
+        return AgentApiResult.success(true);
+      }
+
+      print('📡 Logging out user: $userId');
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/api/logout/$userId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+      ).timeout(const Duration(seconds: 15));
+
+      print('📡 Logout Status: ${response.statusCode}');
+
+      // Clear tokens regardless of server response success
+      await AuthResponse.clearTokens();
+
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        return AgentApiResult.success(true);
+      } else {
+        // Return success anyway because local session is cleared, 
+        // but maybe log the error
+        print('⚠️ Server logout failed but local tokens cleared: ${response.body}');
+        return AgentApiResult.success(true);
+      }
+    } catch (e) {
+      print('❌ logoutUser error: $e');
+      // Still clear tokens locally on error
+      await AuthResponse.clearTokens();
+      return AgentApiResult.failure('Network error: ${e.toString()}');
+    }
+  }
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
   String _fileExtension(String path) {
@@ -376,5 +562,118 @@ class ApiService
     if (ext == 'png') return 'png';
     if (ext == 'pdf') return 'pdf';
     return 'jpeg'; // safe default
+  }
+
+  // ── Token Management Helpers ───────────────────────────────────────────────
+
+  // Helper: Get access token
+  static Future<String?> _getAccessToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('access_token');
+    print('🔎 Getting Access Token: $token');
+    return token;
+  }
+
+  // Helper: Get refresh token
+  static Future<String?> _getRefreshToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('refresh_token');
+    print('🔎 Getting Refresh Token: $token');
+    return token;
+  }
+
+  // Helper: Clear all tokens (calls AuthResponse.clearTokens())
+  static Future<void> _clearTokens() async {
+    await AuthResponse.clearTokens();
+  }
+
+  static Future<bool> _refreshAccessToken() async {
+    final refreshToken = await _getRefreshToken();
+    print('🔄 Refresh Token Used: $refreshToken');
+
+    if (refreshToken == null) {
+      print('❌ No refresh token found');
+      return false;
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/api/token/refresh/'),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'refresh': refreshToken,
+        }),
+      );
+
+      print('🔁 Refresh Status: ${response.statusCode}');
+      print('🔁 Refresh Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final jsonData = jsonDecode(response.body);
+        final prefs = await SharedPreferences.getInstance();
+
+        await prefs.setString('access_token', jsonData['access']);
+        print('✅ New Access Token Saved: ${jsonData['access']}');
+
+        if (jsonData['refresh'] != null) {
+          await prefs.setString('refresh_token', jsonData['refresh']);
+          print('✅ New Refresh Token Saved: ${jsonData['refresh']}');
+        }
+
+        return true;
+      } else {
+        print('❌ Refresh failed. Clearing tokens.');
+        await _clearTokens();
+        return false;
+      }
+    } catch (e) {
+      print('❌ Refresh Exception: $e');
+      return false;
+    }
+  }
+
+  static Future<http.Response> _authorizedRequest(
+    Future<http.Response> Function(String token) request,
+  ) async {
+    String? token = await _getAccessToken();
+    print('📡 Authorized Request Using Token: $token');
+
+    if (token == null) {
+      throw Exception('No access token');
+    }
+
+    http.Response response = await request(token);
+    print('📡 Response Status: ${response.statusCode}');
+
+    if (response.statusCode == 401) {
+      print('⚠️ Token expired. Trying refresh...');
+      final refreshed = await _refreshAccessToken();
+
+      if (!refreshed) {
+        print('❌ Refresh failed. Clearing tokens.');
+        await _clearTokens();
+        throw Exception('Session expired');
+      }
+
+      token = await _getAccessToken();
+      print('🔁 Retrying with new token: $token');
+      response = await request(token!);
+    }
+
+    return response;
+  }
+
+  // Get user role
+  static Future<String> getUserRole() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('user_role') ?? 'CUSTOMER';
+  }
+
+  // Helper: Get user id from SharedPreferences
+  static Future<String?> getUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('user_id');
   }
 }

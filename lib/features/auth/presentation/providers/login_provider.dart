@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum LoginPhase { phoneInput, otpInput }
 
@@ -29,7 +30,7 @@ class LoginState {
     return LoginState(
       phase: phase ?? this.phase,
       isLoading: isLoading ?? this.isLoading,
-      error: error, // Nullable update logic requires care, but for simplicity: pass null to clear
+      error: error,
       resendTimer: resendTimer ?? this.resendTimer,
       phoneNumber: phoneNumber ?? this.phoneNumber,
     );
@@ -87,11 +88,16 @@ class LoginController extends StateNotifier<LoginState> {
     await Future.delayed(const Duration(seconds: 1));
 
     if (otp == '1234') {
+      // SUCCESS: Save tokens to SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('access_token', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzcyMjcwOTczLCJpYXQiOjE3NzIyMTY5NzQsImp0aSI6ImFiYTMwYjZjMjgzOTRiMjBiMmM3YmM0NTY4MjkzMGJlIiwidXNlcl9pZCI6IjFhNTdlYzkxLTZjNTQtNDg5Ny1hNDBlLWJjOGVhZmY0YjkwNSJ9.NfkyPvaOesapavy9ciFdQo1saR1CqRAblW9OKrAESfM');
+      await prefs.setBool('is_logged_in', true);
+      
       state = state.copyWith(isLoading: false);
-      return true; // Success
+      return true;
     } else {
       state = state.copyWith(isLoading: false, error: 'Invalid OTP. Try 1234');
-      return false; // Failure
+      return false;
     }
   }
   
@@ -103,7 +109,6 @@ class LoginController extends StateNotifier<LoginState> {
   void resendOtp() {
      state = state.copyWith(resendTimer: 30, error: null);
      _startTimer();
-     // Trigger resend API
   }
 
   @override

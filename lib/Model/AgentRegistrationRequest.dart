@@ -6,6 +6,7 @@ class AgentRegistrationRequest {
   final String name;
   final String email;
   final String mobileNumber;
+  // final String? alternateNumber; // Commented out for now
   final String password;
   final String? comments;
   final String? agentType;       // 'OWN' | 'PARTNERSHIP'
@@ -17,12 +18,16 @@ class AgentRegistrationRequest {
   final String? accountNumber;
   final String? ifscCode;
   final String? upiId;
+  final String? vehicleNumber;
+  final String? vehicleType;     // '2_WHEELER' | '4_WHEELER'
+  // final String? dlExpiryDate;    // Commented out for now
   // Files are handled separately as multipart
 
   const AgentRegistrationRequest({
     required this.name,
     required this.email,
     required this.mobileNumber,
+    // this.alternateNumber,
     required this.password,
     this.comments,
     this.agentType,
@@ -34,6 +39,9 @@ class AgentRegistrationRequest {
     this.accountNumber,
     this.ifscCode,
     this.upiId,
+    this.vehicleNumber,
+    this.vehicleType,
+    // this.dlExpiryDate,
   });
 
   /// Converts to map for multipart form fields
@@ -44,6 +52,8 @@ class AgentRegistrationRequest {
       'mobile_number': mobileNumber,
       'password': password,
     };
+    // if (alternateNumber != null && alternateNumber!.isNotEmpty)
+    //   map['alternate_number'] = alternateNumber!;
     if (comments != null && comments!.isNotEmpty)
       map['comments'] = comments!;
     if (agentType != null)
@@ -65,6 +75,12 @@ class AgentRegistrationRequest {
       map['ifsc_code'] = ifscCode!;
     if (upiId != null && upiId!.isNotEmpty)
       map['upi_id'] = upiId!;
+    if (vehicleNumber != null && vehicleNumber!.isNotEmpty)
+      map['vehicle_number'] = vehicleNumber!;
+    if (vehicleType != null && vehicleType!.isNotEmpty)
+      map['vehicle_type'] = vehicleType!;
+    // if (dlExpiryDate != null && dlExpiryDate!.isNotEmpty)
+    //   map['dl_expiry_date'] = dlExpiryDate!;
     return map;
   }
 }

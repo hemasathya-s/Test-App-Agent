@@ -41,7 +41,10 @@ class HomeTab extends ConsumerWidget {
                     child: _buildHeaderIcon(Icons.sos),
                   ),
                   const SizedBox(width: 10),
-                  _buildNotificationIcon(),
+                  GestureDetector(
+                    onTap: () => context.push('/request-tracking'),
+                    child: _buildNotificationIcon(),
+                  ),
                   const SizedBox(width: 10),
                   Container(
                     decoration: BoxDecoration(
@@ -55,10 +58,13 @@ class HomeTab extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    child: const CircleAvatar(
-                      radius: 20,
-                      backgroundColor: Colors.white,
-                      child: Icon(Icons.person_rounded, color: Colors.black),
+                    child: InkWell(
+                      onTap: () => context.push('/profile'),
+                      child: const CircleAvatar(
+                        radius: 20,
+                        backgroundColor: Colors.white,
+                        child: Icon(Icons.person_rounded, color: Colors.black),
+                      ),
                     ),
                   ),
                 ],

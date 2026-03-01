@@ -35,6 +35,9 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
   final _accountNumberController = TextEditingController();
   final _ifscController = TextEditingController();
   final _upiIdController = TextEditingController();
+ // final _alternateNumberController = TextEditingController();
+  final _vehicleNumberController = TextEditingController();
+  //final _dlExpiryController = TextEditingController();
 
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
@@ -50,6 +53,8 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
   bool? _adminPermission;
   TimeOfDay? _startTime;
   TimeOfDay? _endTime;
+  String? _vehicleType; // '2_WHEELER' | '4_WHEELER'
+  //DateTime? _dlExpiryDate;
 
   // Files
   File? _profileImage;
@@ -79,6 +84,9 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
     _accountNumberController.dispose();
     _ifscController.dispose();
     _upiIdController.dispose();
+   // _alternateNumberController.dispose();
+    _vehicleNumberController.dispose();
+   // _dlExpiryController.dispose();
     super.dispose();
   }
 
@@ -200,6 +208,29 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
   String _timeToString(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:00';
 
+/*
+  Future<void> _pickDlExpiry() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().add(const Duration(days: 365)),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 20)),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(primary: _orange),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) {
+      setState(() {
+        _dlExpiryDate = picked;
+        _dlExpiryController.text = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+      });
+    }
+  }
+*/
+
   // ── Submit ────────────────────────────────────────────────────────────────
 
   Future<void> _submit() async {
@@ -207,6 +238,10 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
 
     if (_profileImage == null) {
       _showSnack('Please upload a profile image');
+      return;
+    }
+    if (_vehicleType == null) {
+      _showSnack('Please select a vehicle type');
       return;
     }
     if (_aadharDoc == null) {
@@ -224,6 +259,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
       name: _nameController.text.trim(),
       email: _emailController.text.trim(),
       mobileNumber: _mobileController.text.trim(),
+      // alternateNumber: _alternateNumberController.text.trim(),
       password: _passwordController.text,
       comments: _commentsController.text.trim(),
       agentType: _agentType,
@@ -235,6 +271,9 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
       accountNumber: _accountNumberController.text.trim(),
       ifscCode: _ifscController.text.trim(),
       upiId: _upiIdController.text.trim(),
+      vehicleNumber: _vehicleNumberController.text.trim(),
+      vehicleType: _vehicleType,
+      // dlExpiryDate: _dlExpiryController.text.trim(),
     );
 
     final result = await ApiService().registerAgent(
@@ -321,7 +360,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
       backgroundColor: _surface,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+          icon: const Icon(HugeIcons.strokeRoundedArrowLeft01, color: Colors.white),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
@@ -355,6 +394,60 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                 padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
                 child: Column(
                   children: [
+                    // ── Profile Image (Top Circle) ──────────────────
+                    Center(
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: 110,
+                            height: 110,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 4),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                              color: Colors.grey[100],
+                            ),
+                            child: _profileImage != null
+                                ? ClipOval(
+                              child: Image.file(_profileImage!,
+                                  fit: BoxFit.cover),
+                            )
+                                : Icon(Icons.person_rounded,
+                                size: 60, color: Colors.grey[400]),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: GestureDetector(
+                              onTap: () => _pickFile(
+                                isImage: true,
+                                onPicked: (f) =>
+                                    setState(() => _profileImage = f),
+                              ),
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: const BoxDecoration(
+                                  color: _orange,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.camera_alt_rounded,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                     // ── 1. Basic Information ────────────────────────
                     _sectionCard(
                       icon: Icons.person_rounded,
@@ -397,6 +490,22 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                             return null;
                           },
                         ),
+                       /* const SizedBox(height: 16),
+                        _field(
+                          controller: _alternateNumberController,
+                          label: 'Alternate Number (Optional)',
+                          icon: Icons.phone_android_rounded,
+                          keyboardType: TextInputType.phone,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(10),
+                          ],
+                          validator: (v) {
+                            if (v != null && v.isNotEmpty && v.length != 10)
+                              return 'Must be 10 digits';
+                            return null;
+                          },
+                        ), */
                         const SizedBox(height: 16),
                         _field(
                           controller: _passwordController,
@@ -444,13 +553,63 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                             return null;
                           },
                         ),
-                       /* const SizedBox(height: 16),
+                      ],
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // ── 2. Vehicle Details ──────────────────────────
+                    _sectionCard(
+                      icon: Icons.directions_bike_rounded,
+                      title: 'Vehicle Details',
+                      color: Colors.orange.shade800,
+                      children: [
+                        _labelText('Vehicle Type *'),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            _typeChip(
+                              label: '2 Wheeler',
+                              icon: Icons.directions_bike_rounded,
+                              selected: _vehicleType == '2_WHEELER',
+                              onTap: () =>
+                                  setState(() => _vehicleType = '2_WHEELER'),
+                            ),
+                            const SizedBox(width: 12),
+                            _typeChip(
+                              label: '4 Wheeler',
+                              icon: Icons.directions_car_rounded,
+                              selected: _vehicleType == '4_WHEELER',
+                              onTap: () =>
+                                  setState(() => _vehicleType = '4_WHEELER'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
                         _field(
-                          controller: _commentsController,
-                          label: 'Comments (Optional)',
-                          icon: Icons.comment_outlined,
-                          maxLines: 3,
-                        ),*/
+                          controller: _vehicleNumberController,
+                          label: 'Vehicle Number *',
+                          icon: Icons.numbers_rounded,
+                          inputFormatters: [
+                            _UpperCaseTextFormatter(),
+                            LengthLimitingTextInputFormatter(12),
+                          ],
+                          validator: (v) =>
+                          v!.isEmpty ? 'Vehicle number is required' : null,
+                        ),
+                        /* const SizedBox(height: 16),
+                        GestureDetector(
+                          onTap: _pickDlExpiry,
+                          child: AbsorbPointer(
+                            child: _field(
+                              controller: _dlExpiryController,
+                              label: 'DL Expiry Date *',
+                              icon: Icons.calendar_today_rounded,
+                              validator: (v) =>
+                              v!.isEmpty ? 'DL expiry is required' : null,
+                            ),
+                          ),
+                        ), */
                       ],
                     ),
 
@@ -535,18 +694,6 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                       title: 'Documents & KYC',
                       color: _orange,
                       children: [
-                        _uploadTile(
-                          label: 'Profile Image *',
-                          subtitle: 'JPG / PNG — Passport photo',
-                          icon: Icons.account_circle_rounded,
-                          file: _profileImage,
-                          isVideo: false,
-                          onTap: () => _pickFile(
-                            isImage: true,
-                            onPicked: (f) => setState(() => _profileImage = f),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
                         _uploadTile(
                           label: 'Aadhaar Document *',
                           subtitle: 'JPG / PNG — Front & back',

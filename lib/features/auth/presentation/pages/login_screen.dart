@@ -312,6 +312,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 }*/
 
 
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
+
 class LoginPage extends StatefulWidget {
   final String? initialMobileNumber;
 
@@ -324,8 +329,6 @@ class LoginPage extends StatefulWidget {
 class LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _mobileNumberController;
-  final _nameController = TextEditingController();
-  final _nameFocusNode = FocusNode();
   final _mobileNumberFocusNode = FocusNode();
   bool _isLoading = false;
 
@@ -334,15 +337,12 @@ class LoginPageState extends State<LoginPage> {
     super.initState();
     _mobileNumberController =
         TextEditingController(text: widget.initialMobileNumber);
-    _nameFocusNode.addListener(() => setState(() {}));
     _mobileNumberFocusNode.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
     _mobileNumberController.dispose();
-    _nameController.dispose();
-    _nameFocusNode.dispose();
     _mobileNumberFocusNode.dispose();
     super.dispose();
   }
@@ -365,12 +365,15 @@ class LoginPageState extends State<LoginPage> {
     } else {
       ScaffoldMessenger.of(pageContext).showSnackBar(
         SnackBar(
-          content: Text(result.error ?? 'Failed to send OTP',
-              style: GoogleFonts.lato()),
+          content: Text(
+            result.error ?? 'Failed to send OTP',
+            style: GoogleFonts.lato(),
+          ),
           backgroundColor: Colors.red[400],
           behavior: SnackBarBehavior.floating,
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       );
     }
@@ -381,16 +384,18 @@ class LoginPageState extends State<LoginPage> {
       context: pageContext,
       isScrollControlled: true,
       backgroundColor: Colors.white,
+      isDismissible: false,   // ✅ tap outside won't close
+      enableDrag: false,      // ✅ swipe down won't close
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (_) => _OtpBottomSheet(
         phoneNumber: _mobileNumberController.text,
+        onClose: () => Navigator.of(pageContext).pop(), // ✅ only close button closes
         onVerified: () {
-          // ✅ Uses page-level context — safe after sheet closes
           Navigator.of(pageContext).pushReplacement(
             MaterialPageRoute(
-              builder: (_) => const DashboardShell(),
+              builder: (_) => const DashboardShell(), // 👈 replace with your home
             ),
           );
         },
@@ -426,27 +431,37 @@ class LoginPageState extends State<LoginPage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // ── Header ──────────────────────────────────────
                     Center(
-                      child: Text('Login',
-                          style: GoogleFonts.lato(
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black)),
+                      child: Text(
+                        'Login',
+                        style: GoogleFonts.lato(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 10),
                     Center(
-                      child: Text('Welcome Back!',
-                          style: GoogleFonts.lato(
-                              fontSize: 18, color: Colors.grey[600])),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // Mobile
-                    Text('Mobile Number',
+                      child: Text(
+                        'Welcome Back!',
                         style: GoogleFonts.lato(
-                            fontWeight: FontWeight.bold,
-                            color: const Color.fromRGBO(0, 0, 0, 0.8))),
+                          fontSize: 18,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+
+                    // ── Mobile Number ────────────────────────────────
+                    Text(
+                      'Mobile Number',
+                      style: GoogleFonts.lato(
+                        fontWeight: FontWeight.bold,
+                        color: const Color.fromRGBO(0, 0, 0, 0.8),
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     _buildTextFormField(
                       controller: _mobileNumberController,
@@ -463,7 +478,7 @@ class LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 30),
 
-                    // Get OTP Button
+                    // ── Get OTP Button ───────────────────────────────
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -474,46 +489,58 @@ class LoginPageState extends State<LoginPage> {
                           backgroundColor: Colors.orange[400],
                           disabledBackgroundColor: Colors.orange[200],
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                         child: _isLoading
                             ? const SizedBox(
                           width: 22,
                           height: 22,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
-                            : Text('Get OTP',
-                            style: GoogleFonts.lato(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold)),
+                            : Text(
+                          'Get OTP',
+                          style: GoogleFonts.lato(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 20),
 
-                    // Sign up row
+                    // ── Sign Up Row ──────────────────────────────────
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text('Are you a new member? ',
-                            style: GoogleFonts.lato(
-                                color: const Color.fromRGBO(0, 0, 0, 0.6))),
+                        Text(
+                          'Are you a new member? ',
+                          style: GoogleFonts.lato(
+                            color: const Color.fromRGBO(0, 0, 0, 0.6),
+                          ),
+                        ),
                         GestureDetector(
                           onTap: () {
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => AgentRegistrationPage(
-                                  mobileNumber: _mobileNumberController.text.trim(),
+                                  mobileNumber:
+                                  _mobileNumberController.text.trim(),
                                 ),
                               ),
                             );
-                            // Handle sign up navigation
                           },
-                          child: Text('Sign up',
-                              style: GoogleFonts.lato(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.orange[400])),
+                          child: Text(
+                            'Sign up',
+                            style: GoogleFonts.lato(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange[400],
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -567,22 +594,28 @@ class LoginPageState extends State<LoginPage> {
         filled: true,
         fillColor: Colors.white,
         counterText: '',
-        contentPadding:
-        const EdgeInsets.symmetric(vertical: 14.0, horizontal: 12.0),
+        contentPadding: const EdgeInsets.symmetric(
+          vertical: 14.0,
+          horizontal: 12.0,
+        ),
       ),
     );
   }
 }
 
-// ─── OTP Bottom Sheet ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// OTP BOTTOM SHEET
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _OtpBottomSheet extends StatefulWidget {
   final String phoneNumber;
   final VoidCallback onVerified;
+  final VoidCallback onClose;
 
   const _OtpBottomSheet({
     required this.phoneNumber,
     required this.onVerified,
+    required this.onClose,
   });
 
   @override
@@ -614,7 +647,10 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
     _resendTimer = 30;
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (!mounted) { t.cancel(); return; }
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
       if (_resendTimer == 0) {
         t.cancel();
       } else {
@@ -623,9 +659,12 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
     });
   }
 
-  // ── Verify OTP via API ────────────────────────────────────────────────────
+  // ── Verify OTP ────────────────────────────────────────────────────────────
   Future<void> _handleVerify() async {
-    setState(() { _isVerifying = true; _errorMsg = null; });
+    setState(() {
+      _isVerifying = true;
+      _errorMsg = null;
+    });
 
     final api = ApiService(); // 👈 replace with your singleton/provider
     final result = await api.verifyOtp(
@@ -637,15 +676,18 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
     setState(() => _isVerifying = false);
 
     if (result.isSuccess) {
-      widget.onVerified(); // ✅ navigates using page context
+      widget.onVerified();
     } else {
       setState(() => _errorMsg = result.error ?? 'Invalid OTP. Try again.');
     }
   }
 
-  // ── Resend OTP via API ────────────────────────────────────────────────────
+  // ── Resend OTP ────────────────────────────────────────────────────────────
   Future<void> _handleResend() async {
-    setState(() { _isResending = true; _errorMsg = null; });
+    setState(() {
+      _isResending = true;
+      _errorMsg = null;
+    });
 
     final api = ApiService(); // 👈 replace with your singleton/provider
     final result = await api.sendOtp(widget.phoneNumber);
@@ -662,12 +704,12 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
           backgroundColor: Colors.green[600],
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10)),
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
       );
     } else {
-      setState(
-              () => _errorMsg = result.error ?? 'Failed to resend OTP');
+      setState(() => _errorMsg = result.error ?? 'Failed to resend OTP');
     }
   }
 
@@ -685,20 +727,45 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Drag handle
-          Container(
-            width: 40, height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey[300],
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 20),
 
-          Text('Enter OTP',
-              style: GoogleFonts.lato(
-                  fontSize: 24, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
+          // ── Header Row (close btn + title) ────────────────────────
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Close button
+              GestureDetector(
+                onTap: widget.onClose,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.close_rounded,
+                    size: 20,
+                    color: Colors.black54,
+                  ),
+                ),
+              ),
+
+              // Title
+              Text(
+                'Enter OTP',
+                style: GoogleFonts.lato(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
+              // Spacer to balance close button
+              const SizedBox(width: 32),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          // ── Subtitle ──────────────────────────────────────────────
           Text(
             'A 6-digit code was sent to ${widget.phoneNumber}',
             textAlign: TextAlign.center,
@@ -706,20 +773,20 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
           ),
           const SizedBox(height: 32),
 
-          // ── 6 OTP Boxes ──────────────────────────────────────────
+          // ── 6 OTP Boxes ───────────────────────────────────────────
           Stack(
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(
-                    6, (index) {
+                children: List.generate(6, (index) {
                   final isFocused = otp.length == index;
                   final isFilled = otp.length > index;
                   return Container(
                     width: 48,
                     height: 54,
                     decoration: BoxDecoration(
-                      color: isFilled ? Colors.orange[50] : Colors.grey[100],
+                      color:
+                      isFilled ? Colors.orange[50] : Colors.grey[100],
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: isFocused
@@ -741,10 +808,10 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
                       ),
                     ),
                   );
-                }
-                ),
+                }),
               ),
-              // Hidden input
+
+              // Hidden input field
               Positioned.fill(
                 child: Opacity(
                   opacity: 0,
@@ -753,7 +820,9 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
                     autofocus: true,
                     keyboardType: TextInputType.number,
                     maxLength: 6,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
                     onChanged: (_) => setState(() => _errorMsg = null),
                     decoration: const InputDecoration(counterText: ''),
                   ),
@@ -762,7 +831,7 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
             ],
           ),
 
-          // Error message
+          // ── Error Message ─────────────────────────────────────────
           if (_errorMsg != null) ...[
             const SizedBox(height: 12),
             Row(
@@ -771,28 +840,37 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
                 const Icon(Icons.error_outline_rounded,
                     color: Colors.redAccent, size: 16),
                 const SizedBox(width: 6),
-                Text(_errorMsg!,
+                Flexible(
+                  child: Text(
+                    _errorMsg!,
                     style: GoogleFonts.lato(
-                        color: Colors.redAccent, fontSize: 13)),
+                      color: Colors.redAccent,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
               ],
             ),
           ],
 
           const SizedBox(height: 24),
 
-          // Resend row
+          // ── Resend Row ────────────────────────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text("Didn't receive code? ",
-                  style: GoogleFonts.lato(color: Colors.grey[600])),
+              Text(
+                "Didn't receive code? ",
+                style: GoogleFonts.lato(color: Colors.grey[600]),
+              ),
               _isResending
                   ? const SizedBox(
                 width: 14,
                 height: 14,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Color(0xFFFF9800)),
+                  strokeWidth: 2,
+                  color: Color(0xFFFF9800),
+                ),
               )
                   : GestureDetector(
                 onTap: _resendTimer == 0 ? _handleResend : null,
@@ -813,7 +891,7 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
 
           const SizedBox(height: 20),
 
-          // Verify Button
+          // ── Verify Button ─────────────────────────────────────────
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
@@ -825,22 +903,29 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
                 backgroundColor: Colors.orange[400],
                 disabledBackgroundColor: Colors.orange[200],
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               child: _isVerifying
                   ? const SizedBox(
                 width: 22,
                 height: 22,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white),
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
               )
-                  : Text('Verify OTP',
-                  style: GoogleFonts.lato(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold)),
+                  : Text(
+                'Verify OTP',
+                style: GoogleFonts.lato(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
+
           const SizedBox(height: 8),
         ],
       ),

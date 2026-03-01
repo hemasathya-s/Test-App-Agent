@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:urban_agent_app/features/dashboard/presentation/pages/AgentProfilePage.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/pages/kyc_status_screen.dart';
 import 'features/auth/presentation/pages/login_screen.dart';
@@ -15,6 +16,7 @@ import 'features/map/presentation/pages/service_area_screen.dart';
 import 'features/order/presentation/pages/approval_waiting_screen.dart';
 import 'features/order/presentation/pages/modification_summary_screen.dart';
 import 'features/order/presentation/pages/modify_order_screen.dart';
+import 'features/order/presentation/pages/request_tracking_screen.dart';
 import 'features/orders/presentation/pages/orders_history_screen.dart';
 
 void main() {
@@ -69,12 +71,20 @@ final _router = GoRouter(
       builder: (context, state) => const ModificationSummaryScreen(),
     ),
     GoRoute(
+      path: '/request-tracking',
+      builder: (context, state) => const RequestTrackingScreen(),
+    ),
+    GoRoute(
       path: '/approval-waiting',
       builder: (context, state) => const ApprovalWaitingScreen(),
     ),
     GoRoute(
       path: '/orders',
       builder: (context, state) => const OrdersHistoryScreen(),
+    ),
+    GoRoute(
+      path: '/profile',
+      builder: (context, state) => const AgentProfilePage(),
     ),
   ],
 );
