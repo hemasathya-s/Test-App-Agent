@@ -12,56 +12,43 @@ class TrackingService {
 
   Timer? _timer;
   bool _isTracking = false;
-  bool _isOnline = false; // Internal state to track active status
+  bool _isOnline = false;
 
   void setOnlineStatus(bool online) {
     _isOnline = online;
-    debugPrint("[TRACKING] Agent status set to: ${online ? 'ONLINE' : 'OFFLINE'}");
-    if (!online) {
-      debugPrint("[TRACKING] Offline: Data sharing suspended.");
-    }
+    debugPrint("[TRACKING] Agent status: ${online ? 'ONLINE' : 'OFFLINE'}");
   }
 
   Future<void> startTracking() async {
     if (_isTracking) return;
     _isTracking = true;
     
-    debugPrint("[TRACKING] Background tracking service running.");
+    debugPrint("[TRACKING] Precise location service started.");
 
-    try {
-      // Periodic timer every 60 seconds
-      _timer = Timer.periodic(const Duration(seconds: 60), (timer) {
-        _sendLocationUpdate();
-      });
-      
+    _timer = Timer.periodic(const Duration(seconds: 60), (timer) {
       _sendLocationUpdate();
-    } catch (e) {
-      debugPrint("[TRACKING] Start Error: $e");
-      _isTracking = false;
-    }
+    });
+    
+    _sendLocationUpdate();
   }
 
   Future<void> _sendLocationUpdate() async {
-    // REQUIREMENT: Only share to backend if agent is ONLINE
-    if (!_isOnline) {
-      debugPrint(" TRACKING] Skip update: Agent is currently OFFLINE.");
-      return;
-    }
+    if (!_isOnline) return;
 
     try {
       final String token = ApiService.accessToken;
       if (token.isEmpty) return;
 
+      // Use best accuracy for moving riders
       final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+        desiredAccuracy: LocationAccuracy.bestForNavigation,
+        timeLimit: const Duration(seconds: 5), // Don't hang if GPS is slow
       );
       
-      debugPrint("[TRACKING] SHARING: Lat: ${position.latitude}, Lng: ${position.longitude}");
-
-      final String url = '${ApiService.baseUrl}/api/tracking/log/';
+      debugPrint("[TRACKING] SYNCING: ${position.latitude}, ${position.longitude}");
 
       final response = await http.post(
-        Uri.parse(url),
+        Uri.parse('${ApiService.baseUrl}/api/tracking/log/'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -69,22 +56,23 @@ class TrackingService {
         body: jsonEncode({
           "latitude": position.latitude,
           "longitude": position.longitude,
+          "speed": position.speed,
+          "heading": position.heading,
           "timestamp": DateTime.now().toIso8601String(),
-          "is_mock_location": position.isMocked,
         }),
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        debugPrint('[TRACKING] SUCCESS: Backend updated.');
+        debugPrint('[TRACKING] OK: Backend Updated.');
       }
     } catch (e) {
-      debugPrint('[TRACKING] ERROR: $e');
+      debugPrint('[TRACKING] GPS ERROR: $e');
     }
   }
 
   void stopTracking() {
     _timer?.cancel();
     _isTracking = false;
-    debugPrint("[TRACKING] Service stopped.");
+    debugPrint("[TRACKING] Stopped.");
   }
 }

@@ -10,22 +10,28 @@ import '../providers/job_provider.dart';
 
 class JobDetailsScreen extends ConsumerWidget {
   final SlotAvailability? slot;
+  final OrderDetails? order;
 
-  const JobDetailsScreen({super.key, this.slot});
+  const JobDetailsScreen({super.key, this.slot, this.order});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.read(jobProvider.notifier);
-    final order = slot?.orderDetails;
-    final customerName = order?.customerName ?? 'Unknown Customer';
-    final customerEmail = order?.userDetails?.email ?? '';
-    final customerMobile = order?.customerNumber ?? '';
-    final orderId = slot?.orderId ?? 'N/A';
-    final address = order?.address ?? 'No address provided';
-    final items = order?.items ?? [];
-    final totalPrice = order?.totalPrice ?? '0.00';
-    final date = slot?.date ?? 'N/A';
-    final timeSlot = '${slot?.etaStartTime ?? ""} - ${slot?.etaEndTime ?? ""}';
+    final effectiveOrder = order ?? slot?.orderDetails;
+    
+    final customerName = effectiveOrder?.customerName ?? 'Unknown Customer';
+    final customerEmail = effectiveOrder?.userDetails?.email ?? '';
+    final customerMobile = effectiveOrder?.customerNumber ?? '';
+    final orderId = effectiveOrder?.id ?? slot?.orderId ?? 'N/A';
+    final address = effectiveOrder?.address ?? 'No address provided';
+    final items = effectiveOrder?.items ?? [];
+    final totalPrice = effectiveOrder?.totalPrice ?? '0.00';
+    
+    // Use fields from OrderDetails/FullDetails if possible, else fallback to slot
+    final date = slot?.date ?? (effectiveOrder?.createdAt?.split('T')[0]) ?? 'N/A';
+    final timeSlot = slot != null 
+        ? '${slot?.etaStartTime ?? ""} - ${slot?.etaEndTime ?? ""}'
+        : 'Scheduled';
 
     return Scaffold(
       backgroundColor: AppTheme.surfaceColor,

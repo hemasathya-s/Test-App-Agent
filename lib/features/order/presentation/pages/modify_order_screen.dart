@@ -137,7 +137,7 @@ class ModifyOrderScreen extends ConsumerWidget {
                     ),
                     GestureDetector(
                       onTap: () {
-                         // Logic to clear items
+                        // Logic to clear items
                       },
                       child: Text(
                         'Clear all',
@@ -156,153 +156,155 @@ class ModifyOrderScreen extends ConsumerWidget {
                     .where((i) => !i.isRemoved)
                     .map(
                       (item) => Container(
-                        margin: const EdgeInsets.only(bottom: 24),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.grey.shade200),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.04),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
+                    margin: const EdgeInsets.only(bottom:24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.grey.shade200),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.04),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
                         ),
-                        child: Stack(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
+                      ],
+                    ),
+                    child: Stack(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      // 1. Image at the left side
-                                      Container(
-                                        width: 80,
-                                        height: 80,
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey[100],
-                                          borderRadius: BorderRadius.circular(12),
-                                          image: const DecorationImage(
-                                            image: NetworkImage('https://images.unsplash.com/photo-1581578731522-745d0514216e?q=80&w=500&auto=format&fit=crop'),
-                                            fit: BoxFit.cover,
+                                  // 1. Image at the left side
+                                  Container(
+                                    width: 80,
+                                    height: 80,
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[100],
+                                      borderRadius: BorderRadius.circular(12),
+                                      image: const DecorationImage(
+                                        image: NetworkImage('https://images.unsplash.com/photo-1581578731522-745d0514216e?q=80&w=500&auto=format&fit=crop'),
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+
+                                  // 2. Name and Total Price
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          item.name,
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppTheme.textPrimary,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        if (item.quantity > 0)
+                                          Text(
+                                            '\₹${(item.price * item.quantity).toStringAsFixed(2)}',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppTheme.primaryColor,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // 3. Conditional Quantity buttons (Right side, but moved slightly down to avoid X)
+                                  if (item.quantity >= 1)
+                                    Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const SizedBox(height: 24), // Space for the X icon above
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey[50],
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: Colors.grey.shade100),
+                                          ),
+                                          padding: const EdgeInsets.all(2),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              _buildQtyBtn(
+                                                Icons.remove,
+                                                    () => controller.updateQuantity(
+                                                  item.id,
+                                                  item.quantity - 1,
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                                child: Text(
+                                                  item.quantity.toString(),
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                              _buildQtyBtn(
+                                                Icons.add,
+                                                    () => controller.updateQuantity(
+                                                  item.id,
+                                                  item.quantity + 1,
+                                                ),
+                                                isColor: true,
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      
-                                      // 2. Name and Total Price
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              item.name,
-                                              style: GoogleFonts.outfit(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.bold,
-                                                color: AppTheme.textPrimary,
-                                              ),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            const SizedBox(height: 4),
-                                            if (item.quantity > 0)
-                                            Text(
-                                              '₹${(item.price * item.quantity).toStringAsFixed(2)}',
-                                              style: GoogleFonts.outfit(
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.bold,
-                                                color: AppTheme.primaryColor,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      
-                                      // 3. Conditional Quantity buttons
-                                      if (item.quantity >= 1)
-                                        Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            const SizedBox(height: 24),
-                                            Container(
-                                              decoration: BoxDecoration(
-                                                color: Colors.grey[50],
-                                                borderRadius: BorderRadius.circular(8),
-                                                border: Border.all(color: Colors.grey.shade100),
-                                              ),
-                                              padding: const EdgeInsets.all(2),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  _buildQtyBtn(
-                                                    Icons.remove,
-                                                    () => controller.updateQuantity(
-                                                      item.id,
-                                                      item.quantity - 1,
-                                                    ),
-                                                  ),
-                                                  Padding(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                                                    child: Text(
-                                                      item.quantity.toString(),
-                                                      style: GoogleFonts.outfit(
-                                                        fontSize: 14,
-                                                        fontWeight: FontWeight.bold,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  _buildQtyBtn(
-                                                    Icons.add,
-                                                    () => controller.updateQuantity(
-                                                      item.id,
-                                                      item.quantity + 1,
-                                                    ),
-                                                    isColor: true,
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                    ],
-                                  ),
-
-                                  const SizedBox(height: 16),
-
-                                  // 4. Bottom replace item dropdown
-                                  _buildAddDropdown(products, controller, isSmall: true, replaceId: item.id),
+                                      ],
+                                    ),
                                 ],
                               ),
-                            ),
-                            
-                            // 5. Tip of the right corner X mark
-                            Positioned(
-                              top: 3,
-                              right: 3,
-                              child: GestureDetector(
-                                onTap: () => controller.removeItem(item.id),
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[100],
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.close,
-                                    color: AppTheme.textSecondary,
-                                    size: 16,
-                                  ),
-                                ),
+
+                              // const SizedBox(height: 16),
+                              // const Divider(height: 1),
+                              const SizedBox(height: 16),
+
+                              // 4. Bottom replace item dropdown
+                              _buildAddDropdown(products, controller, isSmall: true, replaceId: item.id),
+                            ],
+                          ),
+                        ),
+
+                        // 5. Tip of the right corner X mark
+                        Positioned(
+                          top: 3,
+                          right: 3,
+                          child: GestureDetector(
+                            onTap: () => controller.removeItem(item.id),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[100],
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.close,
+                                color: AppTheme.textSecondary,
+                                size: 16,
                               ),
                             ),
-                          ],
+                          ),
                         ),
-                      ),
+                      ],
                     ),
+                  ),
+                ),
 
                 const SizedBox(height: 16),
 
@@ -397,10 +399,9 @@ class ModifyOrderScreen extends ConsumerWidget {
                 const SizedBox(height: 8),
                 TextField(
                   maxLines: 3,
-                  onChanged: (val) => controller.setNote(val),
                   decoration: InputDecoration(
                     hintText:
-                        'Add a note for the approver explaining why this change is necessary...',
+                    'Add a note for the approver explaining why this change is necessary...',
                     hintStyle: GoogleFonts.outfit(
                       color: AppTheme.textSecondary,
                     ),
@@ -434,7 +435,6 @@ class ModifyOrderScreen extends ConsumerWidget {
         ),
         child: ElevatedButton(
           onPressed: () {
-            controller.submitRequest(); // Record the request in history
             Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const ApprovalWaitingScreen()),
@@ -498,11 +498,11 @@ class ModifyOrderScreen extends ConsumerWidget {
           onChanged: (val) {
             if (val != null) {
               if (replaceId != null) {
-                controller.replaceItem(
-                  replaceId,
-                  val['name'] as String,
-                  val['price'] as double,
-                );
+                // controller.replaceItem(
+                //   replaceId,
+                //   val['name'] as String,
+                //   val['price'] as double,
+                // );
               } else {
                 controller.addItem(
                   val['name'] as String,

@@ -12,6 +12,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
+import '../../../../core/model/slot_availability.dart';
 import '../../../../core/services/apiservices.dart';
 import '../../../../core/services/tracking_service.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -27,7 +28,6 @@ class NavigationScreen extends ConsumerStatefulWidget {
 class _NavigationScreenState extends ConsumerState<NavigationScreen> {
   GoogleMapController? _mapController;
   final String apiKey = "AIzaSyAflftNedMvJ812sMI1l0h7kqj1-HBYDE8";
-  final ApiService _apiService = ApiService();
   final TrackingService _trackingService = TrackingService();
 
   String? currentOrderId;
@@ -77,62 +77,43 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
         permission = await Geolocator.requestPermission();
       }
 
-      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      // Use bestAccuracy for initial position as well
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.bestForNavigation,
+      );
       riderPosition = LatLng(position.latitude, position.longitude);
       print("DEBUG: Current Agent Position: $riderPosition");
 
-      print("DEBUG: Calling API getMySlots()...");
-      final slots = await _apiService.getMySlots();
+      print("DEBUG: Calling API getAgentSlotAvailability()...");
+      final List<SlotAvailability> slots = await ApiService.getAgentSlotAvailability();
       print("DEBUG: API My Slots Response Length: ${slots.length}");
-      print("DEBUG: Raw Slots JSON: $slots");
 
       if (slots.isNotEmpty) {
         final activeSlot = slots.firstWhere(
-              (s) => s['status'] == 'PENDING' || s['status'] == 'ACCEPTED',
+          (s) => s.status == 'PENDING' || s.status == 'ACCEPTED',
           orElse: () => slots.first,
         );
 
-        print("DEBUG: Selected Active Slot: ${activeSlot['id']} (Status: ${activeSlot['status']})");
-        currentOrderId = activeSlot['order_id']?.toString();
+        print("DEBUG: Selected Active Slot: ${activeSlot.id} (Status: ${activeSlot.status})");
+        currentOrderId = activeSlot.orderId;
         print("DEBUG: Associated Order ID: $currentOrderId");
 
-        final dynamic details = activeSlot['order_details'];
-        print("DEBUG: Order Details found in Slot: $details");
-
+        final details = activeSlot.orderDetails;
         if (details != null) {
-          if (details is Map) {
-            double? lat = double.tryParse(details['latitude']?.toString() ?? details['lat']?.toString() ?? '');
-            double? lng = double.tryParse(details['longitude']?.toString() ?? details['lng']?.toString() ?? '');
-            
-            if (lat != null && lng != null) {
-              destination = LatLng(lat, lng);
-              print("DEBUG: Successfully parsed LatLng from order_details Map: $destination");
-            } else {
-              print("DEBUG: FAILED to parse Lat/Lng from details Map. Content: $details");
-            }
-            
-            customerPhone = details['customer_number']?.toString() ?? details['phone']?.toString();
-            print("DEBUG: Customer Phone extracted: $customerPhone");
-          } else if (details is String && details.contains(',')) {
-            final parts = details.split(',');
-            destination = LatLng(double.parse(parts[0].trim()), double.parse(parts[1].trim()));
-            print("DEBUG: Parsed destination from String: $destination");
+          if (details.latitude != null && details.longitude != null) {
+            destination = LatLng(details.latitude!, details.longitude!);
+            print("DEBUG: Successfully set destination from OrderDetails: $destination");
+          } else {
+            print("DEBUG: OrderDetails found but Lat/Lng are null in the model.");
           }
+          
+          customerPhone = details.customerNumber;
+          print("DEBUG: Customer Phone extracted: $customerPhone");
         } else {
-          print("DEBUG: order_details is NULL in the active slot response.");
+          print("DEBUG: orderDetails is NULL in the active slot object.");
         }
 
-        if (destination == null) {
-          print("DEBUG: Destination still null, checking top-level slot fields for lat/lng...");
-          double? lat = double.tryParse(activeSlot['latitude']?.toString() ?? activeSlot['lat']?.toString() ?? '');
-          double? lng = double.tryParse(activeSlot['longitude']?.toString() ?? activeSlot['lng']?.toString() ?? '');
-          if (lat != null && lng != null) {
-            destination = LatLng(lat, lng);
-            print("DEBUG: Found destination in top-level slot fields: $destination");
-          }
-        }
-
-        destinationName = activeSlot['slot_name'] ?? "Job Location";
+        destinationName = activeSlot.slotName ?? "Job Location";
       } else {
         print("DEBUG: CRITICAL - No slots returned from API. Navigation cannot proceed with real data.");
       }
@@ -163,11 +144,11 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
     final Canvas canvas = Canvas(pictureRecorder);
     const double size = 100.0;
 
-    final Paint bluePaint = Paint()..color = const Color(0xFF007AFF);
+    final Paint orangePaint = Paint()..color = Colors.blue;
     final Paint whiteBorderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 8.0;
+      ..strokeWidth = 10.0;
 
     final Path path = Path();
     path.moveTo(size / 2, 0);
@@ -177,7 +158,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
     path.close();
 
     canvas.drawShadow(path, Colors.black, 6, true);
-    canvas.drawPath(path, bluePaint);
+    canvas.drawPath(path, orangePaint);
     canvas.drawPath(path, whiteBorderPaint);
 
     final ui.Image image = await pictureRecorder.endRecording().toImage(size.toInt(), size.toInt());
@@ -245,8 +226,8 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
           Polyline(
             polylineId: const PolylineId("path"),
             points: points,
-            color: const Color(0xFF007AFF),
-            width: 10,
+            color: Colors.blue,
+            width: 8,
             jointType: JointType.round,
             startCap: Cap.roundCap,
             endCap: Cap.roundCap,
@@ -260,7 +241,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
           rotation: 0,
           anchor: const Offset(0.5, 0.5),
           flat: false,
-          icon: _navigationIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          icon: _navigationIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
           zIndex: 2,
         ),
         Marker(
@@ -280,7 +261,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
         CameraUpdate.newCameraPosition(
           CameraPosition(
             target: riderPosition!,
-            zoom: 19,
+            zoom: 15,
             tilt: 0,
             bearing: riderRotation,
           ),
@@ -289,11 +270,20 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
     }
   }
 
-  void _startTracking() {
+  void _startTracking() async {
     if (isStarted) return;
 
     if (currentOrderId != null) {
-      ApiService.updateJobStatus(currentOrderId!, 'NAVIGATING');
+      final success = await ApiService.updateJobStatus(currentOrderId!, 'NAVIGATING');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success ? "Status updated: NAVIGATING" : "Failed to update status"),
+            backgroundColor: success ? Colors.green : Colors.red,
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
     }
 
     _trackingService.startTracking();
@@ -302,7 +292,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
 
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
+        accuracy: LocationAccuracy.bestForNavigation, // Highest accuracy for moving
         distanceFilter: 2,
       ),
     ).listen((Position position) {
@@ -413,43 +403,84 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
               target: riderPosition ?? const LatLng(13.0827, 80.2707),
               zoom: 19,
               tilt: 0,
+              bearing: 0,
             ),
-            markers: markers,
-            polylines: polylines,
-            myLocationEnabled: false,
-            myLocationButtonEnabled: false,
-            compassEnabled: false,
-            zoomControlsEnabled: false,
             onMapCreated: (controller) {
               _mapController = controller;
               _recenterPosition();
             },
+            markers: markers,
+            polylines: polylines,
+            myLocationEnabled: false, // Enabled myLocation to compare visual accuracy
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            mapToolbarEnabled: false,
+            compassEnabled: false,
           ),
 
+          // Top Navigation Bar
           Positioned(
-            top: 60, left: 20, right: 20,
+            top: 50,
+            left: 15,
+            right: 15,
             child: Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
               decoration: BoxDecoration(
-                color: const Color(0xFF2B2D42),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10)],
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
               ),
               child: Row(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    onPressed: () => context.pop(),
+                  GestureDetector(
+                    onTap: () => context.pop(),
+                    child: const Icon(Icons.arrow_back, color: Colors.black87),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 15),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(eta, style: GoogleFonts.outfit(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                        Text("to Destination", style: GoogleFonts.outfit(color: Colors.white70, fontSize: 14)),
+                        Text(
+                          "Navigating to Job",
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        Text(
+                          destinationName,
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      eta,
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.primaryColor,
+                      ),
                     ),
                   ),
                 ],
@@ -457,24 +488,19 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
             ),
           ),
 
+          // Navigation Overlay (Bottom)
           Positioned(
-            bottom: 220,
-            right: 20,
-            child: FloatingActionButton(
-              onPressed: _recenterPosition,
-              backgroundColor: Colors.white,
-              mini: true,
-              child: const Icon(Icons.my_location, color: Color(0xFF2B2D42), size: 20),
-            ),
-          ),
-
-          Positioned(
-            bottom: 0, left: 0, right: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
             child: Container(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(20, 25, 20, 40),
               decoration: const BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+                boxShadow: [
+                  BoxShadow(color: Colors.black12, blurRadius: 20, spreadRadius: 5),
+                ],
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -485,52 +511,84 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text("Remaining Distance", style: GoogleFonts.outfit(color: Colors.grey, fontSize: 14)),
-                          Text(distanceText, style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.bold)),
+                          Text(
+                            distanceText,
+                            style: GoogleFonts.poppins(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          Text(
+                            "Remaining Distance",
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
+                          ),
                         ],
                       ),
-                      GestureDetector(
-                        onTap: _makePhoneCall,
-                        child: const CircleAvatar(
-                          radius: 28,
-                          backgroundColor: Color(0xFFEDF2F4),
-                          child: Icon(Icons.call, color: Color(0xFF2B2D42)),
-                        ),
+                      Row(
+                        children: [
+                          _buildCircleButton(
+                            icon: Icons.call,
+                            color: Colors.green,
+                            onTap: _makePhoneCall,
+                          ),
+                          const SizedBox(width: 15),
+                          _buildCircleButton(
+                            icon: Icons.my_location,
+                            color: AppTheme.primaryColor,
+                            onTap: _recenterPosition,
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 25),
                   SizedBox(
                     width: double.infinity,
+                    height: 55,
                     child: ElevatedButton(
                       onPressed: !isStarted
                           ? _startTracking
                           : (isNearDestination
-                          ? () {
+                          ? () async {
                         if (currentOrderId != null) {
-                          ApiService.updateJobStatus(currentOrderId!, 'ARRIVED');
+                          final success = await ApiService.updateJobStatus(currentOrderId!, 'ARRIVED');
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(success ? "Status updated: ARRIVED" : "Failed to update status"),
+                                backgroundColor: success ? Colors.green : Colors.red,
+                                duration: const Duration(seconds: 1),
+                              ),
+                            );
+                            if (success) {
+                              jobController.arriveAtLocation();
+                              context.pop();
+                            }
+                          }
                         }
-                        _trackingService.stopTracking();
-                        jobController.arriveAtLocation();
-                        context.pushReplacement('/checklist');
                       }
                           : null),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: !isStarted
-                            ? const Color(0xFFFFAB0F)
-                            : (isNearDestination ? Colors.green : const Color(0xFFE0E0E0)),
-                        padding: const EdgeInsets.symmetric(vertical: 20),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                            ? AppTheme.primaryColor
+                            : (isNearDestination ? Colors.green : Colors.grey[400]),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
                         elevation: 0,
                       ),
                       child: Text(
                         !isStarted
                             ? "START NAVIGATION"
-                            : (isNearDestination ? "I HAVE ARRIVED" : "APPROACHING DESTINATION..."),
-                        style: GoogleFonts.outfit(
-                          fontSize: 18,
+                            : (isNearDestination ? "ARRIVED AT LOCATION" : "NAVIGATING..."),
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: !isStarted || isNearDestination ? Colors.white : Colors.black26,
+                          color: Colors.white,
                         ),
                       ),
                     ),
@@ -540,6 +598,20 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCircleButton({required IconData icon, required Color color, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: color, size: 26),
       ),
     );
   }
