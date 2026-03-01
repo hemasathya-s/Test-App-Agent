@@ -11,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/services/apiservices.dart';
 import '../../../../core/services/tracking_service.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -30,6 +31,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
   final TrackingService _trackingService = TrackingService();
 
   String? currentOrderId;
+  String? customerPhone;
   LatLng? destination;
   LatLng? riderPosition;
   double riderRotation = 0;
@@ -66,18 +68,23 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
     if (!mounted) return;
     setState(() => isLoading = true);
 
+    print("DEBUG: --- START NAVIGATION INITIALIZATION ---");
+
     try {
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
+        print("DEBUG: Requesting location permissions...");
         permission = await Geolocator.requestPermission();
       }
 
       Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
       riderPosition = LatLng(position.latitude, position.longitude);
+      print("DEBUG: Current Agent Position: $riderPosition");
 
+      print("DEBUG: Calling API getMySlots()...");
       final slots = await _apiService.getMySlots();
-      // PRINT API RESPONSE AS REQUESTED
-      print("DEBUG: API My Slots Response: $slots");
+      print("DEBUG: API My Slots Response Length: ${slots.length}");
+      print("DEBUG: Raw Slots JSON: $slots");
 
       if (slots.isNotEmpty) {
         final activeSlot = slots.firstWhere(
@@ -85,35 +92,57 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
           orElse: () => slots.first,
         );
 
+        print("DEBUG: Selected Active Slot: ${activeSlot['id']} (Status: ${activeSlot['status']})");
         currentOrderId = activeSlot['order_id']?.toString();
+        print("DEBUG: Associated Order ID: $currentOrderId");
 
         final dynamic details = activeSlot['order_details'];
-        // PRINT ORDER DETAILS AS REQUESTED
-        print("DEBUG: Active Slot Order Details: $details");
+        print("DEBUG: Order Details found in Slot: $details");
 
         if (details != null) {
           if (details is Map) {
             double? lat = double.tryParse(details['latitude']?.toString() ?? details['lat']?.toString() ?? '');
             double? lng = double.tryParse(details['longitude']?.toString() ?? details['lng']?.toString() ?? '');
-            if (lat != null && lng != null) destination = LatLng(lat, lng);
+            
+            if (lat != null && lng != null) {
+              destination = LatLng(lat, lng);
+              print("DEBUG: Successfully parsed LatLng from order_details Map: $destination");
+            } else {
+              print("DEBUG: FAILED to parse Lat/Lng from details Map. Content: $details");
+            }
+            
+            customerPhone = details['customer_number']?.toString() ?? details['phone']?.toString();
+            print("DEBUG: Customer Phone extracted: $customerPhone");
           } else if (details is String && details.contains(',')) {
             final parts = details.split(',');
             destination = LatLng(double.parse(parts[0].trim()), double.parse(parts[1].trim()));
+            print("DEBUG: Parsed destination from String: $destination");
           }
+        } else {
+          print("DEBUG: order_details is NULL in the active slot response.");
         }
 
         if (destination == null) {
+          print("DEBUG: Destination still null, checking top-level slot fields for lat/lng...");
           double? lat = double.tryParse(activeSlot['latitude']?.toString() ?? activeSlot['lat']?.toString() ?? '');
           double? lng = double.tryParse(activeSlot['longitude']?.toString() ?? activeSlot['lng']?.toString() ?? '');
-          if (lat != null && lng != null) destination = LatLng(lat, lng);
+          if (lat != null && lng != null) {
+            destination = LatLng(lat, lng);
+            print("DEBUG: Found destination in top-level slot fields: $destination");
+          }
         }
 
         destinationName = activeSlot['slot_name'] ?? "Job Location";
-        // PRINT FINAL DESTINATION AS REQUESTED
-        print("DEBUG: Final Parsed Destination: $destination (Name: $destinationName)");
+      } else {
+        print("DEBUG: CRITICAL - No slots returned from API. Navigation cannot proceed with real data.");
       }
 
-      destination ??= const LatLng(13.0418, 80.2337);
+      if (destination == null) {
+        print("DEBUG: FALLBACK TRIGGERED - No destination found in API response. Defaulting to T Nagar (13.0418, 80.2337)");
+        destination = const LatLng(13.0418, 80.2337);
+      }
+
+      print("DEBUG: Final Destination for Map: $destination (Name: $destinationName)");
 
       if (riderPosition != null && destination != null) {
         distanceToDestination = _calculateDistance(riderPosition!, destination!);
@@ -122,8 +151,9 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
       await _createNavigationIcon();
       await fetchRoute();
     } catch (e) {
-      debugPrint("DEBUG: Init Error: $e");
+      print("DEBUG: ERROR during _initializeNavigation: $e");
     } finally {
+      print("DEBUG: --- END NAVIGATION INITIALIZATION ---");
       if (mounted) setState(() => isLoading = false);
     }
   }
@@ -133,11 +163,11 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
     final Canvas canvas = Canvas(pictureRecorder);
     const double size = 100.0;
 
-    final Paint bluePaint = Paint()..color = const Color(0xFF3484E3);
+    final Paint bluePaint = Paint()..color = const Color(0xFF007AFF);
     final Paint whiteBorderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 10.0;
+      ..strokeWidth = 8.0;
 
     final Path path = Path();
     path.moveTo(size / 2, 0);
@@ -227,9 +257,9 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
         Marker(
           markerId: const MarkerId("agent"),
           position: riderPosition!,
-          rotation: riderRotation,
+          rotation: 0,
           anchor: const Offset(0.5, 0.5),
-          flat: true,
+          flat: false,
           icon: _navigationIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
           zIndex: 2,
         ),
@@ -303,7 +333,6 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
         _updateUI();
       });
 
-      // UPDATE CAMERA: Face UP and keep rider lower on screen via padding
       _mapController?.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(
@@ -348,6 +377,26 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
     return (atan2(y, x) * 180 / pi + 360) % 360;
   }
 
+  Future<void> _makePhoneCall() async {
+    if (customerPhone == null || customerPhone!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Phone number not available")),
+      );
+      return;
+    }
+    final Uri launchUri = Uri(
+      scheme: 'tel',
+      path: customerPhone,
+    );
+    if (await canLaunchUrl(launchUri)) {
+      await launchUrl(launchUri);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Could not launch dialer")),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final jobController = ref.read(jobProvider.notifier);
@@ -359,10 +408,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
           : Stack(
         children: [
           GoogleMap(
-            // ADD PADDING: This moves the visual focus upwards,
-            // positioning the rider icon at the bottom of the visible map area
-            // like in a navigation game or Apple/Google Maps.
-            padding: const EdgeInsets.only(bottom: 280, top: 100),
+            padding: const EdgeInsets.only(bottom: 320, top: 100),
             initialCameraPosition: CameraPosition(
               target: riderPosition ?? const LatLng(13.0827, 80.2707),
               zoom: 19,
@@ -443,10 +489,13 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
                           Text(distanceText, style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.bold)),
                         ],
                       ),
-                      const CircleAvatar(
-                        radius: 28,
-                        backgroundColor: Color(0xFFEDF2F4),
-                        child: Icon(Icons.call, color: Color(0xFF2B2D42)),
+                      GestureDetector(
+                        onTap: _makePhoneCall,
+                        child: const CircleAvatar(
+                          radius: 28,
+                          backgroundColor: Color(0xFFEDF2F4),
+                          child: Icon(Icons.call, color: Color(0xFF2B2D42)),
+                        ),
                       ),
                     ],
                   ),

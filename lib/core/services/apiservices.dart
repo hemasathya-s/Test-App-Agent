@@ -143,12 +143,16 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final dynamic decodedData = jsonDecode(response.body);
+        
+        // Fix: Explicitly return a list to avoid type casting error
         if (decodedData is List) {
           return decodedData;
-        } else if (decodedData is Map && decodedData.containsKey('results')) {
-          return decodedData['results'] as List<dynamic>;
-        } else if (decodedData is Map && decodedData.containsKey('data')) {
-          return decodedData['data'] as List<dynamic>;
+        } else if (decodedData is Map) {
+          if (decodedData.containsKey('results') && decodedData['results'] is List) {
+            return decodedData['results'];
+          } else if (decodedData.containsKey('data') && decodedData['data'] is List) {
+            return decodedData['data'];
+          }
         }
         return [];
       }
