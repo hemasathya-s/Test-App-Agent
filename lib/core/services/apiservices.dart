@@ -11,7 +11,7 @@ import '../model/slot_availability.dart';
 class ApiService{
 
   static String baseUrl ='https://api.itfixer199.com';
-  static String accessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzcyNDAzMDgzLCJpYXQiOjE3NzIzNDkwODMsImp0aSI6ImQ5NjI3MjIyYmRkMzQ3YjY4NDcxZTlkMTNmM2RmMjMzIiwidXNlcl9pZCI6ImUzYWM4OTQ3LTdhYzktNDYwOS05NGVlLTczZjNjYmU4ZWM1NiJ9.WoDHSjmtNolTYVF7ZN71b2oXujcjFxJflHMK4Jkrgt8';
+  static String accessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzcyNDg2NTkxLCJpYXQiOjE3NzI0MzI1OTEsImp0aSI6IjVkNzBjYjk4M2Q4ODQxNTk4NGNlMDdmMDc3NzU5Y2VhIiwidXNlcl9pZCI6ImUzYWM4OTQ3LTdhYzktNDYwOS05NGVlLTczZjNjYmU4ZWM1NiJ9.R1F43aEj0V7nLDStpOCDkcYmYTWj-V5CWvCISNLcCAQ';
 
   static Future<List<SlotAvailability>> getAgentSlotAvailability([String? date])async{
     String fetchDate = date ?? DateTime.now().toString().split(' ')[0];
@@ -54,6 +54,7 @@ class ApiService{
      return [];
    }
   }
+
   Future<List<dynamic>> getMySlots() async {
     final token = accessToken;
 
