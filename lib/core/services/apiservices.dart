@@ -11,8 +11,7 @@ import '../model/slot_availability.dart';
 class ApiService{
 
   static String baseUrl ='https://api.itfixer199.com';
-  static String accessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzcyNDg2NTkxLCJpYXQiOjE3NzI0MzI1OTEsImp0aSI6IjVkNzBjYjk4M2Q4ODQxNTk4NGNlMDdmMDc3NzU5Y2VhIiwidXNlcl9pZCI6ImUzYWM4OTQ3LTdhYzktNDYwOS05NGVlLTczZjNjYmU4ZWM1NiJ9.R1F43aEj0V7nLDStpOCDkcYmYTWj-V5CWvCISNLcCAQ';
-
+  static String accessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzcyNTA0MzYyLCJpYXQiOjE3NzI0NTAzNjIsImp0aSI6ImQwYmEyNGYzYmIwNDRmYzg4NGYzNDU4OGZjNjRiOWEzIiwidXNlcl9pZCI6ImUzYWM4OTQ3LTdhYzktNDYwOS05NGVlLTczZjNjYmU4ZWM1NiJ9.8jK-xjkw31bE7irf1LD161Tke8IZehDTL4dkB267E-I';
   static Future<List<SlotAvailability>> getAgentSlotAvailability([String? date])async{
     String fetchDate = date ?? DateTime.now().toString().split(' ')[0];
    try{
@@ -323,6 +322,50 @@ class ApiService{
       }
     } catch (e) {
       print('Error getOrderbyId: $e');
+    }
+    return null;
+  }
+  static Future<bool> updateJobStatus(String orderId, String status) async {
+    try {
+      String url = '$baseUrl/api/order/orders/$orderId/update-status/';
+
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: jsonEncode({"status": status}),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        print("Job $orderId status successfully updated to $status");
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print("Error on update job status: $e");
+      return false;
+    }
+  }
+
+  static Future<bool?> toggleActiveStatus() async {
+    try {
+      String url = '$baseUrl/api/user/toggle-active';
+      final response = await http.patch(
+        Uri.parse(url),
+        headers: {
+          'accept': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['data']['is_active'] as bool?;
+      }
+    } catch (e) {
+      print("Error toggling active status: $e");
     }
     return null;
   }
