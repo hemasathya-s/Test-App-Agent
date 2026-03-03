@@ -1,3 +1,20 @@
+// ── SEND OTP REQUEST MODEL ────────────────────────────────────────────────
+class SendOtpRequest {
+  final int mobileNumber;
+  final String role;
+
+  const SendOtpRequest({
+    required this.mobileNumber,
+    this.role = 'CUSTOMER',
+  });
+
+  Map<String, dynamic> toJson() => {
+    'mobile_number': mobileNumber,
+    'role': role,
+  };
+}
+
+
 class OtpUser {
   final String id;
   final String name;

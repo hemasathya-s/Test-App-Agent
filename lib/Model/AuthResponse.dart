@@ -89,6 +89,7 @@ class AuthResponse {
       prefs.remove('user_id'),
       prefs.remove('user_name'),
       prefs.remove('user_role'),
+      prefs.remove('is_logged_in'),
       prefs.remove('is_staff'),
       prefs.remove('is_superuser'),
       prefs.remove('temp_user_address'),

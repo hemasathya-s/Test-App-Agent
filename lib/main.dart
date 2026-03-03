@@ -18,6 +18,7 @@ import 'features/order/presentation/pages/modification_summary_screen.dart';
 import 'features/order/presentation/pages/modify_order_screen.dart';
 import 'features/order/presentation/pages/request_tracking_screen.dart';
 import 'features/orders/presentation/pages/orders_history_screen.dart';
+import 'features/auth/presentation/pages/CreateAgent.dart';
 
 void main() {
   runApp(
@@ -31,10 +32,23 @@ final _router = GoRouter(
   initialLocation: '/',
   routes: [
     GoRoute(path: '/', builder: (context, state) => const SplashScreen()),
-    GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
+    GoRoute(
+      path: '/login',
+      builder: (context, state) {
+        final mobileNumber = state.extra as String?;
+        return LoginPage(initialMobileNumber: mobileNumber);
+      },
+    ),
     GoRoute(
       path: '/permissions',
       builder: (context, state) => const PermissionsScreen(),
+    ),
+    GoRoute(
+      path: '/register',
+      builder: (context, state) {
+        final mobileNumber = state.extra as String?;
+        return AgentRegistrationPage(mobileNumber: mobileNumber);
+      },
     ),
     GoRoute(path: '/kyc', builder: (context, state) => const KycStatusScreen()),
     GoRoute(path: '/home', builder: (context, state) => const DashboardShell()),

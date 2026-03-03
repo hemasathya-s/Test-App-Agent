@@ -76,7 +76,20 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
       _error = null;
     });
 
-    final result = await ApiService().getAgentProfile();
+    final api = ApiService();
+    // Guard: Check if token exists before making authorized request
+    final token = await api.getAccessTokenLocal();
+    if (token == null) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = "Session expired. Please login again.";
+        });
+      }
+      return;
+    }
+
+    final result = await api.getAgentProfile();
 
     if (mounted) {
       if (result.isSuccess && result.data != null) {
@@ -162,7 +175,7 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
       setState(() => _isLoading = false);
 
       if (result.isSuccess) {
-        // Navigate using GoRouter to Login
+        // Navigate using GoRouter to Login and clear the stack
         if (mounted) context.go('/login');
         
         ScaffoldMessenger.of(context).showSnackBar(

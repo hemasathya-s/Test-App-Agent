@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:image_picker/image_picker.dart';
@@ -322,14 +323,8 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(
-                  builder: (_) => LoginPage(
-                    initialMobileNumber: _mobileController.text.trim(),
-                  ),
-                ),
-              );
+              // Properly navigate back to login using GoRouter
+              context.go('/login', extra: _mobileController.text.trim());
             },
             child: Text('Continue',
                 style: GoogleFonts.outfit(

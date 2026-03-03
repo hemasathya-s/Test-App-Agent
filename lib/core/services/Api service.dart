@@ -7,14 +7,93 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../Model/AgentRegistrationRequest.dart';
 import '../../Model/AuthResponse.dart';
 import '../../Model/AgentProfileResponse.dart';
+import '../../Model/LoginRequestModel.dart';
+import '../../Model/OtpUser.dart';
 
 class ApiService
 {
   static const String _baseUrl = 'https://api.itfixer199.com';
 
+  Future<ApiResponse<AuthResponse>> unifiedLogin(LoginRequestModel request) async {
+    try {
+      final deviceInfo = await _getDeviceInfo();
+
+      final LoginRequestModel finalRequest;
+
+      if (request.loginType == 'PASSWORD') {
+        finalRequest = LoginRequestModel.password(
+          username: request.username ?? '',
+          password: request.password ?? '',
+          role: request.role,
+          deviceType: Platform.isAndroid ? 'ANDROID' : 'IOS',
+          deviceId: deviceInfo['device_id'] ?? 'unknown',
+          deviceName: deviceInfo['device_name'] ?? 'unknown',
+          ipAddress: '0.0.0.0',
+        );
+      } else {
+        finalRequest = LoginRequestModel.otp(
+          mobileNumber: request.mobileNumber ?? 0,
+          role: request.role,
+          deviceType: Platform.isAndroid ? 'ANDROID' : 'IOS',
+          deviceId: deviceInfo['device_id'] ?? 'unknown',
+          deviceName: deviceInfo['device_name'] ?? 'unknown',
+          ipAddress: '0.0.0.0',
+        );
+      }
+
+      print('🔐 [UnifiedLogin] login_type : ${finalRequest.loginType}');
+      print('🔐 [UnifiedLogin] role       : ${finalRequest.role}');
+      print('🔐 [UnifiedLogin] Request body: ${finalRequest.toFormJson()}');
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/api/unified-login'),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'accept': 'application/json',
+        },
+        body: finalRequest.toFormJson(),
+      ).timeout(const Duration(seconds: 15));
+
+      print('🔐 [UnifiedLogin] Status Code : ${response.statusCode}');
+      print('🔐 [UnifiedLogin] Response    : ${response.body}');
+
+      final json = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        final authResponse = AuthResponse.fromJson(json);
+        await authResponse.saveTokens();
+        print('✅ [UnifiedLogin] Success — user: ${authResponse.user?.name}');
+        return ApiResponse(isSuccess: true, data: authResponse);
+      }
+
+      final errors = json['errors'] as List<dynamic>?;
+      final errorMsg = (errors?.isNotEmpty == true)
+          ? errors!.first.toString()
+          : json['message']?.toString() ?? 'Login failed';
+
+      print('❌ [UnifiedLogin] Failed — error: $errorMsg');
+      return ApiResponse(isSuccess: false, error: errorMsg);
+    } on SocketException catch (e) {
+      print('❌ [UnifiedLogin] SocketException: $e');
+      return ApiResponse(isSuccess: false, error: 'No internet connection');
+    } on TimeoutException catch (e) {
+      print('❌ [UnifiedLogin] TimeoutException: $e');
+      return ApiResponse(isSuccess: false, error: 'Request timed out');
+    } catch (e) {
+      print('❌ [UnifiedLogin] Exception: $e');
+      return ApiResponse(isSuccess: false, error: 'Something went wrong');
+    }
+  }
+
+
   Future<ApiResponse<String>> sendOtp(String mobileNumber) async {
     try {
-      print('📲 Sending OTP to: $mobileNumber');
+      final request = SendOtpRequest(
+        mobileNumber: int.tryParse(mobileNumber) ?? 0,
+        role: 'AGENT',
+      );
+
+      print('📲 [SendOtp] Request body  : ${jsonEncode(request.toJson())}');
 
       final response = await http.post(
         Uri.parse('$_baseUrl/api/send-otp'),
@@ -22,37 +101,41 @@ class ApiService
           'Content-Type': 'application/json',
           'accept': 'application/json',
         },
-        body: jsonEncode({'mobile_number': mobileNumber}),
+        body: jsonEncode(request.toJson()),
       ).timeout(const Duration(seconds: 15));
 
-      print('📲 Send OTP [${response.statusCode}]: ${response.body}');
+      print('📲 [SendOtp] Status Code   : ${response.statusCode}');
+      print('📲 [SendOtp] Response      : ${response.body}');
 
       final json = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
-        return ApiResponse(
-          isSuccess: true,
-          data: json['message']?.toString() ?? 'OTP sent successfully',
-        );
+        final msg = json['message']?.toString() ?? 'OTP sent successfully';
+        print('✅ [SendOtp] Success — $msg');
+        return ApiResponse(isSuccess: true, data: msg);
       }
 
-      final errors = json['errors'] as List<dynamic>?;
+      final errors   = json['errors'] as List<dynamic>?;
       final errorMsg = (errors?.isNotEmpty == true)
           ? errors!.first.toString()
           : json['message']?.toString() ?? 'Failed to send OTP';
 
+      print('❌ [SendOtp] Failed [${response.statusCode}] — $errorMsg');
       return ApiResponse(isSuccess: false, error: errorMsg);
-    } on SocketException {
+    } on SocketException catch (e) {
+      print('❌ [SendOtp] SocketException: $e');
       return ApiResponse(isSuccess: false, error: 'No internet connection');
-    } on TimeoutException {
+    } on TimeoutException catch (e) {
+      print('❌ [SendOtp] TimeoutException: $e');
       return ApiResponse(isSuccess: false, error: 'Request timed out');
     } catch (e) {
-      print('❌ sendOtp error: $e');
+      print('❌ [SendOtp] Exception: $e');
       return ApiResponse(isSuccess: false, error: 'Something went wrong');
     }
   }
 
-  Future<ApiResponse<AuthResponse>> verifyOtp({
+  // ── VERIFY OTP ────────────────────────────────────────────────────────────
+  Future<ApiResponse<VerifyOtpResponse>> verifyOtp({
     required String mobileNumber,
     required String otp,
   }) async {
@@ -61,53 +144,133 @@ class ApiService
 
       final body = {
         'mobile_number': mobileNumber,
-        'otp': otp,
-        'login_type': 'PASSWORD',
-        'device_type': Platform.isAndroid ? 'ANDROID' : 'IOS',
-        'device_id': deviceInfo['device_id'] ?? 'unknown',
-        'device_name': deviceInfo['device_name'] ?? 'unknown',
-        'ip_address': '0.0.0.0',
+        'otp':           otp,
+        'login_type':    'OTP',
+        'role':          'AGENT',
+        'device_type':   Platform.isAndroid ? 'ANDROID' : 'IOS',
+        'device_id':     deviceInfo['device_id'] ?? 'unknown',
+        'device_name':   deviceInfo['device_name'] ?? 'unknown',
+        'ip_address':    '0.0.0.0',
       };
 
-      print('📲 Verifying OTP: $body');
+      print('📲 [VerifyOtp] Request body : $body');
 
       final response = await http.post(
         Uri.parse('$_baseUrl/api/verify-otp'),
         headers: {
           'Content-Type': 'application/json',
-          'accept': 'application/json',
+          'accept':       'application/json',
         },
         body: jsonEncode(body),
       ).timeout(const Duration(seconds: 15));
 
-      print('📲 Verify OTP [${response.statusCode}]: ${response.body}');
+      print('📲 [VerifyOtp] Status Code  : ${response.statusCode}');
+      print('📲 [VerifyOtp] Raw Response : ${response.body}');
 
-      final json = jsonDecode(response.body);
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
 
       if (response.statusCode == 200) {
-        // AuthResponse.fromJson parses user as OtpUser
-        final authResponse = AuthResponse.fromJson(json);
+        // ── Deep debug: print every top-level key and its type ──────────
+        print('📲 [VerifyOtp] Top-level keys:');
+        json.forEach((k, v) => print('   "$k" → ${v.runtimeType} = $v'));
 
-        // ✅ Saves tokens + OtpUser fields to SharedPreferences
-        await authResponse.saveTokens();
+        // ── Try to locate user/token data at any nesting level ───────────
+        // Pattern A: { "user": {...}, "tokens": {...} }  ← direct
+        // Pattern B: { "data": { "user": {...}, "tokens": {...} } }
+        // Pattern C: { "access": "...", "refresh": "..." , "user": {...} }
 
-        print('✅ Logged in as: ${authResponse.user?.name} (${authResponse.user?.mobileNumber})');
+        Map<String, dynamic>? userMap;
+        Map<String, dynamic>? tokensMap;
 
-        return ApiResponse(isSuccess: true, data: authResponse);
+        if (json.containsKey('tokens') && json['tokens'] is Map) {
+          // Pattern A
+          tokensMap = Map<String, dynamic>.from(json['tokens'] as Map);
+        } else if (json.containsKey('access') && json.containsKey('refresh')) {
+          // Pattern C — tokens are flat at root
+          tokensMap = {
+            'access':  json['access'],
+            'refresh': json['refresh'],
+          };
+        } else if (json.containsKey('data') && json['data'] is Map) {
+          // Pattern B — nested under 'data'
+          final data = Map<String, dynamic>.from(json['data'] as Map);
+          if (data.containsKey('tokens') && data['tokens'] is Map) {
+            tokensMap = Map<String, dynamic>.from(data['tokens'] as Map);
+          } else if (data.containsKey('access')) {
+            tokensMap = {'access': data['access'], 'refresh': data['refresh']};
+          }
+          if (data.containsKey('user') && data['user'] is Map) {
+            userMap = Map<String, dynamic>.from(data['user'] as Map);
+          }
+        }
+
+        if (userMap == null && json.containsKey('user') && json['user'] is Map) {
+          userMap = Map<String, dynamic>.from(json['user'] as Map);
+        }
+
+        print('📲 [VerifyOtp] Resolved tokensMap : $tokensMap');
+        print('📲 [VerifyOtp] Resolved userMap   : $userMap');
+
+        if (tokensMap != null) {
+          final tokens = OtpTokens.fromJson(tokensMap);
+          final user   = userMap != null ? OtpUser.fromJson(userMap) : null;
+
+          final verifyResponse = VerifyOtpResponse(
+            success: true,
+            message: json['message']?.toString() ?? 'Login successful',
+            user:    user,
+            tokens:  tokens,
+          );
+
+          // Save to SharedPreferences
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('access_token',  tokens.access);
+          await prefs.setString('refresh_token', tokens.refresh);
+
+          if (user != null) {
+            await prefs.setString('user_id',     user.id);
+            await prefs.setString('user_name',   user.name);
+            await prefs.setString('user_email',  user.email);
+            await prefs.setString('user_mobile', user.mobileNumber);
+            await prefs.setString('user_role',   user.role);
+            await prefs.setBool('is_mobile_verified', user.isMobileVerified);
+            await prefs.setBool('is_email_verified',  user.isEmailVerified);
+            await prefs.setString('user_status', user.status);
+          }
+
+          print('✅ [VerifyOtp] Success — user: ${user?.name}, role: ${user?.role}');
+          print('✅ [VerifyOtp] access_token saved: ${tokens.access}');
+          return ApiResponse(isSuccess: true, data: verifyResponse);
+        }
+
+        // Still null after all patterns — full dump for diagnosis
+        print('⚠️ [VerifyOtp] Could not resolve tokens from 200 response.');
+        print('⚠️ [VerifyOtp] Full JSON dump: $json');
+        return ApiResponse(isSuccess: false, error: 'Failed to parse response');
       }
 
-      final errors = json['errors'] as List<dynamic>?;
-      final errorMsg = (errors?.isNotEmpty == true)
-          ? errors!.first.toString()
-          : json['message']?.toString() ?? 'OTP verification failed';
+      // Non-200 — handle List or Map errors shape
+      final rawErrors = json['errors'];
+      String errorMsg;
+      if (rawErrors is List && rawErrors.isNotEmpty) {
+        errorMsg = rawErrors.first.toString();
+      } else if (rawErrors is Map && rawErrors.isNotEmpty) {
+        errorMsg = rawErrors.values.first.toString();
+      } else {
+        errorMsg = json['message']?.toString() ?? 'OTP verification failed';
+      }
 
+      print('❌ [VerifyOtp] Failed [${response.statusCode}] — $errorMsg');
       return ApiResponse(isSuccess: false, error: errorMsg);
-    } on SocketException {
+    } on SocketException catch (e) {
+      print('❌ [VerifyOtp] SocketException: $e');
       return ApiResponse(isSuccess: false, error: 'No internet connection');
-    } on TimeoutException {
+    } on TimeoutException catch (e) {
+      print('❌ [VerifyOtp] TimeoutException: $e');
       return ApiResponse(isSuccess: false, error: 'Request timed out');
-    } catch (e) {
-      print('❌ verifyOtp error: $e');
+    } catch (e, stack) {
+      print('❌ [VerifyOtp] Exception: $e');
+      print('❌ [VerifyOtp] Stack: $stack');
       return ApiResponse(isSuccess: false, error: 'Something went wrong');
     }
   }
@@ -565,6 +728,11 @@ class ApiService
   }
 
   // ── Token Management Helpers ───────────────────────────────────────────────
+
+  // Helper: Get access token
+  Future<String?> getAccessTokenLocal() async {
+    return _getAccessToken();
+  }
 
   // Helper: Get access token
   static Future<String?> _getAccessToken() async {
