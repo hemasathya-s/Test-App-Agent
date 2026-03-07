@@ -328,7 +328,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
     final jobController = ref.read(jobProvider.notifier);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.grey.shade50,
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : Stack(

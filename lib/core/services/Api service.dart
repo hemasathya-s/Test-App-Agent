@@ -4,15 +4,182 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../Model/AgentRegistrationRequest.dart';
 import '../../Model/AuthResponse.dart';
 import '../../Model/AgentProfileResponse.dart';
 import '../../Model/LoginRequestModel.dart';
+import '../../Model/MovementRequest.dart';
+import '../../Model/OrderDetails.dart';
 import '../../Model/OtpUser.dart';
+import '../../Model/Product.dart';
+import '../../Model/ProductStock.dart';
+import '../../Model/ToolStock.dart';
+import '../../Model/Tool.dart';
 
-class ApiService
-{
+class ApiService {
   static const String _baseUrl = 'https://api.itfixer199.com';
+  static const String temptokens = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzcyOTEzMDAzLCJpYXQiOjE3NzI4NTkwMDMsImp0aSI6ImY0ZWNkMjRlY2IzZTQ1M2M5NjJmNDkyODUxYzBlMDI2IiwidXNlcl9pZCI6ImUzYWM4OTQ3LTdhYzktNDYwOS05NGVlLTczZjNjYmU4ZWM1NiJ9.I8SPT-hvb0W79SSSMIKJKkU9db5bB3xLM4bjpaJIxkU";
+
+  // ── WebSocket ───────────────────────────────────────────────────────────────
+  // ── Product WebSocket ───────────────────────────────────────────────────────
+  static const String _wsUrl = 'wss://api.itfixer199.com/ws/movements/';
+  WebSocketChannel? _wsChannel;
+  StreamSubscription? _wsSubscription;
+  bool _wsIsConnecting = false;
+  int _wsReconnectAttempts = 0;
+  final StreamController<Map<String, dynamic>> _wsController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  Stream<Map<String, dynamic>> get movementStream => _wsController.stream;
+
+  // ── Tool WebSocket ──────────────────────────────────────────────────────────
+  static const String _toolWsUrl = 'wss://api.itfixer199.com/ws/tool-movements/';
+  WebSocketChannel? _toolWsChannel;
+  StreamSubscription? _toolWsSubscription;
+  bool _toolWsIsConnecting = false;
+  int _toolWsReconnectAttempts = 0;
+  final StreamController<Map<String, dynamic>> _toolWsController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  Stream<Map<String, dynamic>> get toolMovementStream => _toolWsController.stream;
+
+  bool _isDisposed = false;
+
+  Future<void> connectMovementWebSocket() async {
+    if (_wsIsConnecting) return;
+    _wsIsConnecting = true;
+    try {
+      final token = await _getAccessToken();
+      if (token == null) {
+        print('❌ WebSocket: No access token');
+        _wsIsConnecting = false;
+        return;
+      }
+      final uri = Uri.parse('$_wsUrl?token=$token');
+      print('📡 WS Connecting: $uri');
+      _wsChannel = WebSocketChannel.connect(uri);
+      _wsSubscription = _wsChannel!.stream.listen(
+        (msg) {
+          _wsReconnectAttempts = 0;
+          _wsIsConnecting = false;
+          if (_isDisposed) return;
+          print('📦 WS Message: $msg');
+          try {
+            if (!_wsController.isClosed) {
+              _wsController.add(jsonDecode(msg));
+            }
+          } catch (e) {
+            print('❌ WS parse error: $e');
+          }
+        },
+        onError: (e) {
+          _wsIsConnecting = false;
+          print('❌ WS error: $e');
+          _wsReconnect();
+        },
+        onDone: () {
+          _wsIsConnecting = false;
+          print('🔌 WS closed');
+          _wsReconnect();
+        },
+      );
+    } catch (e) {
+      _wsIsConnecting = false;
+      print('❌ WS connect error: $e');
+      _wsReconnect();
+    }
+  }
+
+  void _wsReconnect() {
+    if (_isDisposed) return;
+    _wsReconnectAttempts++;
+    final delay = Duration(seconds: (2 * _wsReconnectAttempts).clamp(5, 30));
+    print('🔄 WS reconnect in ${delay.inSeconds}s (attempt $_wsReconnectAttempts)...');
+    Future.delayed(delay, () {
+      if (!_wsIsConnecting && !_isDisposed) connectMovementWebSocket();
+    });
+  }
+
+  // ── Tool WebSocket Methods ──────────────────────────────────────────────────
+  Future<void> connectToolMovementWebSocket() async {
+    if (_toolWsIsConnecting) return;
+    _toolWsIsConnecting = true;
+    try {
+      final token = await _getAccessToken();
+      if (token == null) {
+        print('❌ Tool WebSocket: No access token');
+        _toolWsIsConnecting = false;
+        return;
+      }
+
+      final uri = Uri.parse('$_toolWsUrl?token=$token');
+      print('📡 Tool WS Connecting to: $uri');
+
+      _toolWsChannel = WebSocketChannel.connect(uri);
+      _toolWsSubscription = _toolWsChannel!.stream.listen(
+        (msg) {
+          _toolWsReconnectAttempts = 0;
+          _toolWsIsConnecting = false;
+          if (_isDisposed) return;
+          print('📦 Tool WS Message: $msg');
+          try {
+            if (!_toolWsController.isClosed) {
+              _toolWsController.add(jsonDecode(msg));
+            }
+          } catch (e) {
+            print('❌ Tool WS parse error: $e');
+          }
+        },
+        onError: (e) {
+          _toolWsIsConnecting = false;
+          print('❌ Tool WS error: $e');
+          _toolWsReconnect();
+        },
+        onDone: () {
+          _toolWsIsConnecting = false;
+          print('🔌 Tool WS closed');
+          _toolWsReconnect();
+        },
+      );
+    } catch (e) {
+      _toolWsIsConnecting = false;
+      print('❌ Tool WS connect error: $e');
+      _toolWsReconnect();
+    }
+  }
+
+  void _toolWsReconnect() {
+    if (_isDisposed) return;
+    _toolWsReconnectAttempts++;
+    final delay = Duration(seconds: (2 * _toolWsReconnectAttempts).clamp(5, 30));
+    print('🔄 Tool WS reconnect in ${delay.inSeconds}s (attempt $_toolWsReconnectAttempts)...');
+    Future.delayed(delay, () {
+      if (!_toolWsIsConnecting && !_isDisposed) connectToolMovementWebSocket();
+    });
+  }
+
+  void disconnectToolMovementWebSocket() {
+    _toolWsSubscription?.cancel();
+    _toolWsSubscription = null;
+    _toolWsChannel?.sink.close();
+    _toolWsChannel = null;
+  }
+
+  void disconnectMovementWebSocket() {
+    _wsSubscription?.cancel();
+    _wsSubscription = null;
+    _wsChannel?.sink.close();
+    _wsChannel = null;
+  }
+
+  void disposeWebSocket() {
+    _isDisposed = true;
+    disconnectMovementWebSocket();
+    disconnectToolMovementWebSocket();
+    if (!_wsController.isClosed) _wsController.close();
+    if (!_toolWsController.isClosed) _toolWsController.close();
+  }
 
   Future<ApiResponse<AuthResponse>> unifiedLogin(LoginRequestModel request) async {
     try {
@@ -843,5 +1010,340 @@ class ApiService
   static Future<String?> getUserId() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('user_id');
+  }
+
+  Future<ApiResponse<List<Product>>> getProducts() async {
+    try {
+      final queryParams = {
+        'include_attribute': 'true',
+        'include_brand': 'true',
+        'include_category': 'true',
+        'include_children': 'true',
+        'include_media': 'true',
+        'include_pricing': 'true',
+      };
+      
+      final uri = Uri.parse('$_baseUrl/api/product').replace(queryParameters: queryParams);
+      
+      print('📡 Fetching Products from: $uri');
+      
+      final response = await http.get(
+        uri,
+        headers: {
+          'accept': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 15));
+
+
+      print('📡 Get Products Status: ${response.statusCode}');
+      print('📦 Product Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        final productResponse = ProductResponse.fromJson(json);
+        return ApiResponse(isSuccess: true, data: productResponse.data);
+      }
+
+      return ApiResponse(
+        isSuccess: false, 
+        error: 'Failed to fetch products (${response.statusCode})'
+      );
+    } catch (e) {
+      print('❌ getProducts error: $e');
+      return ApiResponse(isSuccess: false, error: e.toString());
+    }
+  }
+
+  // ── Product Movement Request ───────────────────────────────────────────────
+  Future<ApiResponse<MovementRequest>> requestProductMovement({
+    required String productId,
+    required int stock,
+    String type = 'GIVE',
+  }) async {
+    try {
+      final token = await _getAccessToken();
+      if (token == null) throw Exception('No access token');
+
+      final url = Uri.parse('$_baseUrl/api/product-inventory/movements/request/');
+      print('📡 Requesting Movement: $url');
+
+      final response = await http.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'product_id': productId,
+          'stock': stock,
+          'type': type,
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      print('📡 Movement Status: ${response.statusCode}');
+      print('📦 Movement Response: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final json = jsonDecode(response.body);
+        final data = json['data'];
+        return ApiResponse(isSuccess: true, data: MovementRequest.fromJson(data));
+      }
+
+      return ApiResponse(
+        isSuccess: false,
+        error: 'Failed to request movement (${response.statusCode})',
+      );
+    } catch (e) {
+      print('❌ requestProductMovement error: $e');
+      return ApiResponse(isSuccess: false, error: e.toString());
+    }
+  }
+
+  // ── Get All Tools ────────────────────────────────────────────────────────
+  Future<ApiResponse<List<Tool>>> getTools() async {
+    try {
+      final token = await _getAccessToken();
+      final url = Uri.parse('$_baseUrl/api/tools/');
+      print('📡 GET Tools Catalog: $url');
+      
+      final response = await http.get(url, headers: {
+        'Accept': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      }).timeout(const Duration(seconds: 15));
+
+      print('📡 Tools Catalog Status: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        final List raw = json['data'] ?? json['results'] ?? json ?? [];
+        final tools = raw.map((e) => Tool.fromJson(e)).toList();
+        return ApiResponse(isSuccess: true, data: tools);
+      }
+      return ApiResponse(isSuccess: false, error: 'Failed to fetch tools (${response.statusCode})');
+    } catch (e) {
+      print('❌ getTools error: $e');
+      return ApiResponse(isSuccess: false, error: e.toString());
+    }
+  }
+
+  // ── Tool Movement Request ─────────────────────────────────────────────────
+  Future<ApiResponse<MovementRequest>> requestToolMovement({
+    required String toolId,
+    required int stock,
+    String type = 'GET',
+  }) async {
+    try {
+      final token = await _getAccessToken();
+      if (token == null) throw Exception('No access token');
+
+      final url = Uri.parse('$_baseUrl/api/tools/movement/request/');
+      print('📡 Requesting Tool Movement: $url');
+
+      final response = await http.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'tools_id': toolId,
+          'stock': stock,
+          'type': type,
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      print('📡 Tool Movement Status: ${response.statusCode}');
+      print('📦 Tool Movement Response: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final json = jsonDecode(response.body);
+        final data = json['data'] ?? json;
+        return ApiResponse(isSuccess: true, data: MovementRequest.fromJson(data));
+      }
+
+      return ApiResponse(
+        isSuccess: false,
+        error: 'Failed to request tool movement (${response.statusCode})',
+      );
+    } catch (e) {
+      print('❌ requestToolMovement error: $e');
+      return ApiResponse(isSuccess: false, error: e.toString());
+    }
+  }
+
+  // ── My Tool Stocks ─────────────────────────────────────────────────────────
+  Future<ApiResponse<List<ToolStock>>> getMyToolStocks() async {
+    try {
+      final token = await _getAccessToken();
+      if (token == null) throw Exception('No access token');
+
+      final url = Uri.parse('$_baseUrl/api/tools/my-stocks/');
+      print('📡 GET Tool Stocks: $url');
+
+      final response = await http.get(url, headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      }).timeout(const Duration(seconds: 15));
+
+      print('📡 Tool Stocks Status: ${response.statusCode}');
+      print('📦 Tool Stocks Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        final List raw = json['data'] ?? json['results'] ?? json ?? [];
+        final items = raw.map((e) => ToolStock.fromJson(e)).toList();
+        return ApiResponse(isSuccess: true, data: items);
+      }
+      return ApiResponse(isSuccess: false, error: 'Tool stocks failed (${response.statusCode})');
+    } catch (e) {
+      print('❌ getMyToolStocks error: $e');
+      return ApiResponse(isSuccess: false, error: e.toString());
+    }
+  }
+
+  // ── My Product Stocks ──────────────────────────────────────────────────────
+  Future<ApiResponse<List<ProductStock>>> getMyProductStocks() async {
+    try {
+      final token = await _getAccessToken();
+      if (token == null) throw Exception('No access token');
+
+      final url = Uri.parse('$_baseUrl/api/product-inventory/my-stocks/');
+      print('📡 GET Product Stocks: $url');
+
+      final response = await http.get(url, headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      }).timeout(const Duration(seconds: 15));
+
+      print('📡 Product Stocks Status: ${response.statusCode}');
+      print('📦 Product Stocks Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        final List raw = json['data'] ?? json['results'] ?? json ?? [];
+        final items = raw.map((e) => ProductStock.fromJson(e)).toList();
+        return ApiResponse(isSuccess: true, data: items);
+      }
+      return ApiResponse(isSuccess: false, error: 'Product stocks failed (${response.statusCode})');
+    } catch (e) {
+      print('❌ getMyProductStocks error: $e');
+      return ApiResponse(isSuccess: false, error: e.toString());
+    }
+  }
+
+  static Future<List<OrderDetails>?> agentOrder() async {
+    try {
+      String url = "$_baseUrl/api/order/agent-orders/?is_active=true";
+      // Use temporary token as requested
+      final token = temptokens;
+      
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      print("Response body agent order ${response.body}");
+      print("Response status code agent order ${response.statusCode}");
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        return AgentOrderResponse.fromJson(data).orders;
+      }
+      return null;
+    } catch (e) {
+      print("Error on agent Order $e");
+      return null;
+    }
+  }
+
+  Future<ApiResponse<Map<String, dynamic>>> createHubServiceRequest({
+    required String orderId,
+    String? orderItemId,
+    String? deviceSerialNumber,
+    String? deviceConditionNotes,
+    List<File>? images,
+    List<File>? videos,
+  }) async {
+    try {
+      final token = await _getAccessToken();
+      if (token == null) {
+        return ApiResponse(isSuccess: false, error: 'Not authenticated');
+      }
+
+      final uri = Uri.parse('$_baseUrl/api/request/hub-service/');
+      final request = http.MultipartRequest('POST', uri)
+        ..headers.addAll({
+          'accept': 'application/json',
+          'Authorization': 'Bearer $temptokens',
+        });
+
+      // Add fields
+      request.fields['order_id'] = orderId;
+      if (orderItemId != null && orderItemId.isNotEmpty) {
+        request.fields['order_item_id'] = orderItemId;
+      }
+      if (deviceSerialNumber != null && deviceSerialNumber.isNotEmpty) {
+        request.fields['device_serial_number'] = deviceSerialNumber;
+      }
+      if (deviceConditionNotes != null && deviceConditionNotes.isNotEmpty) {
+        request.fields['device_condition_notes'] = deviceConditionNotes;
+      }
+
+      // Add images
+      if (images != null) {
+        for (var i = 0; i < images.length; i++) {
+          final file = images[i];
+          final ext = _fileExtension(file.path);
+          request.files.add(await http.MultipartFile.fromPath(
+            'images',
+            file.path,
+            contentType: http.MediaType('image', ext),
+          ));
+        }
+      }
+
+      // Add videos
+      if (videos != null) {
+        for (var i = 0; i < videos.length; i++) {
+          final file = videos[i];
+          request.files.add(await http.MultipartFile.fromPath(
+            'videos',
+            file.path,
+            contentType: http.MediaType('video', 'mp4'),
+          ));
+        }
+      }
+
+      print('📡 Creating Hub Service Request: $uri');
+      print('📡 Fields: ${request.fields}');
+      
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 300));
+      final response = await http.Response.fromStream(streamedResponse);
+
+      print('📡 Hub Service Request Status: ${response.statusCode}');
+      print('📡 Hub Service Request Body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final json = jsonDecode(response.body);
+        return ApiResponse(isSuccess: true, data: json);
+      }
+
+      final json = jsonDecode(response.body);
+      String errorMsg = 'Failed to create request';
+      if (json is Map && json['message'] != null) {
+        errorMsg = json['message'].toString();
+      } else if (json is Map && json['errors'] != null) {
+        errorMsg = json['errors'].toString();
+      }
+
+      return ApiResponse(isSuccess: false, error: errorMsg);
+    } catch (e) {
+      print('❌ createHubServiceRequest error: $e');
+      return ApiResponse(isSuccess: false, error: e.toString());
+    }
   }
 }

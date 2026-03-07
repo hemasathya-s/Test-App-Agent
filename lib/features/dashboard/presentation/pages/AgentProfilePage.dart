@@ -6,6 +6,7 @@ import 'package:shimmer/shimmer.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/Api service.dart';
 import '../../../../Model/AgentProfileResponse.dart';
+import '../../../../features/inventory/presentation/pages/RequestInventoryPage.dart';
 import 'EditProfilePage.dart';
 
 class AgentProfilePage extends StatefulWidget {
@@ -467,9 +468,9 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
                         ),
                       ),
 
-                      const SizedBox(height: 24),
 
-            /// 🔹 Bank Details (EDITABLE)
+            const SizedBox(height: 24),
+
             _sectionCard(
               title: "Bank Details",
               icon: Icons.account_balance_outlined,
@@ -483,6 +484,88 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
               ),
             ),
                       const SizedBox(height: 20),
+
+                      /// 🔹 Request Inventory
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            /*Padding(
+                              padding: const EdgeInsets.only(left: 4, bottom: 12),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.inventory_2_outlined, size: 20, color: AppTheme.primaryColor),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Request Inventory',
+                                    style: GoogleFonts.outfit(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),*/
+                            InkWell(
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const RequestInventoryPage(),
+                                ),
+                              ),
+                              borderRadius: BorderRadius.circular(20),
+                              child: Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(20),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.03),
+                                      blurRadius: 15,
+                                      offset: const Offset(0, 5),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.primaryColor.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: const Icon(
+                                        Icons.inventory_2_outlined,
+                                        color: AppTheme.primaryColor,
+                                        size: 22,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('Request Inventory Stock',
+                                              style: GoogleFonts.outfit(
+                                                  fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                                          const SizedBox(height: 2),
+                                          Text('Request products or tools from admin',
+                                              style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary)),
+                                        ],
+                                      ),
+                                    ),
+                                    const Icon(Icons.arrow_forward_ios, size: 14, color: AppTheme.textSecondary),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
 
                       // Logout Button
                       Container(
