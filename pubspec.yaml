@@ -1,0 +1,38 @@
+name: urban_agent_app
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  flutter_background_service: ^5.1.0
+  flutter_background_service_android: ^6.3.1
+  cupertino_icons: ^1.0.8
+  flutter_riverpod: ^3.1.0
+  go_router: ^17.0.1
+  google_fonts: ^6.3.3
+  flutter_svg: ^2.2.3
+  shared_preferences: ^2.5.4
+  flutter_local_notifications: ^17.2.2
+  intl: ^0.20.2
+  permission_handler: ^12.0.1
+  google_maps_flutter: ^2.10.0
+  flutter_polyline_points: ^2.1.0
+  http: ^1.2.2
+  geolocator: ^13.0.2
+  url_launcher: ^6.3.1
+  web_socket_channel: ^3.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
