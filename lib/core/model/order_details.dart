@@ -1,5 +1,5 @@
-import 'dart:convert';
-import 'service_modification.dart';
+﻿import 'dart:convert';
+import 'package:urban_agent_app/core/model/service_modification.dart';
 
 class OrderDetails {
   final String? id;
@@ -29,6 +29,7 @@ class OrderDetails {
   final String? zoneId;
   final List<ServiceModification>? serviceModifications;
   final bool? isActive;
+  final bool? isInstantSlot;
 
   OrderDetails({
     this.id,
@@ -58,6 +59,7 @@ class OrderDetails {
     this.zoneId,
     this.serviceModifications,
     this.isActive,
+    this.isInstantSlot,
   });
 
   factory OrderDetails.fromJson(Map<String, dynamic> json) {
@@ -101,6 +103,7 @@ class OrderDetails {
               .toList()
           : null,
       isActive: json['is_active'],
+      isInstantSlot: json['is_instant_slot'],
     );
   }
 
@@ -133,8 +136,15 @@ class OrderDetails {
       'zone_id': zoneId,
       'service_modifications': serviceModifications?.map((m) => m.toJson()).toList(),
       'is_active': isActive,
+      'is_instant_slot': isInstantSlot,
     };
   }
+
+  @override
+  String toString() {
+    return 'OrderDetails{id: $id, items: $items, agentHistory: $agentHistory, userDetails: $userDetails, agentDetails: $agentDetails, zoneDetails: $zoneDetails, createdAt: $createdAt, isOtpRequired: $isOtpRequired, isOtpVerified: $isOtpVerified, userId: $userId, orderStatus: $orderStatus, agentApproval: $agentApproval, paymentStatus: $paymentStatus, totalPrice: $totalPrice, latitude: $latitude, longitude: $longitude, address: $address, googleAddress: $googleAddress, customerName: $customerName, customerNumber: $customerNumber, slotId: $slotId, slotTime: $slotTime, assignedAgentId: $assignedAgentId, startingAgentCoordinates: $startingAgentCoordinates, zoneId: $zoneId, serviceModifications: $serviceModifications, isActive: $isActive, isInstantSlot: $isInstantSlot}';
+  }
+
 }
 
 class OrderItem {
@@ -239,6 +249,12 @@ class OrderItem {
       'order': order,
     };
   }
+
+  @override
+  String toString() {
+    return 'OrderItem{id: $id, media: $media, itemDetails: $itemDetails, attributes: $attributes, createdAt: $createdAt, type: $type, productId: $productId, serviceId: $serviceId, orderProductSuggestionId: $orderProductSuggestionId, serviceModificationId: $serviceModificationId, quantity: $quantity, price: $price, agentId: $agentId, serialNumber: $serialNumber, status: $status, customerConfirmation: $customerConfirmation, comment: $comment, deviceId: $deviceId, brand: $brand, issueDescriptionText: $issueDescriptionText, order: $order}';
+  }
+
 }
 
 class ItemMedia {
@@ -604,7 +620,7 @@ class UserDetails {
   final bool? isSuperuser;
   final String? dateJoined;
   final dynamic createdBy;
-  final dynamic hub;
+  final dynamic hubId;
 
   UserDetails({
     this.id,
@@ -621,7 +637,7 @@ class UserDetails {
     this.isSuperuser,
     this.dateJoined,
     this.createdBy,
-    this.hub,
+    this.hubId,
   });
 
   factory UserDetails.fromJson(Map<String, dynamic> json) {
@@ -640,7 +656,7 @@ class UserDetails {
       isSuperuser: json['is_superuser'],
       dateJoined: json['date_joined'],
       createdBy: json['created_by'],
-      hub: json['hub'],
+      hubId: json['hub_id'],
     );
   }
 
@@ -660,7 +676,7 @@ class UserDetails {
       'is_superuser': isSuperuser,
       'date_joined': dateJoined,
       'created_by': createdBy,
-      'hub': hub,
+      'hub_id': hubId,
     };
   }
 }
@@ -685,7 +701,7 @@ class AgentDetails {
   final String? endTime;
   final String? agentType;
   final bool? isAdminPermissionRequired;
-  final dynamic hub;
+  final dynamic hubId;
   final dynamic hubName;
   final dynamic bankName;
   final dynamic accountNumber;
@@ -717,7 +733,7 @@ class AgentDetails {
     this.endTime,
     this.agentType,
     this.isAdminPermissionRequired,
-    this.hub,
+    this.hubId,
     this.hubName,
     this.bankName,
     this.accountNumber,
@@ -753,7 +769,7 @@ class AgentDetails {
       endTime: json['end_time'],
       agentType: json['agent_type'],
       isAdminPermissionRequired: json['is_admin_permission_required'],
-      hub: json['hub'],
+      hubId: json['hub_id'],
       hubName: json['hub_name'],
       bankName: json['bank_name'],
       accountNumber: json['account_number'],
@@ -792,7 +808,7 @@ class AgentDetails {
       'end_time': endTime,
       'agent_type': agentType,
       'is_admin_permission_required': isAdminPermissionRequired,
-      'hub': hub,
+      'hub_id': hubId,
       'hub_name': hubName,
       'bank_name': bankName,
       'account_number': accountNumber,

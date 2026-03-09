@@ -1,7 +1,8 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/model/slot_availability.dart';
-import '../../../../core/model/order_details.dart';
-import '../../../../core/services/apiservices.dart';
+﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:urban_agent_app/core/model/slot_availability.dart';
+import 'package:urban_agent_app/core/model/order_details.dart';
+import 'package:urban_agent_app/core/services/apiservices.dart';
+import 'package:urban_agent_app/Model/AgentProfileResponse.dart';
 
 class DashboardState {
   final int currentTabIndex;
@@ -60,9 +61,18 @@ class DashboardController extends Notifier<DashboardState> {
     try {
       final jobs = await ApiService.getAgentSlotAvailability();
       final orders = await ApiService.agentOrder();
+      
+      // Fetch profile to get availability status
+      final profileResult = await ApiService.getAgentProfile();
+      bool isAvailable = state.isAvailable;
+      if (profileResult.isSuccess && profileResult.data != null) {
+        isAvailable = profileResult.data!.agent.userDetails.isActive;
+      }
+
       state = state.copyWith(
         upcomingJobs: jobs,
         upcomingOrders: orders ?? [],
+        isAvailable: isAvailable,
         isLoading: false,
       );
     } catch (e) {

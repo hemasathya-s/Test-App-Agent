@@ -1,14 +1,13 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:urban_agent_app/features/inventory/presentation/pages/inventory_screen.dart';
 import 'package:urban_agent_app/features/map/presentation/pages/live_map_screen.dart';
 import 'package:urban_agent_app/features/schedule/presentation/pages/slot_management_screen.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../providers/dashboard_provider.dart';
-import 'home_tab.dart';
-
-import '../widgets/app_drawer.dart';
-import '../widgets/sos_bottom_sheet.dart';
+import 'package:urban_agent_app/core/theme/app_theme.dart';
+import 'package:urban_agent_app/features/dashboard/presentation/providers/dashboard_provider.dart';
+import 'package:urban_agent_app/features/dashboard/presentation/pages/home_tab.dart';
+import 'package:urban_agent_app/features/dashboard/presentation/widgets/app_drawer.dart';
+import 'package:urban_agent_app/features/dashboard/presentation/widgets/sos_bottom_sheet.dart';
 
 class DashboardShell extends ConsumerWidget {
   const DashboardShell({super.key});

@@ -1,12 +1,12 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../../core/model/order_details.dart' as api;
-import '../../../../core/model/ServiceModal.dart';
-import '../../../../core/services/apiservices.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../providers/order_modification_provider.dart';
+import 'package:urban_agent_app/core/model/order_details.dart' as api;
+import 'package:urban_agent_app/core/model/ServiceModal.dart';
+import 'package:urban_agent_app/core/services/apiservices.dart';
+import 'package:urban_agent_app/core/theme/app_theme.dart';
+import 'package:urban_agent_app/features/order/presentation/providers/order_modification_provider.dart';
 import 'approval_waiting_screen.dart';
 
 class ModifyOrderScreen extends ConsumerStatefulWidget {
@@ -38,11 +38,15 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
         final imageUrl = (item.media != null && item.media!.isNotEmpty)
             ? item.media!.first.url
             : null;
+        final price = double.tryParse(item.price ?? '0') ?? 0.0;
+        final qty = item.quantity ?? 1;
         return OrderItem(
           id: item.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
           name: item.itemDetails?.name ?? 'Unknown Item',
-          price: double.tryParse(item.price ?? '0') ?? 0.0,
-          quantity: item.quantity ?? 1,
+          price: price,
+          quantity: qty,
+          originalPrice: price,
+          originalQuantity: qty,
           imageUrl: imageUrl,
           type: item.type,
         );
@@ -116,7 +120,7 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
       ),
       body: Column(
         children: [
-          // ── Customer & Order Info Header ──
+          // Customer & Order Info Header ──
           Container(
             padding: const EdgeInsets.all(16),
             color: Colors.grey[50],
@@ -455,7 +459,7 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              '+ ₹${(state.newTotal - state.originalTotal).toStringAsFixed(2)}',
+                              '₹${(state.newTotal - state.originalTotal).toStringAsFixed(2)}',
                               style: GoogleFonts.outfit(
                                 fontWeight: FontWeight.bold,
                                 color: AppTheme.primaryColor,

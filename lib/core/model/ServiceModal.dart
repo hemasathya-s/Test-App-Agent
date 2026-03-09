@@ -1,4 +1,4 @@
-
+﻿
 class ServiceModal {
   final String title;
   final double rating;
@@ -298,7 +298,7 @@ class Service {
   }
 }
 
-// ── Sub-models ──
+// ────────────────── Sub-models ──────────────────
 
 class ServiceCategoryMapping {
   final String id;

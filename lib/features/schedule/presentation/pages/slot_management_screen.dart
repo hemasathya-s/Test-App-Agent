@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:urban_agent_app/core/model/slot_availability.dart';
 import 'package:urban_agent_app/core/services/apiservices.dart';
@@ -351,7 +351,7 @@ class _SlotManagementScreenState extends State<SlotManagementScreen> {
                                           borderRadius: BorderRadius.circular(10),
                                         ),
                                         child: Text(
-                                          slot.status ?? 'N/A',
+                                          slot.orderDetails?.orderStatus ?? 'N/A',  //order status
                                           style: GoogleFonts.outfit(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,

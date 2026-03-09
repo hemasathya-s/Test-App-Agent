@@ -1,32 +1,46 @@
-import 'package:go_router/go_router.dart';
-import '../core/model/order_details.dart';
-import '../core/model/slot_availability.dart';
-import '../features/auth/presentation/pages/splash_screen.dart';
-import '../features/auth/presentation/pages/login_screen.dart';
-import '../features/auth/presentation/pages/permissions_screen.dart';
-import '../features/auth/presentation/pages/kyc_status_screen.dart';
-import '../features/dashboard/presentation/pages/AgentProfilePage.dart';
-import '../features/dashboard/presentation/pages/edit_profile_screen.dart';
-import '../features/dashboard/presentation/pages/dashboard_shell.dart';
-import '../features/map/presentation/pages/service_area_screen.dart';
-import '../features/jobs/presentation/pages/new_job_request_screen.dart';
-import '../features/jobs/presentation/pages/job_details_screen.dart';
-import '../features/jobs/presentation/pages/navigation_screen.dart';
-import '../features/jobs/presentation/pages/service_checklist_screen.dart';
-import '../features/order/presentation/pages/modify_order_screen.dart';
-import '../features/order/presentation/pages/modification_summary_screen.dart';
-import '../features/order/presentation/pages/approval_waiting_screen.dart';
-import '../features/order/presentation/pages/request_tracking_screen.dart';
-import '../features/orders/presentation/pages/orders_history_screen.dart';
+﻿import 'package:go_router/go_router.dart';
+import 'package:urban_agent_app/core/model/order_details.dart';
+import 'package:urban_agent_app/core/model/slot_availability.dart';
+import 'package:urban_agent_app/features/auth/presentation/pages/splash_screen.dart';
+import 'package:urban_agent_app/features/auth/presentation/pages/login_screen.dart';
+import 'package:urban_agent_app/features/auth/presentation/pages/permissions_screen.dart';
+import 'package:urban_agent_app/features/auth/presentation/pages/kyc_status_screen.dart';
+import 'package:urban_agent_app/features/dashboard/presentation/pages/AgentProfilePage.dart';
+import 'package:urban_agent_app/features/dashboard/presentation/pages/edit_profile_screen.dart';
+import 'package:urban_agent_app/features/dashboard/presentation/pages/dashboard_shell.dart';
+import 'package:urban_agent_app/features/auth/presentation/pages/CreateAgent.dart';
+import 'package:urban_agent_app/features/map/presentation/pages/service_area_screen.dart';
+import 'package:urban_agent_app/features/jobs/presentation/pages/new_job_request_screen.dart';
+import 'package:urban_agent_app/features/jobs/presentation/pages/job_details_screen.dart';
+import 'package:urban_agent_app/features/jobs/presentation/pages/navigation_screen.dart';
+import 'package:urban_agent_app/features/jobs/presentation/pages/service_checklist_screen.dart';
+import 'package:urban_agent_app/features/order/presentation/pages/modify_order_screen.dart';
+import 'package:urban_agent_app/features/order/presentation/pages/modification_summary_screen.dart';
+import 'package:urban_agent_app/features/order/presentation/pages/approval_waiting_screen.dart';
+import 'package:urban_agent_app/features/order/presentation/pages/request_tracking_screen.dart';
+import 'package:urban_agent_app/features/orders/presentation/pages/orders_history_screen.dart';
 
 final router = GoRouter(
   initialLocation: '/',
   routes: [
     GoRoute(path: '/', builder: (context, state) => const SplashScreen()),
-    GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+    GoRoute(
+      path: '/login',
+      builder: (context, state) {
+        final mobileNumber = state.extra as String?;
+        return LoginPage(initialMobileNumber: mobileNumber);
+      },
+    ),
     GoRoute(
       path: '/permissions',
       builder: (context, state) => const PermissionsScreen(),
+    ),
+    GoRoute(
+      path: '/register',
+      builder: (context, state) {
+        final mobileNumber = state.extra as String?;
+        return AgentRegistrationPage(mobileNumber: mobileNumber);
+      },
     ),
     GoRoute(path: '/kyc', builder: (context, state) => const KycStatusScreen()),
     GoRoute(path: '/home', builder: (context, state) => const DashboardShell()),
@@ -42,11 +56,16 @@ final router = GoRouter(
       path: '/job-details',
       builder: (context, state) {
         final extra = state.extra;
+        print("Router extra: $extra");
+        print("Router extra type: ${extra.runtimeType}");
         if (extra is SlotAvailability) {
+          print("Router: extra matches SlotAvailability");
           return JobDetailsScreen(slot: extra);
         } else if (extra is OrderDetails) {
+          print("Router: extra matches OrderDetails");
           return JobDetailsScreen(order: extra);
         }
+        print("Router: extra NO MATCH");
         return const JobDetailsScreen();
       },
     ),

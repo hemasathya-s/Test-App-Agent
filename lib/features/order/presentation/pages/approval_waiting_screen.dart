@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -42,12 +42,13 @@ class _ApprovalWaitingScreenState extends ConsumerState<ApprovalWaitingScreen> {
   /// • Emits once when status becomes APPROVED/APPLIED or REJECTED/DECLINED
   /// • If the server closes the socket before a final status arrives,
   ///   reconnects automatically after 5 s (so the buffer never disappears)
-  void _connectWs(String orderId) {
+  void _connectWs(String orderId) async {
     if (_done) return;
     _wsSub?.cancel();
     debugPrint('WS: connecting for order $orderId');
 
-    _wsSub = ApiService.orderUpdatedStream(orderId).listen(
+    final stream = await ApiService.orderUpdatedStream(orderId);
+    _wsSub = stream.listen(
       // ── Final status received ────────────────────────────────────
       (bool approved) {
         _done = true;
@@ -79,9 +80,9 @@ class _ApprovalWaitingScreenState extends ConsumerState<ApprovalWaitingScreen> {
     super.dispose();
   }
 
-  // ──────────────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────
   // Called once with the final approved / rejected result
-  // ──────────────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────
   void _onStatusReceived(bool approved) async {
     debugPrint('Status received — approved: $approved');
     _wsSub?.cancel();
@@ -138,9 +139,9 @@ class _ApprovalWaitingScreenState extends ConsumerState<ApprovalWaitingScreen> {
     });
   }
 
-  // ──────────────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────
   // UI — unchanged spinner screen
-  // ──────────────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(

@@ -1,4 +1,4 @@
-import 'order_details.dart';
+﻿import 'package:urban_agent_app/core/model/order_details.dart';
 
 class AgentOrderResponse {
   final bool? success;

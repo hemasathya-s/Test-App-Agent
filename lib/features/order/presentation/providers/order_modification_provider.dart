@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 class OrderItem {
@@ -6,6 +6,8 @@ class OrderItem {
   final String name;
   final double price;
   final int quantity;
+  final double originalPrice;    // Track price at load time
+  final int originalQuantity;    // Track quantity at load time
   final bool isNew;
   final bool isRemoved;
   final String? imageUrl;
@@ -16,6 +18,8 @@ class OrderItem {
     required this.name,
     required this.price,
     this.quantity = 1,
+    required this.originalPrice,
+    required this.originalQuantity,
     this.isNew = false,
     this.isRemoved = false,
     this.imageUrl,
@@ -35,6 +39,8 @@ class OrderItem {
       name: name ?? this.name,
       price: price ?? this.price,
       quantity: quantity ?? this.quantity,
+      originalPrice: originalPrice,
+      originalQuantity: originalQuantity,
       isNew: isNew,
       isRemoved: isRemoved ?? this.isRemoved,
       imageUrl: imageUrl ?? this.imageUrl,
@@ -90,8 +96,11 @@ class OrderModificationState {
     );
   }
 
+  // Original total is based on the prices/quantities when the order was first loaded
   double get originalTotal =>
-      items.where((i) => !i.isNew).fold(0, (sum, i) => sum + (i.price * i.quantity));
+      items.where((i) => !i.isNew).fold(0, (sum, i) => sum + (i.originalPrice * i.originalQuantity));
+
+  // New total reflects the current modifications
   double get newTotal =>
       items.where((i) => !i.isRemoved).fold(0, (sum, i) => sum + (i.price * i.quantity));
 }
@@ -111,6 +120,8 @@ class OrderModificationController extends StateNotifier<OrderModificationState> 
       price: price,
       isNew: true,
       quantity: 1,
+      originalPrice: 0,
+      originalQuantity: 0,
     );
     state = state.copyWith(items: [...state.items, newItem]);
   }

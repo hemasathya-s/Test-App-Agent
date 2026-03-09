@@ -1,11 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/mock_map_widget.dart';
-import '../providers/job_provider.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
+import '../providers/job_provider.dart';
 
 class NewJobRequestScreen extends ConsumerWidget {
   const NewJobRequestScreen({super.key});
@@ -18,7 +18,7 @@ class NewJobRequestScreen extends ConsumerWidget {
       body: Stack(
         children: [
           // Map Background
-          const Positioned.fill(
+          Positioned.fill(
             child: MockMapWidget(interactionsEnabled: false),
           ),
 

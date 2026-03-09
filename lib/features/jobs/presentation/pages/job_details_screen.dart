@@ -2,38 +2,83 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:urban_agent_app/core/model/slot_availability.dart';
 import 'package:urban_agent_app/core/model/order_details.dart';
 import 'package:urban_agent_app/core/model/service_modification.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../providers/job_provider.dart';
-import '../../../order/presentation/providers/order_modification_provider.dart';
+import 'package:urban_agent_app/core/theme/app_theme.dart';
+import 'package:urban_agent_app/core/services/apiservices.dart';
+import 'package:urban_agent_app/features/jobs/presentation/providers/job_provider.dart';
+import 'package:urban_agent_app/features/order/presentation/providers/order_modification_provider.dart';
 
-class JobDetailsScreen extends ConsumerWidget {
+class JobDetailsScreen extends ConsumerStatefulWidget {
   final SlotAvailability? slot;
   final OrderDetails? order;
 
   const JobDetailsScreen({super.key, this.slot, this.order});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final controller = ref.read(jobProvider.notifier);
-    final effectiveOrder = order ?? slot?.orderDetails;
+  ConsumerState<JobDetailsScreen> createState() => _JobDetailsScreenState();
+}
 
+class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
+  OrderDetails? _fetchedOrder;
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFullDetails();
+  }
+
+  Future<void> _loadFullDetails() async {
+    final orderId = widget.order?.id ?? widget.slot?.orderId;
+    if (orderId == null) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final fullOrder = await ApiService.getOrderbyId(orderId);
+      if (mounted) {
+        setState(() {
+          _fetchedOrder = fullOrder;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = "Failed to load order details: $e";
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = ref.read(jobProvider.notifier);
+    final effectiveOrder = _fetchedOrder ?? widget.order ?? widget.slot?.orderDetails;
     final customerName = effectiveOrder?.customerName ?? 'Unknown Customer';
     final customerEmail = effectiveOrder?.userDetails?.email ?? '';
     final customerMobile = effectiveOrder?.customerNumber ?? '';
-    final orderId = effectiveOrder?.id ?? slot?.orderId ?? 'N/A';
+    final orderId = effectiveOrder?.id ?? widget.slot?.orderId ?? 'N/A';
     final address = effectiveOrder?.address ?? 'No address provided';
     final items = effectiveOrder?.items ?? [];
     final totalPrice = effectiveOrder?.totalPrice ?? '0.00';
 
     // Use fields from OrderDetails/FullDetails if possible, else fallback to slot
-    final date = slot?.date ?? (effectiveOrder?.createdAt?.split('T')[0]) ?? 'N/A';
-    final timeSlot = slot != null
-        ? '${slot?.etaStartTime ?? ""} - ${slot?.etaEndTime ?? ""}'
-        : 'Scheduled';
+    final date = widget.slot?.date ?? (effectiveOrder?.createdAt?.split('T')[0]) ?? 'N/A';
+    final timeSlot = widget.slot != null
+        ? '${widget.slot?.etaStartTime ?? ""} - ${widget.slot?.etaEndTime ?? ""}'
+        : (effectiveOrder?.slotTime is String ? effectiveOrder?.slotTime as String : 'Scheduled');
+    
+    final isInstant = effectiveOrder?.isInstantSlot ?? false;
+
     // Real service modifications from API
     final serviceModifications = effectiveOrder?.serviceModifications ?? [];
 
@@ -41,192 +86,188 @@ class JobDetailsScreen extends ConsumerWidget {
     final latestMod = serviceModifications.isNotEmpty ? serviceModifications.last : null;
 
     // Legacy mock — kept so provider-based pending button still works
-    final modificationState = ref.watch(orderModificationProvider);
-    final latestModification = modificationState.requestHistory.isNotEmpty
-        ? modificationState.requestHistory.firstWhere(
-            (req) => req.orderId == 'ORD-123',
-            orElse: () => RequestRecord(id: '', orderId: '', type: '', status: '', time: '', items: '', note: ''),
-          )
-        : null;
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) {
-          if (context.canPop()) {
-            context.pop();
-          } else {
-            context.go('/home');
-          }
-        }
-      },
-      child: Scaffold(
-      backgroundColor: AppTheme.surfaceColor,
-      appBar: AppBar(
-        title: Text(
-          'Job #$orderId',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/home');
-            }
-          },
-        ),
-      ),
-      body: Column(
-        children: [
-          // Customer Card
-          Container(
-            color: Colors.white,
-            padding: const EdgeInsets.all(24),
-            child: Row(
-              children: [
-                Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.person_rounded,
-                    size: 36,
-                    color: AppTheme.primaryColor,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        customerName,
-                        style: GoogleFonts.outfit(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        customerEmail,
-                        style: GoogleFonts.outfit(
-                          fontSize: 14,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(
-                        Icons.phone,
-                        color: AppTheme.successColor,
-                      ),
-                      onPressed: () => _makePhoneCall(customerMobile),
-                    ),
-                    // IconButton(
-                    //   icon: const Icon(
-                    //     Icons.message,
-                    //     color: AppTheme.primaryColor,
-                    //   ),
-                    //   onPressed: () => _sendSMS(customerMobile),
-                    // ),
-                  ],
-                ),
-              ],
+    // final modificationState = ref.watch(orderModificationProvider);
+    // final latestModification = modificationState.requestHistory.isNotEmpty
+    //     ? modificationState.requestHistory.firstWhere(
+    //         (req) => req.orderId == 'ORD-123',
+    //         orElse: () => RequestRecord(id: '', orderId: '', type: '', status: '', time: '', items: '', note: ''),
+    //       )
+    //     : null;
+
+    // Define the body separately to avoid nested ternary type issues
+    Widget body;
+    if (_isLoading) {
+      body = const Center(child: CircularProgressIndicator());
+    } else if (_errorMessage != null) {
+      body = Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _loadFullDetails,
+              child: const Text("Retry"),
             ),
-          ),
-          const SizedBox(height: 8),
-
-          // Job Info List
+          ],
+        ),
+      );
+    } else {
+      body = Column(
+        children: [
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                // 🔹 Real Modification Request Section (from API data)
-                if (latestMod != null) ...[
-                  _buildSectionHeader('Modification Request'),
-                  _buildServiceModificationCard(context, latestMod),
-                  const SizedBox(height: 24),
-                ] else if (latestModification != null && latestModification.id.isNotEmpty) ...[
-                  _buildSectionHeader('Modification Request'),
-                  _buildModificationStatusCard(context, latestModification),
-                  const SizedBox(height: 24),
-                ],
-
-                _buildSectionHeader('Job Details'),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  // Customer Card
+                  Container(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    children: [
-                      // List each item in the order
-                      ...items.map((item) {
-                        return Column(
+                    padding: const EdgeInsets.all(24),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 60,
+                          height: 60,
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor.withOpacity(0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.person_rounded,
+                            size: 36,
+                            color: AppTheme.primaryColor,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                customerName,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                customerEmail,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 14,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Row(
                           children: [
+                            IconButton(
+                              icon: const Icon(
+                                Icons.phone,
+                                color: AppTheme.successColor,
+                              ),
+                              onPressed: () => _makePhoneCall(customerMobile),
+                            ),
+                            // IconButton(
+                            //   icon: const Icon(
+                            //     Icons.message,
+                            //     color: AppTheme.primaryColor,
+                            //   ),
+                            //   onPressed: () => _sendSMS(customerMobile),
+                            // ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Job Info List
+                  ListView(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      // ?? Real Modification Request Section (from API data)
+                      if (latestMod != null) ...[
+                        _buildSectionHeader('Modification Request'),
+                        _buildServiceModificationCard(context, latestMod),
+                        const SizedBox(height: 24),
+                      ]
+                      // else if (latestModification != null && latestModification.id.isNotEmpty) ...[
+                      //   _buildSectionHeader('Modification Request'),
+                      //   _buildModificationStatusCard(context, latestModification),
+                      //   const SizedBox(height: 24),
+                      // ],
+                      ,
+                      _buildSectionHeader('Job Details'),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          children: [
+                            // List each item in the order
+                            ...items.map((item) {
+                              return Column(
+                                children: [
+                                  _buildDetailRow(
+                                    Icons.build_circle_outlined,
+                                    'Service/Product',
+                                    '${item.itemDetails?.name ?? "Unknown"} (x${item.quantity ?? 1})',
+                                  ),
+                                  const Divider(height: 24),
+                                ],
+                              );
+                            }).toList(),
+
                             _buildDetailRow(
-                              Icons.build_circle_outlined,
-                              'Service/Product',
-                              '${item.itemDetails?.name ?? "Unknown"} (x${item.quantity ?? 1})',
+                              Icons.calendar_today,
+                              'Date & Time',
+                              '$date, $timeSlot',
                             ),
                             const Divider(height: 24),
+                            _buildDetailRow(
+                              Icons.location_on,
+                              'Address',
+                              address,
+                            ),
+                            const Divider(height: 24),
+                            _buildDetailRow(
+                              Icons.payments_outlined,
+                              'Total Payout',
+                              '₹ $totalPrice',
+                            ),
                           ],
-                        );
-                      }).toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
 
-                      _buildDetailRow(
-                        Icons.calendar_today,
-                        'Date & Time',
-                        '$date, $timeSlot',
-                      ),
-                      const Divider(height: 24),
-                      _buildDetailRow(
-                        Icons.location_on,
-                        'Address',
-                        address,
-                      ),
-                      const Divider(height: 24),
-                      _buildDetailRow(
-                        Icons.payments_outlined,
-                        'Total Payout',
-                        '₹ $totalPrice',
+                      _buildSectionHeader('Status Info'),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildStatusItem('Order Status', effectiveOrder?.orderStatus ?? 'N/A'),
+                            _buildStatusItem('Payment Status', effectiveOrder?.paymentStatus ?? 'N/A'),
+                            _buildStatusItem('Approval', effectiveOrder?.agentApproval ?? 'N/A'),
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 24),
-
-                _buildSectionHeader('Status Info'),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildStatusItem('Order Status', order?.orderStatus ?? 'N/A'),
-                      _buildStatusItem('Payment Status', order?.paymentStatus ?? 'N/A'),
-                      _buildStatusItem('Approval', order?.agentApproval ?? 'N/A'),
-                    ],
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-
           // Action Bar
           Container(
             padding: const EdgeInsets.all(24),
@@ -264,7 +305,7 @@ class JobDetailsScreen extends ConsumerWidget {
                   const SizedBox(height: 12),
                   // Modify Order button — driven by real API serviceModifications
                   if (latestMod == null)
-                    // No modification exists → show Modify Order button
+                    // No modification exists ? show Modify Order button
                     TextButton.icon(
                       onPressed: () => context.push('/modify-order', extra: effectiveOrder),
                       icon: const Icon(Icons.edit_note, color: AppTheme.primaryColor),
@@ -277,7 +318,7 @@ class JobDetailsScreen extends ConsumerWidget {
                       ),
                     )
                   else if ((latestMod.status ?? '').toUpperCase() == 'PENDING')
-                    // Modification pending → show waiting label, no tap
+                    // Modification pending ? show waiting label, no tap
                     Container(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Row(
@@ -296,7 +337,7 @@ class JobDetailsScreen extends ConsumerWidget {
                         ],
                       ),
                     )
-                  // APPROVED / APPLIED / REJECTED → show nothing
+                  // APPROVED / APPLIED / REJECTED ? show nothing
                   else
                     const SizedBox.shrink(),
                 ],
@@ -304,9 +345,63 @@ class JobDetailsScreen extends ConsumerWidget {
             ),
           ),
         ],
+      );
+    }
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/home');
+          }
+        }
+      },
+      child: Scaffold(
+      backgroundColor: AppTheme.surfaceColor,
+      appBar: AppBar(
+        title: Text(
+          'Job #$orderId',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          if (isInstant)
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Chip(
+                label: Text(
+                  'INSTANT',
+                  style: GoogleFonts.outfit(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                backgroundColor: Colors.orange,
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+        ],
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/home');
+            }
+          },
+        ),
       ),
-    )  // Scaffold
-    );  // PopScope
+      body: body,
+    ),
+    );
   }
 
   Widget _buildSectionHeader(String title) {

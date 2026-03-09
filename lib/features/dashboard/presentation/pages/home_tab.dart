@@ -1,23 +1,35 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/services/apiservices.dart';
-import '../../../../core/services/tracking_service.dart';
-import '../../../orders/presentation/pages/orders_history_screen.dart';
-import '../providers/dashboard_provider.dart';
-import '../widgets/sos_bottom_sheet.dart';
-import 'agent_verification_screen.dart';
-import '../../../../core/model/slot_availability.dart';
-import '../../../../core/model/order_details.dart';
+import 'package:urban_agent_app/core/theme/app_theme.dart';
+import 'package:urban_agent_app/core/services/apiservices.dart';
+import 'package:urban_agent_app/core/services/tracking_service.dart';
+import 'package:urban_agent_app/features/orders/presentation/pages/orders_history_screen.dart';
+import 'package:urban_agent_app/features/dashboard/presentation/providers/dashboard_provider.dart';
+import 'package:urban_agent_app/features/dashboard/presentation/widgets/sos_bottom_sheet.dart';
+import 'package:urban_agent_app/features/dashboard/presentation/pages/agent_verification_screen.dart';
+import 'package:urban_agent_app/core/model/slot_availability.dart';
+import 'package:urban_agent_app/core/model/order_details.dart';
 
-class HomeTab extends ConsumerWidget {
+class HomeTab extends ConsumerStatefulWidget {
   const HomeTab({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeTab> createState() => _HomeTabState();
+}
+
+class _HomeTabState extends ConsumerState<HomeTab> {
+  @override
+  void initState() {
+    super.initState();
+    // Initial data load
+    Future.microtask(() => ref.read(dashboardProvider.notifier).fetchUpcomingJobs());
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(dashboardProvider);
     final controller = ref.read(dashboardProvider.notifier);
 
@@ -221,7 +233,7 @@ class HomeTab extends ConsumerWidget {
               ),
             )
           else
-            ...state.upcomingOrders.map((order) => _buildJobCard(order, context, ref)),
+            ...state.upcomingOrders.map((order) => _buildJobCard(order, context)),
         ],
       ),
     ),
@@ -385,8 +397,8 @@ class HomeTab extends ConsumerWidget {
   Widget _buildJobCard(
     OrderDetails order,
     BuildContext context,
-    WidgetRef ref,
   ) {
+    print("Home Page Order Details $order");
     final title = (order.items != null && order.items!.isNotEmpty)
         ? (order.items!.first.itemDetails?.name ?? 'Unnamed Order')
         : 'Unnamed Order';
@@ -509,7 +521,7 @@ class HomeTab extends ConsumerWidget {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () =>
-                        _showAcceptBottomSheet(context, ref, order),
+                        _showAcceptBottomSheet(context, order),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryColor,
                       shape: RoundedRectangleBorder(
@@ -527,7 +539,7 @@ class HomeTab extends ConsumerWidget {
                   child: OutlinedButton(
                     onPressed: () {
                       if (order.id != null) {
-                        _showRejectBottomSheet(context, ref, order.id!);
+                        _showRejectBottomSheet(context, order.id!);
                       }
                     },
                     style: OutlinedButton.styleFrom(
@@ -634,7 +646,7 @@ class HomeTab extends ConsumerWidget {
   }
 
   void _showAcceptBottomSheet(
-      BuildContext context, WidgetRef ref, OrderDetails order) {
+      BuildContext context, OrderDetails order) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -725,7 +737,7 @@ class HomeTab extends ConsumerWidget {
                       onPressed: () {
                         Navigator.pop(context);
                         if (order.id != null) {
-                          _showRejectBottomSheet(context, ref, order.id!);
+                          _showRejectBottomSheet(context, order.id!);
                         }
                       },
                       style: OutlinedButton.styleFrom(
@@ -817,7 +829,7 @@ class HomeTab extends ConsumerWidget {
   }
 
   void _showRejectBottomSheet(
-      BuildContext context, WidgetRef ref, String orderId) {
+      BuildContext context, String orderId) {
     final controller = TextEditingController();
     final formKey = GlobalKey<FormState>();
     final isReasonValid = ValueNotifier<bool>(false);

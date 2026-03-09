@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../../../core/theme/app_theme.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -153,7 +154,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           children: [
             const SizedBox(height: 24),
 
-            /// 🔹 Profile Avatar
+            /// ðŸ”¹ Profile Avatar
             Center(
               child: Stack(
                 children: [
@@ -216,7 +217,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
             const SizedBox(height: 32),
 
-            /// 🔹 Rider Details (READ-ONLY)
+            /// ðŸ”¹ Rider Details (READ-ONLY)
             _sectionCard(
               title: "Rider Details",
               icon: Icons.delivery_dining_outlined,
@@ -238,7 +239,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
             const SizedBox(height: 24),
 
-            /// 🔹 Personal Details (EDITABLE)
+            /// ðŸ”¹ Personal Details (EDITABLE)
             _sectionCard(
               title: "Personal Details",
               icon: Icons.person_outline,
@@ -254,7 +255,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
             const SizedBox(height: 24),
 
-            /// 🔹 Bank Details (EDITABLE)
+            /// ðŸ”¹ Bank Details (EDITABLE)
             _sectionCard(
               title: "Bank Details",
               icon: Icons.account_balance_outlined,
@@ -273,7 +274,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  /// 🔹 Reusable Section Card
+  /// ðŸ”¹ Reusable Section Card
   Widget _sectionCard({
     required String title,
     required IconData icon,
@@ -321,7 +322,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  /// 🔹 Editable Field UI
+  /// ðŸ”¹ Editable Field UI
   Widget _editableField(
     String label, 
     TextEditingController controller, {

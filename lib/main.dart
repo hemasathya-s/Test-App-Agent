@@ -1,16 +1,10 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'config/router.dart';
+import 'package:go_router/go_router.dart';
+import 'package:urban_agent_app/config/router.dart' as app_router;
 import 'core/theme/app_theme.dart';
-import 'core/services/tracking_service.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  // Start background tracking
-  final trackingService = TrackingService();
-  await trackingService.startTracking();
-
+void main() {
   runApp(
     const ProviderScope(
       child: MyApp(),
@@ -24,10 +18,10 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'IT Fixer Agent',
+      title: 'UC Agent',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      routerConfig: router,
+      routerConfig: app_router.router,
     );
   }
 }
