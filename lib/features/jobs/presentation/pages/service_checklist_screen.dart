@@ -43,13 +43,13 @@ class _ServiceChecklistScreenState
                 fontWeight: FontWeight.bold,
               ),
             ),
-            Text(
-              'Step ${_tasks.values.where((v) => v).length} of ${_tasks.length}',
-              style: GoogleFonts.outfit(
-                fontSize: 12,
-                color: AppTheme.textSecondary,
-              ),
-            ),
+            // Text(
+            //   'Step ${_tasks.values.where((v) => v).length} of ${_tasks.length}',
+            //   style: GoogleFonts.outfit(
+            //     fontSize: 12,
+            //     color: AppTheme.textSecondary,
+            //   ),
+            // ),
           ],
         ),
         centerTitle: true,
@@ -65,12 +65,12 @@ class _ServiceChecklistScreenState
       body: Column(
         children: [
           // Progress Bar
-          LinearProgressIndicator(
-            value: progress / 100,
-            backgroundColor: Colors.grey[200],
-            color: AppTheme.primaryColor,
-            minHeight: 6,
-          ),
+          // LinearProgressIndicator(
+          //   value: progress / 100,
+          //   backgroundColor: Colors.grey[200],
+          //   color: AppTheme.primaryColor,
+          //   minHeight: 6,
+          // ),
 
           Expanded(
             child: ListView(
@@ -86,13 +86,13 @@ class _ServiceChecklistScreenState
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    Text(
-                      '${progress.toInt()}%',
-                      style: GoogleFonts.outfit(
-                        color: AppTheme.primaryColor,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    // Text(
+                    //   '${progress.toInt()}%',
+                    //   style: GoogleFonts.outfit(
+                    //     color: AppTheme.primaryColor,
+                    //     fontWeight: FontWeight.bold,
+                    //   ),
+                    // ),
                   ],
                 ),
                 const SizedBox(height: 16),

@@ -1,25 +1,447 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
+import 'dart:developer';
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:urban_agent_app/core/model/ServiceModal.dart';
+import 'package:urban_agent_app/core/model/order_details.dart';
+import 'package:urban_agent_app/core/model/agent_order_response.dart';
 import '../../Model/AgentRegistrationRequest.dart';
 import '../../Model/AuthResponse.dart';
 import '../../Model/AgentProfileResponse.dart';
 import '../../Model/LoginRequestModel.dart';
 import '../../Model/MovementRequest.dart';
-import '../../Model/OrderDetails.dart';
 import '../../Model/OtpUser.dart';
 import '../../Model/Product.dart';
 import '../../Model/ProductStock.dart';
 import '../../Model/ToolStock.dart';
 import '../../Model/Tool.dart';
+import '../model/slot_availability.dart';
 
 class ApiService {
-  static const String _baseUrl = 'https://api.itfixer199.com';
-  static const String temptokens = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzcyOTEzMDAzLCJpYXQiOjE3NzI4NTkwMDMsImp0aSI6ImY0ZWNkMjRlY2IzZTQ1M2M5NjJmNDkyODUxYzBlMDI2IiwidXNlcl9pZCI6ImUzYWM4OTQ3LTdhYzktNDYwOS05NGVlLTczZjNjYmU4ZWM1NiJ9.I8SPT-hvb0W79SSSMIKJKkU9db5bB3xLM4bjpaJIxkU";
+
+  static String baseUrl = 'https://api.itfixer199.com';
+
+  static Future<String?> _getAccessToken() async {
+    return await ApiService.getAccessToken();
+  }
+
+  static Future<List<SlotAvailability>> getAgentSlotAvailability(
+      [String? date]) async {
+    String fetchDate = date ?? DateTime.now().toString().split(' ')[0];
+    try {
+      final token = await ApiService.getAccessToken();
+      if (token == null) throw Exception('No access token');
+
+      String url = '$baseUrl/api/slots/my-slots/?date=$fetchDate';
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      print("Url $url");
+      print("Response Data slot ${response.body}");
+      print("Response Code ${response.statusCode}");
+      if (response.statusCode == 200) {
+        final decoded = json.decode(response.body);
+
+        List<dynamic> list = [];
+        if (decoded is List) {
+          list = decoded;
+        } else if (decoded is Map) {
+          final data = decoded['results'] ?? decoded['data'];
+          if (data is List) {
+            list = data;
+          } else if (data is Map) {
+            list = [data];
+          } else {
+            list = [decoded];
+          }
+        }
+
+        return list.map((json) => SlotAvailability.fromJson(json)).toList();
+      }
+      return [];
+    }
+    catch (e) {
+      print("Error on get Agent Slot $e");
+      return [];
+    }
+  }
+
+  Future<List<dynamic>> getMySlots() async {
+    final token = await getAccessToken();
+    if (token == null) throw Exception('No access token');
+
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/slots/my-slots/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+    } catch (e) {
+      print('Error fetching slots: $e');
+    }
+    return [];
+  }
+
+  static Future<List<OrderDetails>?> agentOrder() async {
+    try {
+      final token = await getAccessToken();
+      if (token == null) throw Exception('No access token');
+      String url = "$baseUrl/api/order/agent-orders/?is_active=true";
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      print("Response body agent order ${response.body}");
+      print("Response status code agent order ${response.statusCode}");
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        return AgentOrderResponse
+            .fromJson(data)
+            .orders;
+      }
+      return null;
+    } catch (e) {
+      print("Error on agent Order $e");
+      return null;
+    }
+  }
+
+  static Future<List<OrderDetails>> getAgentOrderHistory() async {
+    try {
+      final token = await getAccessToken();
+      if (token == null) throw Exception('No access token');
+      String url = "$baseUrl/api/order/agent-orders/";
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        List<dynamic> list = [];
+
+        if (decoded is List) {
+          list = decoded;
+        } else if (decoded is Map) {
+          final data = decoded['orders'] ?? decoded['results'] ??
+              decoded['data'];
+          if (data is List) {
+            list = data;
+          } else if (data is Map) {
+            list = [data];
+          } else {
+            list = [decoded];
+          }
+        }
+
+        return list
+            .map((orderJson) => OrderDetails.fromJson(orderJson))
+            .toList();
+      }
+      return [];
+    } catch (e) {
+      print("Error on get Order History $e");
+      return [];
+    }
+  }
+
+  //Agent Approval for Order Assignment
+  static Future<bool> agentApprovalOrder(String orderID, String status,
+      {String? reason}) async {
+    try {
+      final token = await getAccessToken();
+      if (token == null) throw Exception('No access token');
+      String url = '$baseUrl/api/order/orders/$orderID/agent-approval/';
+
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          "status": status,
+          if (reason != null) "rejection_reason_description": reason,
+        }),
+      );
+
+      print("Response body ${response.body}");
+      print("Response status code ${response.statusCode}");
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print("Error on agent Approval order $e");
+      return false;
+    }
+  }
+
+  static Future<List<ServiceModal>> listService({ String? lat,
+    String? lng,}) async {
+    try {
+      final token = await getAccessToken();
+      if (token == null) throw Exception('No access token');
+      // final prefs = await SharedPreferences.getInstance();
+      // final effectiveLat = lat ?? prefs.getDouble('user_latitude')?.toString();
+      // final effectiveLng = lng ?? prefs.getDouble('user_longitude')?.toString();
+
+      String url = '$baseUrl/api/services/?include_categories=true&include_media=true&include_pricing=true&include_zones=true';
+      // if (effectiveLat != null && effectiveLat.isNotEmpty &&
+      //     effectiveLng != null && effectiveLng.isNotEmpty) {
+      //   url += '&lat=$effectiveLat&lng=$effectiveLng';
+      // }
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        List<dynamic> list = [];
+
+        if (decoded is List) {
+          list = decoded;
+        } else if (decoded is Map) {
+          final data = decoded['services'] ?? decoded['results'] ??
+              decoded['data'];
+          if (data is List) {
+            list = data;
+          } else if (data is Map) {
+            list = [data];
+          } else {
+            list = [decoded];
+          }
+        }
+
+        return list.map((json) {
+          final service = Service.fromJson(json);
+          return ServiceModal.fromService(service);
+        }).toList();
+      }
+      return [];
+    }
+    catch (e) {
+      print("Error on list Service $e");
+      return [];
+    }
+  }
+
+  static Future<void> serviceModification(String orderId, String orderItemId,
+      String serviceId, String? reason) async {
+    try {
+      final token = await getAccessToken();
+      if (token == null) throw Exception('No access token');
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/order/service-modification/request/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          "order_id": orderId,
+          "order_item_id": orderItemId,
+          "new_service_id": serviceId,
+          if (reason != null && reason.isNotEmpty) "reason": reason,
+        }),
+      );
+      print("serviceModification status: ${response.statusCode}");
+      print("serviceModification body: ${response.body}");
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw Exception('serviceModification failed: ${response.statusCode}');
+      }
+    } catch (e) {
+      print("Error on service modification $e");
+      rethrow;
+    }
+  }
+
+  /// Connects once to the order WebSocket and stays connected.
+  /// - Emits [true]  when service_modifications[].status == APPROVED or APPLIED
+  /// - Emits [false] when service_modifications[].status == REJECTED or DECLINED
+  /// - Emits nothing while status == PENDING (stream stays open)
+  /// - On unexpected server close: caller (ApprovalWaitingScreen) reconnects
+  static Stream<bool> orderUpdatedStream(String orderId) async* {
+    final ctrl = StreamController<bool>();
+    WebSocketChannel? channel;
+    StreamSubscription? sub;
+
+    void close(bool? result) {
+      if (ctrl.isClosed) return;
+      sub?.cancel();
+      channel?.sink.close();
+      if (result != null) ctrl.add(result);
+      ctrl.close();
+    }
+
+    try {
+      final token = await getAccessToken();
+      if (token == null) throw Exception('No access token');
+      final wsBase = baseUrl
+          .replaceFirst('https://', 'wss://')
+          .replaceFirst('http://', 'ws://');
+      final wsUrl = '$wsBase/ws/order/$orderId/?token=$token';
+      print('WS connecting: $wsUrl');
+      channel = WebSocketChannel.connect(Uri.parse(wsUrl));
+
+      sub = channel.stream.listen(
+            (dynamic raw) {
+          try {
+            final data = jsonDecode(raw as String) as Map<String, dynamic>;
+            print('WS message: $data');
+
+            // WS sends: { "modification": { "status": "PENDING"/"APPROVED"/"REJECTED", ... } }
+            final mod = data['modification'] as Map<String, dynamic>?;
+            if (mod != null) {
+              final st = (mod['status'] as String? ?? '').toUpperCase();
+              print('WS: modification.status = $st');
+
+              if (st == 'APPROVED' || st == 'APPLIED') {
+                close(true); // status changed → show Approved sheet
+                return;
+              }
+              if (st == 'REJECTED' || st == 'DECLINED') {
+                close(false); // status changed → show Rejected sheet
+                return;
+              }
+              // PENDING → WS stays open, buffer keeps showing
+              print('WS: status=$st — staying connected');
+              return;
+            }
+          } catch (e) {
+            print('WS parse error: $e');
+          }
+        },
+        onError: (e) {
+          print('WS error: $e');
+          close(null); // close without result; caller will reconnect
+        },
+        onDone: () {
+          print('WS closed by server');
+          close(null); // close without result; caller will reconnect
+        },
+      );
+
+      ctrl.onCancel = () {
+        sub?.cancel();
+        channel?.sink.close();
+      };
+    } catch (e) {
+      print('WS connect error: $e');
+      if (!ctrl.isClosed) {
+        ctrl.addError(e);
+        ctrl.close();
+      }
+    }
+
+    yield* ctrl.stream;
+  }
+
+  /// Fetches a single [OrderDetails] by [orderId] and returns it.
+  /// Returns null if the request fails.
+  static Future<OrderDetails?> getOrderbyId(String orderId) async {
+    try {
+      final token = await getAccessToken();
+      if (token == null) throw Exception('No access token');
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/order/orders/$orderId/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      print('getOrderbyId status: ${response.statusCode}');
+      print('getOrderbyId body: ${response.body}');
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        // API returns: { "success": true, "order": { ... } }
+        final orderJson = data['order'] as Map<String, dynamic>? ?? data;
+        return OrderDetails.fromJson(orderJson);
+      }
+    } catch (e) {
+      print('Error getOrderbyId: $e');
+    }
+    return null;
+  }
+
+  static Future<bool> updateJobStatus(String orderId, String status) async {
+    try {
+      final token = await getAccessToken();
+      if (token == null) throw Exception('No access token');
+      String url = '$baseUrl/api/order/orders/$orderId/update-status/';
+
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({"status": status}),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        print("Job $orderId status successfully updated to $status");
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print("Error on update job status: $e");
+      return false;
+    }
+  }
+
+  static Future<bool?> toggleActiveStatus() async {
+    try {
+      final token = await getAccessToken();
+      if (token == null) throw Exception('No access token');
+      String url = '$baseUrl/api/user/toggle-active';
+      final response = await http.patch(
+        Uri.parse(url),
+        headers: {
+          'accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['data']['is_active'] as bool?;
+      }
+    } catch (e) {
+      print("Error toggling active status: $e");
+    }
+    return null;
+  }
+
+  /*--- hari -----*/
 
   // ── WebSocket ───────────────────────────────────────────────────────────────
   // ── Product WebSocket ───────────────────────────────────────────────────────
@@ -29,7 +451,7 @@ class ApiService {
   bool _wsIsConnecting = false;
   int _wsReconnectAttempts = 0;
   final StreamController<Map<String, dynamic>> _wsController =
-      StreamController<Map<String, dynamic>>.broadcast();
+  StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<Map<String, dynamic>> get movementStream => _wsController.stream;
 
@@ -40,9 +462,10 @@ class ApiService {
   bool _toolWsIsConnecting = false;
   int _toolWsReconnectAttempts = 0;
   final StreamController<Map<String, dynamic>> _toolWsController =
-      StreamController<Map<String, dynamic>>.broadcast();
+  StreamController<Map<String, dynamic>>.broadcast();
 
-  Stream<Map<String, dynamic>> get toolMovementStream => _toolWsController.stream;
+  Stream<Map<String, dynamic>> get toolMovementStream =>
+      _toolWsController.stream;
 
   bool _isDisposed = false;
 
@@ -60,7 +483,7 @@ class ApiService {
       print('📡 WS Connecting: $uri');
       _wsChannel = WebSocketChannel.connect(uri);
       _wsSubscription = _wsChannel!.stream.listen(
-        (msg) {
+            (msg) {
           _wsReconnectAttempts = 0;
           _wsIsConnecting = false;
           if (_isDisposed) return;
@@ -95,7 +518,8 @@ class ApiService {
     if (_isDisposed) return;
     _wsReconnectAttempts++;
     final delay = Duration(seconds: (2 * _wsReconnectAttempts).clamp(5, 30));
-    print('🔄 WS reconnect in ${delay.inSeconds}s (attempt $_wsReconnectAttempts)...');
+    print('🔄 WS reconnect in ${delay
+        .inSeconds}s (attempt $_wsReconnectAttempts)...');
     Future.delayed(delay, () {
       if (!_wsIsConnecting && !_isDisposed) connectMovementWebSocket();
     });
@@ -118,7 +542,7 @@ class ApiService {
 
       _toolWsChannel = WebSocketChannel.connect(uri);
       _toolWsSubscription = _toolWsChannel!.stream.listen(
-        (msg) {
+            (msg) {
           _toolWsReconnectAttempts = 0;
           _toolWsIsConnecting = false;
           if (_isDisposed) return;
@@ -152,8 +576,10 @@ class ApiService {
   void _toolWsReconnect() {
     if (_isDisposed) return;
     _toolWsReconnectAttempts++;
-    final delay = Duration(seconds: (2 * _toolWsReconnectAttempts).clamp(5, 30));
-    print('🔄 Tool WS reconnect in ${delay.inSeconds}s (attempt $_toolWsReconnectAttempts)...');
+    final delay = Duration(
+        seconds: (2 * _toolWsReconnectAttempts).clamp(5, 30));
+    print('🔄 Tool WS reconnect in ${delay
+        .inSeconds}s (attempt $_toolWsReconnectAttempts)...');
     Future.delayed(delay, () {
       if (!_toolWsIsConnecting && !_isDisposed) connectToolMovementWebSocket();
     });
@@ -181,7 +607,8 @@ class ApiService {
     if (!_toolWsController.isClosed) _toolWsController.close();
   }
 
-  Future<ApiResponse<AuthResponse>> unifiedLogin(LoginRequestModel request) async {
+  Future<ApiResponse<AuthResponse>> unifiedLogin(
+      LoginRequestModel request) async {
     try {
       final deviceInfo = await _getDeviceInfo();
 
@@ -213,7 +640,7 @@ class ApiService {
       print('🔐 [UnifiedLogin] Request body: ${finalRequest.toFormJson()}');
 
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/unified-login'),
+        Uri.parse('$baseUrl/api/unified-login'),
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           'accept': 'application/json',
@@ -263,7 +690,7 @@ class ApiService {
       print('📲 [SendOtp] Request body  : ${jsonEncode(request.toJson())}');
 
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/send-otp'),
+        Uri.parse('$baseUrl/api/send-otp'),
         headers: {
           'Content-Type': 'application/json',
           'accept': 'application/json',
@@ -282,7 +709,7 @@ class ApiService {
         return ApiResponse(isSuccess: true, data: msg);
       }
 
-      final errors   = json['errors'] as List<dynamic>?;
+      final errors = json['errors'] as List<dynamic>?;
       final errorMsg = (errors?.isNotEmpty == true)
           ? errors!.first.toString()
           : json['message']?.toString() ?? 'Failed to send OTP';
@@ -311,22 +738,22 @@ class ApiService {
 
       final body = {
         'mobile_number': mobileNumber,
-        'otp':           otp,
-        'login_type':    'OTP',
-        'role':          'AGENT',
-        'device_type':   Platform.isAndroid ? 'ANDROID' : 'IOS',
-        'device_id':     deviceInfo['device_id'] ?? 'unknown',
-        'device_name':   deviceInfo['device_name'] ?? 'unknown',
-        'ip_address':    '0.0.0.0',
+        'otp': otp,
+        'login_type': 'OTP',
+        'role': 'AGENT',
+        'device_type': Platform.isAndroid ? 'ANDROID' : 'IOS',
+        'device_id': deviceInfo['device_id'] ?? 'unknown',
+        'device_name': deviceInfo['device_name'] ?? 'unknown',
+        'ip_address': '0.0.0.0',
       };
 
       print('📲 [VerifyOtp] Request body : $body');
 
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/verify-otp'),
+        Uri.parse('$baseUrl/api/verify-otp'),
         headers: {
           'Content-Type': 'application/json',
-          'accept':       'application/json',
+          'accept': 'application/json',
         },
         body: jsonEncode(body),
       ).timeout(const Duration(seconds: 15));
@@ -355,7 +782,7 @@ class ApiService {
         } else if (json.containsKey('access') && json.containsKey('refresh')) {
           // Pattern C — tokens are flat at root
           tokensMap = {
-            'access':  json['access'],
+            'access': json['access'],
             'refresh': json['refresh'],
           };
         } else if (json.containsKey('data') && json['data'] is Map) {
@@ -371,7 +798,8 @@ class ApiService {
           }
         }
 
-        if (userMap == null && json.containsKey('user') && json['user'] is Map) {
+        if (userMap == null && json.containsKey('user') &&
+            json['user'] is Map) {
           userMap = Map<String, dynamic>.from(json['user'] as Map);
         }
 
@@ -380,32 +808,33 @@ class ApiService {
 
         if (tokensMap != null) {
           final tokens = OtpTokens.fromJson(tokensMap);
-          final user   = userMap != null ? OtpUser.fromJson(userMap) : null;
+          final user = userMap != null ? OtpUser.fromJson(userMap) : null;
 
           final verifyResponse = VerifyOtpResponse(
             success: true,
             message: json['message']?.toString() ?? 'Login successful',
-            user:    user,
-            tokens:  tokens,
+            user: user,
+            tokens: tokens,
           );
 
           // Save to SharedPreferences
           final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('access_token',  tokens.access);
+          await prefs.setString('access_token', tokens.access);
           await prefs.setString('refresh_token', tokens.refresh);
 
           if (user != null) {
-            await prefs.setString('user_id',     user.id);
-            await prefs.setString('user_name',   user.name);
-            await prefs.setString('user_email',  user.email);
+            await prefs.setString('user_id', user.id);
+            await prefs.setString('user_name', user.name);
+            await prefs.setString('user_email', user.email);
             await prefs.setString('user_mobile', user.mobileNumber);
-            await prefs.setString('user_role',   user.role);
+            await prefs.setString('user_role', user.role);
             await prefs.setBool('is_mobile_verified', user.isMobileVerified);
-            await prefs.setBool('is_email_verified',  user.isEmailVerified);
+            await prefs.setBool('is_email_verified', user.isEmailVerified);
             await prefs.setString('user_status', user.status);
           }
 
-          print('✅ [VerifyOtp] Success — user: ${user?.name}, role: ${user?.role}');
+          print('✅ [VerifyOtp] Success — user: ${user?.name}, role: ${user
+              ?.role}');
           print('✅ [VerifyOtp] access_token saved: ${tokens.access}');
           return ApiResponse(isSuccess: true, data: verifyResponse);
         }
@@ -562,7 +991,6 @@ class ApiService {
 //   }
 
 
-
   Future<AgentApiResult<AgentRegistrationResponse>> registerAgent({
     required AgentRegistrationRequest request,
     File? profileImage,
@@ -573,7 +1001,7 @@ class ApiService {
     try {
       print('📝 Registering agent: ${request.name}');
 
-      final uri = Uri.parse('$_baseUrl/api/user/agent');
+      final uri = Uri.parse('$baseUrl/api/user/agent');
 
       final multipartRequest = http.MultipartRequest('POST', uri)
         ..headers.addAll({
@@ -618,11 +1046,12 @@ class ApiService {
 
       print('📡 Sending to: $uri');
       print('📡 Fields: ${multipartRequest.fields}');
-      
+
       // Log file sizes for debugging
       for (var file in multipartRequest.files) {
         final length = file.length;
-        print('📡 File: ${file.field} (${file.contentType}) - Size: $length bytes');
+        print('📡 File: ${file.field} (${file
+            .contentType}) - Size: $length bytes');
       }
 
       final streamedResponse = await multipartRequest
@@ -630,8 +1059,10 @@ class ApiService {
           .timeout(
         const Duration(seconds: 300), // Increased to 5 minutes
         onTimeout: () {
-          print('❌ TIMEOUT: $uri did not respond in 300s. Possible slow connection or large files.');
-          throw TimeoutException('Request timed out. Please check your internet connection or try with smaller files.');
+          print(
+              '❌ TIMEOUT: $uri did not respond in 300s. Possible slow connection or large files.');
+          throw TimeoutException(
+              'Request timed out. Please check your internet connection or try with smaller files.');
         },
       );
 
@@ -650,7 +1081,7 @@ class ApiService {
         if (json is Map) {
           print('📡 Success Body Keys: ${json.keys}');
           if (json['data'] != null && json['data'] is Map) {
-             print('📡 Nested data keys: ${(json['data'] as Map).keys}');
+            print('📡 Nested data keys: ${(json['data'] as Map).keys}');
           }
         }
         final result = AgentRegistrationResponse.fromJson(json);
@@ -686,10 +1117,10 @@ class ApiService {
 
       print('❌ API Error [${ response.statusCode}]: $errorMsg');
       return AgentApiResult.failure(errorMsg);
-
     } on SocketException catch (e) {
       print('❌ SocketException: $e');
-      return AgentApiResult.failure('No internet connection. Check your network.');
+      return AgentApiResult.failure(
+          'No internet connection. Check your network.');
     } on TimeoutException catch (e) {
       print('❌ TimeoutException: $e');
       return AgentApiResult.failure('Request timed out. Please try again.');
@@ -702,15 +1133,17 @@ class ApiService {
 
   Future<ApiResponse<AgentProfileResponse>> getAgentProfile() async {
     try {
-      final response = await _authorizedRequest((token) => http.get(
-            Uri.parse('$_baseUrl/api/user/my-details'),
+      final response = await _authorizedRequest((token) =>
+          http.get(
+            Uri.parse('$baseUrl/api/user/my-details'),
             headers: {
               'Authorization': 'Bearer $token',
               'accept': 'application/json',
             },
           ));
 
-      print('📡 Get Profile [${response.statusCode}]: ${response.body}');
+      print('📡 getAgentProfile status: ${response.statusCode}');
+      print('📡 getAgentProfile body: ${response.body}');
 
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body);
@@ -732,8 +1165,7 @@ class ApiService {
   }
 
   /// PUT /api/user/agent/{userId}
-  Future<AgentApiResult<bool>> updateAgentProfile(
-      String userId,
+  Future<AgentApiResult<bool>> updateAgentProfile(String userId,
       Map<String, dynamic> updatedData, {
         File? profileImage,
       }) async {
@@ -746,8 +1178,8 @@ class ApiService {
         return AgentApiResult.failure('Not authenticated. Please login again.');
       }
 
-      final uri = Uri.parse('$_baseUrl/api/user/agent/$userId');
-      
+      final uri = Uri.parse('$baseUrl/api/user/agent/$userId');
+
       // We use MultipartRequest if an image is provided, otherwise a standard PUT
       if (profileImage != null) {
         final request = http.MultipartRequest('PUT', uri)
@@ -756,10 +1188,21 @@ class ApiService {
             'Authorization': 'Bearer $token',
           });
 
-        // Add text fields
-        updatedData.forEach((key, value) {
-          request.fields[key] = value.toString();
-        });
+        // Helper to flatten nested maps for multipart form fields
+        void addFields(String prefix, Map<String, dynamic> data) {
+          data.forEach((key, value) {
+            if (value is Map<String, dynamic>) {
+              // For multipart, we often need flat keys. Try both flat and prefixed if uncertain.
+              // Based on registerAgent, it seems to prefer flat keys for some fields.
+              addFields("", value);
+            } else if (value != null) {
+              request.fields[key] = value.toString();
+            }
+          });
+        }
+
+        // Add all fields (flattened for multipart)
+        addFields("", updatedData);
 
         // Add profile image
         final ext = _fileExtension(profileImage.path);
@@ -770,7 +1213,8 @@ class ApiService {
         ));
 
         print('📡 Sending Multipart PUT to: $uri');
-        final streamedResponse = await request.send().timeout(const Duration(seconds: 300));
+        final streamedResponse = await request.send().timeout(
+            const Duration(seconds: 300));
         final response = await http.Response.fromStream(streamedResponse);
         return _handleUpdateResponse(response);
       } else {
@@ -797,14 +1241,15 @@ class ApiService {
   }
 
   AgentApiResult<bool> _handleUpdateResponse(http.Response response) {
-    print('✏️ Update Profile Status: ${response.statusCode}');
-    
     if (response.statusCode == 200 || response.statusCode == 204) {
       return AgentApiResult.success(true);
     }
 
+    print('❌ Update Profile Error Body: ${response.body}');
+
     if (response.body.isEmpty) {
-      return AgentApiResult.failure('Server returned status ${response.statusCode} with no body');
+      return AgentApiResult.failure(
+          'Server returned status ${response.statusCode} with no body');
     }
 
     // Safe JSON decoding
@@ -812,8 +1257,10 @@ class ApiService {
     try {
       json = jsonDecode(response.body);
     } catch (e) {
-      print('❌ Failed to decode response: ${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}');
-      return AgentApiResult.failure('Server error (${response.statusCode}). Please contact support.');
+      print('❌ Failed to decode response: ${response.body.substring(
+          0, response.body.length > 200 ? 200 : response.body.length)}');
+      return AgentApiResult.failure(
+          'Server error (${response.statusCode}). Please contact support.');
     }
 
     // Parse Django/DRF error formats
@@ -846,7 +1293,7 @@ class ApiService {
   Future<AgentApiResult<bool>> logoutUser() async {
     try {
       final userId = await getUserId();
-      final accessToken = await _getAccessToken();
+      final accessToken = await getAccessToken();
 
       if (accessToken == null || userId == null || userId.isEmpty) {
         // Even if session is missing, we ensure local tokens are cleared
@@ -857,7 +1304,7 @@ class ApiService {
       print('📡 Logging out user: $userId');
 
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/logout/$userId'),
+        Uri.parse('$baseUrl/api/logout/$userId'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $accessToken',
@@ -872,9 +1319,10 @@ class ApiService {
       if (response.statusCode == 200 || response.statusCode == 204) {
         return AgentApiResult.success(true);
       } else {
-        // Return success anyway because local session is cleared, 
+        // Return success anyway because local session is cleared,
         // but maybe log the error
-        print('⚠️ Server logout failed but local tokens cleared: ${response.body}');
+        print('⚠️ Server logout failed but local tokens cleared: ${response
+            .body}');
         return AgentApiResult.success(true);
       }
     } catch (e) {
@@ -884,10 +1332,14 @@ class ApiService {
       return AgentApiResult.failure('Network error: ${e.toString()}');
     }
   }
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-  String _fileExtension(String path) {
-    final ext = path.split('.').last.toLowerCase();
+  static String _fileExtension(String path) {
+    final ext = path
+        .split('.')
+        .last
+        .toLowerCase();
     if (ext == 'jpg' || ext == 'jpeg') return 'jpeg';
     if (ext == 'png') return 'png';
     if (ext == 'pdf') return 'pdf';
@@ -897,12 +1349,7 @@ class ApiService {
   // ── Token Management Helpers ───────────────────────────────────────────────
 
   // Helper: Get access token
-  Future<String?> getAccessTokenLocal() async {
-    return _getAccessToken();
-  }
-
-  // Helper: Get access token
-  static Future<String?> _getAccessToken() async {
+  static Future<String?> getAccessToken() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('access_token');
     print('🔎 Getting Access Token: $token');
@@ -933,7 +1380,7 @@ class ApiService {
 
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/token/refresh/'),
+        Uri.parse('$baseUrl/api/token/refresh/'),
         headers: {
           'Content-Type': 'application/json',
         },
@@ -970,9 +1417,8 @@ class ApiService {
   }
 
   static Future<http.Response> _authorizedRequest(
-    Future<http.Response> Function(String token) request,
-  ) async {
-    String? token = await _getAccessToken();
+      Future<http.Response> Function(String token) request,) async {
+    String? token = await getAccessToken();
     print('📡 Authorized Request Using Token: $token');
 
     if (token == null) {
@@ -992,7 +1438,7 @@ class ApiService {
         throw Exception('Session expired');
       }
 
-      token = await _getAccessToken();
+      token = await getAccessToken();
       print('🔁 Retrying with new token: $token');
       response = await request(token!);
     }
@@ -1022,31 +1468,57 @@ class ApiService {
         'include_media': 'true',
         'include_pricing': 'true',
       };
-      
-      final uri = Uri.parse('$_baseUrl/api/product').replace(queryParameters: queryParams);
-      
-      print('📡 Fetching Products from: $uri');
-      
-      final response = await http.get(
-        uri,
-        headers: {
-          'accept': 'application/json',
-        },
-      ).timeout(const Duration(seconds: 15));
 
+      final uri = Uri.parse('$baseUrl/api/product').replace(
+          queryParameters: queryParams);
+      print('📡 Fetching Products from: $uri');
+
+      final response = await _authorizedRequest((token) =>
+          http.get(
+            uri,
+            headers: {
+              'Authorization': 'Bearer $token',
+              'accept': 'application/json',
+            },
+          )).timeout(const Duration(seconds: 30));
 
       print('📡 Get Products Status: ${response.statusCode}');
-      print('📦 Product Body: ${response.body}');
 
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        final productResponse = ProductResponse.fromJson(json);
-        return ApiResponse(isSuccess: true, data: productResponse.data);
+        final decoded = jsonDecode(response.body);
+        List<dynamic> raw = [];
+
+        if (decoded is List) {
+          raw = decoded;
+        } else if (decoded is Map) {
+          print('📡 Products Response Keys: ${decoded.keys}');
+          // Priority: data, results, products, items
+          final data = decoded['data'] ??
+              decoded['results'] ??
+              decoded['products'] ??
+              decoded['items'];
+
+          if (data is List) {
+            raw = data;
+          } else if (data is Map) {
+            // Check if nested inside data/results
+            final inner = data['products'] ?? data['items'] ?? data['results'];
+            if (inner is List) {
+              raw = inner;
+            } else {
+              raw = [data];
+            }
+          }
+        }
+
+        final items = raw.map((e) => Product.fromJson(e)).toList();
+        print('✅ Fetched ${items.length} products');
+        return ApiResponse(isSuccess: true, data: items);
       }
 
       return ApiResponse(
-        isSuccess: false, 
-        error: 'Failed to fetch products (${response.statusCode})'
+          isSuccess: false,
+          error: 'Failed to fetch products (${response.statusCode})'
       );
     } catch (e) {
       print('❌ getProducts error: $e');
@@ -1061,10 +1533,11 @@ class ApiService {
     String type = 'GIVE',
   }) async {
     try {
-      final token = await _getAccessToken();
+      final token = await getAccessToken();
       if (token == null) throw Exception('No access token');
 
-      final url = Uri.parse('$_baseUrl/api/product-inventory/movements/request/');
+      final url = Uri.parse(
+          '$baseUrl/api/product-inventory/movements/request/');
       print('📡 Requesting Movement: $url');
 
       final response = await http.post(
@@ -1087,7 +1560,8 @@ class ApiService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         final json = jsonDecode(response.body);
         final data = json['data'];
-        return ApiResponse(isSuccess: true, data: MovementRequest.fromJson(data));
+        return ApiResponse(
+            isSuccess: true, data: MovementRequest.fromJson(data));
       }
 
       return ApiResponse(
@@ -1103,24 +1577,53 @@ class ApiService {
   // ── Get All Tools ────────────────────────────────────────────────────────
   Future<ApiResponse<List<Tool>>> getTools() async {
     try {
-      final token = await _getAccessToken();
-      final url = Uri.parse('$_baseUrl/api/tools/');
+      final url = Uri.parse('$baseUrl/api/tools/');
       print('📡 GET Tools Catalog: $url');
-      
-      final response = await http.get(url, headers: {
-        'Accept': 'application/json',
-        if (token != null) 'Authorization': 'Bearer $token',
-      }).timeout(const Duration(seconds: 15));
+
+      final response = await _authorizedRequest((token) =>
+          http.get(
+            url,
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Accept': 'application/json',
+            },
+          )).timeout(const Duration(seconds: 15));
 
       print('📡 Tools Catalog Status: ${response.statusCode}');
-      
+
+
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        final List raw = json['data'] ?? json['results'] ?? json ?? [];
-        final tools = raw.map((e) => Tool.fromJson(e)).toList();
-        return ApiResponse(isSuccess: true, data: tools);
+        final decoded = jsonDecode(response.body);
+        List<dynamic> raw = [];
+
+        if (decoded is List) {
+          raw = decoded;
+        } else if (decoded is Map) {
+          print('📡 Tools Response Keys: ${decoded.keys}');
+          // Priority: data, results, tools, items
+          final data = decoded['data'] ??
+              decoded['results'] ??
+              decoded['tools'] ??
+              decoded['items'];
+
+          if (data is List) {
+            raw = data;
+          } else if (data is Map) {
+            final inner = data['tools'] ?? data['items'] ?? data['results'];
+            if (inner is List) {
+              raw = inner;
+            } else {
+              raw = [data];
+            }
+          }
+        }
+
+        final items = raw.map((e) => Tool.fromJson(e)).toList();
+        print('✅ Fetched ${items.length} tools');
+        return ApiResponse(isSuccess: true, data: items);
       }
-      return ApiResponse(isSuccess: false, error: 'Failed to fetch tools (${response.statusCode})');
+      return ApiResponse(isSuccess: false,
+          error: 'Failed to fetch tools (${response.statusCode})');
     } catch (e) {
       print('❌ getTools error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
@@ -1134,10 +1637,10 @@ class ApiService {
     String type = 'GET',
   }) async {
     try {
-      final token = await _getAccessToken();
+      final token = await getAccessToken();
       if (token == null) throw Exception('No access token');
 
-      final url = Uri.parse('$_baseUrl/api/tools/movement/request/');
+      final url = Uri.parse('$baseUrl/api/tools/movement/request/');
       print('📡 Requesting Tool Movement: $url');
 
       final response = await http.post(
@@ -1160,7 +1663,8 @@ class ApiService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         final json = jsonDecode(response.body);
         final data = json['data'] ?? json;
-        return ApiResponse(isSuccess: true, data: MovementRequest.fromJson(data));
+        return ApiResponse(
+            isSuccess: true, data: MovementRequest.fromJson(data));
       }
 
       return ApiResponse(
@@ -1176,10 +1680,10 @@ class ApiService {
   // ── My Tool Stocks ─────────────────────────────────────────────────────────
   Future<ApiResponse<List<ToolStock>>> getMyToolStocks() async {
     try {
-      final token = await _getAccessToken();
+      final token = await getAccessToken();
       if (token == null) throw Exception('No access token');
 
-      final url = Uri.parse('$_baseUrl/api/tools/my-stocks/');
+      final url = Uri.parse('$baseUrl/api/tools/my-stocks/');
       print('📡 GET Tool Stocks: $url');
 
       final response = await http.get(url, headers: {
@@ -1191,12 +1695,26 @@ class ApiService {
       print('📦 Tool Stocks Body: ${response.body}');
 
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        final List raw = json['data'] ?? json['results'] ?? json ?? [];
+        final decoded = jsonDecode(response.body);
+        List<dynamic> raw = [];
+        if (decoded is List) {
+          raw = decoded;
+        } else if (decoded is Map) {
+          final data = decoded['data'] ?? decoded['results'];
+          if (data is List) {
+            raw = data;
+          } else if (data is Map) {
+            raw = [data];
+          } else {
+            raw = [decoded];
+          }
+        }
+
         final items = raw.map((e) => ToolStock.fromJson(e)).toList();
         return ApiResponse(isSuccess: true, data: items);
       }
-      return ApiResponse(isSuccess: false, error: 'Tool stocks failed (${response.statusCode})');
+      return ApiResponse(isSuccess: false,
+          error: 'Tool stocks failed (${response.statusCode})');
     } catch (e) {
       print('❌ getMyToolStocks error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
@@ -1206,10 +1724,10 @@ class ApiService {
   // ── My Product Stocks ──────────────────────────────────────────────────────
   Future<ApiResponse<List<ProductStock>>> getMyProductStocks() async {
     try {
-      final token = await _getAccessToken();
+      final token = await getAccessToken();
       if (token == null) throw Exception('No access token');
 
-      final url = Uri.parse('$_baseUrl/api/product-inventory/my-stocks/');
+      final url = Uri.parse('$baseUrl/api/product-inventory/my-stocks/');
       print('📡 GET Product Stocks: $url');
 
       final response = await http.get(url, headers: {
@@ -1221,46 +1739,34 @@ class ApiService {
       print('📦 Product Stocks Body: ${response.body}');
 
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
-        final List raw = json['data'] ?? json['results'] ?? json ?? [];
+        final decoded = jsonDecode(response.body);
+        List<dynamic> raw = [];
+        if (decoded is List) {
+          raw = decoded;
+        } else if (decoded is Map) {
+          final data = decoded['data'] ?? decoded['results'];
+          if (data is List) {
+            raw = data;
+          } else if (data is Map) {
+            raw = [data];
+          } else {
+            raw = [decoded];
+          }
+        }
+
         final items = raw.map((e) => ProductStock.fromJson(e)).toList();
         return ApiResponse(isSuccess: true, data: items);
       }
-      return ApiResponse(isSuccess: false, error: 'Product stocks failed (${response.statusCode})');
+      return ApiResponse(isSuccess: false,
+          error: 'Product stocks failed (${response.statusCode})');
     } catch (e) {
       print('❌ getMyProductStocks error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
     }
   }
 
-  static Future<List<OrderDetails>?> agentOrder() async {
-    try {
-      String url = "$_baseUrl/api/order/agent-orders/?is_active=true";
-      // Use temporary token as requested
-      final token = temptokens;
-      
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
 
-      print("Response body agent order ${response.body}");
-      print("Response status code agent order ${response.statusCode}");
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final data = jsonDecode(response.body);
-        return AgentOrderResponse.fromJson(data).orders;
-      }
-      return null;
-    } catch (e) {
-      print("Error on agent Order $e");
-      return null;
-    }
-  }
-
-  Future<ApiResponse<Map<String, dynamic>>> createHubServiceRequest({
+  static Future<ApiResponse<Map<String, dynamic>>> createHubServiceRequest({
     required String orderId,
     String? orderItemId,
     String? deviceSerialNumber,
@@ -1274,11 +1780,11 @@ class ApiService {
         return ApiResponse(isSuccess: false, error: 'Not authenticated');
       }
 
-      final uri = Uri.parse('$_baseUrl/api/request/hub-service/');
+      final uri = Uri.parse('$baseUrl/api/request/hub-service/');
       final request = http.MultipartRequest('POST', uri)
         ..headers.addAll({
           'accept': 'application/json',
-          'Authorization': 'Bearer $temptokens',
+          'Authorization': 'Bearer $token',
         });
 
       // Add fields
@@ -1320,8 +1826,9 @@ class ApiService {
 
       print('📡 Creating Hub Service Request: $uri');
       print('📡 Fields: ${request.fields}');
-      
-      final streamedResponse = await request.send().timeout(const Duration(seconds: 300));
+
+      final streamedResponse = await request.send().timeout(
+          const Duration(seconds: 300));
       final response = await http.Response.fromStream(streamedResponse);
 
       print('📡 Hub Service Request Status: ${response.statusCode}');
@@ -1344,6 +1851,174 @@ class ApiService {
     } catch (e) {
       print('❌ createHubServiceRequest error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
+    }
+  }
+
+  static Future<ApiResponse<Map<String, dynamic>>> createSlotChangeRequest({
+    required String orderId,
+    String? orderItemId,
+    String? currentSlotId,
+    String? requestedSlotId,
+    required String requestedDate,
+    required String requestedStartTime,
+    required String requestedEndTime,
+    required String reasonType,
+    required String reasonDescription,
+  }) async {
+    try {
+      final token = await _getAccessToken();
+      if (token == null)
+        return ApiResponse(isSuccess: false, error: 'Not authenticated');
+
+      final bodyMap = {
+        "order_id": orderId,
+        "order_item_id": orderItemId,
+        "current_slot_id": currentSlotId,
+        "requested_slot_id": requestedSlotId,
+        "requested_date": requestedDate,
+        "requested_start_time": requestedStartTime,
+        "requested_end_time": requestedEndTime,
+        "slot_change_reason_type": reasonType,
+        "slot_change_reason_description": reasonDescription,
+      };
+
+      print('📤 Slot Change Request Body: ${jsonEncode(bodyMap)}');
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/request/slot-change/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode(bodyMap),
+      );
+
+      print('📡 Slot Change Status: ${response.statusCode}');
+      print('📡 Slot Change Body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return ApiResponse(isSuccess: true, data: jsonDecode(response.body));
+      }
+      return ApiResponse(isSuccess: false,
+          error: 'Failed to create slot change request (${response
+              .statusCode})');
+    } catch (e) {
+      print('❌ createSlotChangeRequest error: $e');
+      return ApiResponse(isSuccess: false, error: e.toString());
+    }
+  }
+
+  static Future<ApiResponse<Map<String, dynamic>>> createCancellationRequest({
+    required String orderId,
+    String? orderItemId,
+    required String cancellationReasonType,
+    required String reasonDescription,
+  }) async {
+    try {
+      final token = await _getAccessToken();
+      if (token == null)
+        return ApiResponse(isSuccess: false, error: 'Not authenticated');
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/request/cancellation/'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          "order_id": orderId,
+          "order_item_id": orderItemId,
+          "cancellation_reason_type": cancellationReasonType,
+          "cancellation_reason_description": reasonDescription,
+        }),
+      );
+
+      print('📡 Cancellation Status: ${response.statusCode}');
+      print('📡 Cancellation Body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return ApiResponse(isSuccess: true, data: jsonDecode(response.body));
+      }
+      return ApiResponse(isSuccess: false,
+          error: 'Failed to create cancellation request (${response
+              .statusCode})');
+    } catch (e) {
+      print('❌ createCancellationRequest error: $e');
+      return ApiResponse(isSuccess: false, error: e.toString());
+    }
+  }
+
+  Future<AgentApiResult<List<SlotAvailability>>> getAvailableSlotsByLocation({
+    required double lat,
+    required double lng,
+    String? agentId,
+  }) async {
+    try {
+      final token = await _getAccessToken();
+      if (token == null) {
+        return AgentApiResult.failure('Not authenticated');
+      }
+
+      final uri = Uri.parse(
+          '$baseUrl/api/slots/available-slots/?lat=$lat&lng=$lng${agentId != null ? "&agent_id=$agentId" : ""}');
+      print('📡 Fetching Available Slots from: $uri');
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'accept': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 30));
+
+      print('📡 Get Slots Status: ${response.statusCode}');
+      print('📡 Get Slots Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final decoded = json.decode(response.body);
+        List<dynamic> list = [];
+        
+        if (decoded is List) {
+          list = decoded;
+        } else if (decoded is Map) {
+          if (decoded.containsKey('zone_slot') && decoded['zone_slot'] is Map) {
+            final zoneData = decoded['zone_slot'] as Map<String, dynamic>;
+            final zoneName = zoneData['name'] ?? zoneData['zone_name'];
+            final zoneId = zoneData['id'];
+            
+            if (zoneData.containsKey('slots') && zoneData['slots'] is List) {
+              final rawSlots = zoneData['slots'] as List;
+              list = rawSlots.map((s) {
+                if (s is Map) {
+                  final sMap = Map<String, dynamic>.from(s);
+                  sMap['zone_name'] = sMap['zone_name'] ?? zoneName;
+                  sMap['zone'] = sMap['zone'] ?? zoneId;
+                  return sMap;
+                }
+                return s;
+              }).toList();
+            }
+          } else {
+            final data = decoded['results'] ?? decoded['data'] ?? decoded['zones'] ?? decoded['slots'] ?? decoded['available_slots'];
+            if (data is List) {
+              list = data;
+            } else if (data is Map) {
+              list = [data];
+            } else {
+              list = [decoded];
+            }
+          }
+        }
+        
+        final slots = list.map((j) => SlotAvailability.fromJson(j)).toList();
+        return AgentApiResult.success(slots);
+      } else {
+        return AgentApiResult.failure(
+            'Failed to fetch slots (${response.statusCode})');
+      }
+    } catch (e) {
+      print('❌ Get Slots Error: $e');
+      return AgentApiResult.failure('Error: $e');
     }
   }
 }

@@ -1,0 +1,12 @@
+﻿Analyzing job_details_screen.dart...                            
+
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\jobs\presentation\pages\job_details_screen.dart:144:50 - deprecated_member_use
+   info - Unnecessary use of 'toList' in a spread - lib\features\jobs\presentation\pages\job_details_screen.dart:235:26 - unnecessary_to_list_in_spreads
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\jobs\presentation\pages\job_details_screen.dart:412:47 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\jobs\presentation\pages\job_details_screen.dart:415:32 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\jobs\presentation\pages\job_details_screen.dart:589:47 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\jobs\presentation\pages\job_details_screen.dart:592:32 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\jobs\presentation\pages\job_details_screen.dart:726:44 - deprecated_member_use
+warning - The declaration '_sendSMS' isn't referenced - lib\features\jobs\presentation\pages\job_details_screen.dart:760:16 - unused_element
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\features\jobs\presentation\pages\job_details_screen.dart:1076:57 - deprecated_member_use
+

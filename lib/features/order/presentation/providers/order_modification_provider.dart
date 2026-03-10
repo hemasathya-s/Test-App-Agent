@@ -8,6 +8,8 @@ class OrderItem {
   final int quantity;
   final bool isNew;
   final bool isRemoved;
+  final String? imageUrl;
+  final String? type;
 
   const OrderItem({
     required this.id,
@@ -16,9 +18,18 @@ class OrderItem {
     this.quantity = 1,
     this.isNew = false,
     this.isRemoved = false,
+    this.imageUrl,
+    this.type,
   });
 
-  OrderItem copyWith({String? name, double? price, int? quantity, bool? isRemoved}) {
+  OrderItem copyWith({
+    String? name,
+    double? price,
+    int? quantity,
+    bool? isRemoved,
+    String? imageUrl,
+    String? type,
+  }) {
     return OrderItem(
       id: id,
       name: name ?? this.name,
@@ -26,6 +37,8 @@ class OrderItem {
       quantity: quantity ?? this.quantity,
       isNew: isNew,
       isRemoved: isRemoved ?? this.isRemoved,
+      imageUrl: imageUrl ?? this.imageUrl,
+      type: type ?? this.type,
     );
   }
 }
@@ -77,26 +90,19 @@ class OrderModificationState {
     );
   }
 
-  double get originalTotal => items
-      .where((i) => !i.isNew)
-      .fold(0, (sum, i) => sum + (i.price * i.quantity));
-  double get newTotal => items
-      .where((i) => !i.isRemoved)
-      .fold(0, (sum, i) => sum + (i.price * i.quantity));
+  double get originalTotal =>
+      items.where((i) => !i.isNew).fold(0, (sum, i) => sum + (i.price * i.quantity));
+  double get newTotal =>
+      items.where((i) => !i.isRemoved).fold(0, (sum, i) => sum + (i.price * i.quantity));
 }
 
-class OrderModificationController
-    extends StateNotifier<OrderModificationState> {
-  OrderModificationController()
-    : super(
-        const OrderModificationState(
-          items: [
-            OrderItem(id: '1', name: 'Premium Cleaning', price: 50.0),
-            OrderItem(id: '2', name: 'Extra Supplies Kit', price: 12.0),
-          ],
-          requestHistory: [],
-        ),
-      );
+class OrderModificationController extends StateNotifier<OrderModificationState> {
+  OrderModificationController() : super(const OrderModificationState(items: [], requestHistory: []));
+
+  /// Load real items from the API OrderDetails into the modification state
+  void loadFromOrderItems(List<OrderItem> items) {
+    state = state.copyWith(items: items);
+  }
 
   void addItem(String name, double price) {
     final newItem = OrderItem(
@@ -112,7 +118,9 @@ class OrderModificationController
   void replaceItem(String id, String newName, double newPrice) {
     state = state.copyWith(
       items: state.items
-          .map((i) => i.id == id ? i.copyWith(name: newName, price: newPrice, quantity: 1, isRemoved: false) : i)
+          .map((i) => i.id == id
+              ? i.copyWith(name: newName, price: newPrice, quantity: 1, isRemoved: false)
+              : i)
           .toList(),
     );
   }
@@ -187,8 +195,6 @@ class OrderModificationController
 }
 
 final orderModificationProvider =
-    StateNotifierProvider<OrderModificationController, OrderModificationState>((
-      ref,
-    ) {
-      return OrderModificationController();
-    });
+    StateNotifierProvider<OrderModificationController, OrderModificationState>((ref) {
+  return OrderModificationController();
+});

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:urban_agent_app/features/dashboard/presentation/pages/AgentProfilePage.dart';
+import 'config/router.dart' as app_router;
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/pages/kyc_status_screen.dart';
 import 'features/auth/presentation/pages/login_screen.dart';
@@ -20,7 +21,7 @@ import 'features/order/presentation/pages/request_tracking_screen.dart';
 import 'features/orders/presentation/pages/orders_history_screen.dart';
 import 'features/auth/presentation/pages/CreateAgent.dart';
 
-void main() {
+/*void main() {
   runApp(
     const ProviderScope(
       child: MyApp(),
@@ -113,6 +114,30 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       routerConfig: _router,
+    );
+  }
+}*/
+
+
+
+void main() {
+  runApp(
+    const ProviderScope(
+      child: MyApp(),
+    ),
+  );
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp.router(
+      title: 'UC Agent',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.lightTheme,
+      routerConfig: app_router.router,
     );
   }
 }

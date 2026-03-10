@@ -7,7 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:urban_agent_app/features/dashboard/presentation/pages/home_screen.dart';
 import '../../../../Model/LoginRequestModel.dart';
-import '../../../../core/services/Api service.dart';
+import '../../../../core/services/apiservices.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../dashboard/presentation/pages/dashboard_shell.dart';
 import '../providers/login_provider.dart';
@@ -330,8 +330,11 @@ class LoginPage extends StatefulWidget {
 class LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _mobileNumberController;
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _mobileNumberFocusNode = FocusNode();
   bool _isLoading = false;
+  bool _isOtpLogin = true;
 
   @override
   void initState() {
@@ -344,6 +347,8 @@ class LoginPageState extends State<LoginPage> {
   @override
   void dispose() {
     _mobileNumberController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
     _mobileNumberFocusNode.dispose();
     super.dispose();
   }
@@ -409,6 +414,44 @@ class LoginPageState extends State<LoginPage> {
           ),
         );
       }
+    }
+  }
+
+  Future<void> _handlePasswordLogin(BuildContext pageContext) async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    print('🔐 [LoginPage] Password Login tapped — email: $email');
+
+    final request = LoginRequestModel.password(
+      username: email,
+      password: password,
+      role: 'AGENT',
+    );
+
+    final api = ApiService();
+    final result = await api.unifiedLogin(request);
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (result.isSuccess) {
+      print('✅ [LoginPage] Password Login success');
+      context.go('/home');
+    } else {
+      final error = result.error ?? 'Login failed. Please check your credentials.';
+      ScaffoldMessenger.of(pageContext).showSnackBar(
+        SnackBar(
+          content: Text(error, style: GoogleFonts.lato()),
+          backgroundColor: Colors.red[400],
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
     }
   }
 
@@ -484,28 +527,119 @@ class LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: 30),
 
-                    // ── Mobile Number ────────────────────────────────
-                    Text(
-                      'Mobile Number',
-                      style: GoogleFonts.lato(
-                        fontWeight: FontWeight.bold,
-                        color: const Color.fromRGBO(0, 0, 0, 0.8),
+                    // ── Login Type Toggle ──────────────────────────
+                    Container(
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => setState(() => _isOtpLogin = true),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: _isOtpLogin ? Colors.orange[400] : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  'OTP Login',
+                                  style: GoogleFonts.lato(
+                                    fontWeight: FontWeight.bold,
+                                    color: _isOtpLogin ? Colors.white : Colors.grey[600],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => setState(() => _isOtpLogin = false),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: !_isOtpLogin ? Colors.orange[400] : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  'Email Login',
+                                  style: GoogleFonts.lato(
+                                    fontWeight: FontWeight.bold,
+                                    color: !_isOtpLogin ? Colors.white : Colors.grey[600],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    _buildTextFormField(
-                      controller: _mobileNumberController,
-                      focusNode: _mobileNumberFocusNode,
-                      maxLength: 10,
-                      keyboardType: TextInputType.number,
-                      validator: (value) {
-                        if (value == null || value.isEmpty)
-                          return 'Please enter your mobile number';
-                        if (value.length != 10)
-                          return 'Mobile number must be 10 digits';
-                        return null;
-                      },
-                    ),
+                    const SizedBox(height: 24),
+
+                    if (_isOtpLogin) ...[
+                      // ── Mobile Number ────────────────────────────────
+                      Text(
+                        'Mobile Number',
+                        style: GoogleFonts.lato(
+                          fontWeight: FontWeight.bold,
+                          color: const Color.fromRGBO(0, 0, 0, 0.8),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildTextFormField(
+                        controller: _mobileNumberController,
+                        focusNode: _mobileNumberFocusNode,
+                        maxLength: 10,
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value == null || value.isEmpty)
+                            return 'Please enter your mobile number';
+                          if (value.length != 10)
+                            return 'Mobile number must be 10 digits';
+                          return null;
+                        },
+                      ),
+                    ] else ...[
+                      // ── Email ────────────────────────────────────────
+                      Text(
+                        'Email',
+                        style: GoogleFonts.lato(
+                          fontWeight: FontWeight.bold,
+                          color: const Color.fromRGBO(0, 0, 0, 0.8),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildTextFormField(
+                        controller: _emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return 'Please enter your email';
+                          if (!value.contains('@')) return 'Please enter a valid email';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      // ── Password ─────────────────────────────────────
+                      Text(
+                        'Password',
+                        style: GoogleFonts.lato(
+                          fontWeight: FontWeight.bold,
+                          color: const Color.fromRGBO(0, 0, 0, 0.8),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildTextFormField(
+                        controller: _passwordController,
+                        obscureText: true,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return 'Please enter your password';
+                          return null;
+                        },
+                      ),
+                    ],
                     const SizedBox(height: 30),
 
                     // ── Get OTP Button ───────────────────────────────
@@ -513,7 +647,7 @@ class LoginPageState extends State<LoginPage> {
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed:
-                        _isLoading ? null : () => _handleGetOtp(context),
+                        _isLoading ? null : () => _isOtpLogin ? _handleGetOtp(context) : _handlePasswordLogin(context),
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           backgroundColor: Colors.orange[400],
@@ -532,7 +666,7 @@ class LoginPageState extends State<LoginPage> {
                           ),
                         )
                             : Text(
-                          'Get OTP',
+                          _isOtpLogin ? 'Get OTP' : 'Login',
                           style: GoogleFonts.lato(
                             color: Colors.white,
                             fontSize: 18,

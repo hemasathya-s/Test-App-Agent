@@ -1,9 +1,13 @@
 import 'package:go_router/go_router.dart';
+import '../core/model/order_details.dart';
+import '../core/model/slot_availability.dart';
 import '../features/auth/presentation/pages/splash_screen.dart';
 import '../features/auth/presentation/pages/login_screen.dart';
 import '../features/auth/presentation/pages/permissions_screen.dart';
 import '../features/auth/presentation/pages/kyc_status_screen.dart';
 import '../features/dashboard/presentation/pages/AgentProfilePage.dart';
+import '../features/dashboard/presentation/pages/AgentEditProfilePage.dart';
+import '../Model/AgentProfileResponse.dart';
 import '../features/dashboard/presentation/pages/dashboard_shell.dart';
 import '../features/map/presentation/pages/service_area_screen.dart';
 import '../features/jobs/presentation/pages/new_job_request_screen.dart';
@@ -15,6 +19,7 @@ import '../features/order/presentation/pages/modification_summary_screen.dart';
 import '../features/order/presentation/pages/approval_waiting_screen.dart';
 import '../features/order/presentation/pages/request_tracking_screen.dart';
 import '../features/orders/presentation/pages/orders_history_screen.dart';
+import '../features/inventory/presentation/pages/RequestInventoryPage.dart';
 
 final router = GoRouter(
   initialLocation: '/',
@@ -37,7 +42,15 @@ final router = GoRouter(
     ),
     GoRoute(
       path: '/job-details',
-      builder: (context, state) => const JobDetailsScreen(),
+      builder: (context, state) {
+        final extra = state.extra;
+        if (extra is SlotAvailability) {
+          return JobDetailsScreen(slot: extra);
+        } else if (extra is OrderDetails) {
+          return JobDetailsScreen(order: extra);
+        }
+        return const JobDetailsScreen();
+      },
     ),
     GoRoute(
       path: '/navigation',
@@ -53,7 +66,13 @@ final router = GoRouter(
     ),
     GoRoute(
       path: '/modify-order',
-      builder: (context, state) => const ModifyOrderScreen(),
+      builder: (context, state) {
+        final extra = state.extra;
+        if (extra is OrderDetails) {
+          return ModifyOrderScreen(order: extra);
+        }
+        return const ModifyOrderScreen();
+      },
     ),
     GoRoute(
       path: '/modification-summary',
@@ -74,6 +93,17 @@ final router = GoRouter(
     GoRoute(
       path: '/profile',
       builder: (context, state) => const AgentProfilePage(),
+    ),
+    GoRoute(
+      path: '/edit-profile',
+      builder: (context, state) {
+        final agentData = state.extra as AgentProfileData;
+        return AgentEditProfilePage(agentData: agentData);
+      },
+    ),
+    GoRoute(
+      path: '/request-inventory',
+      builder: (context, state) => const RequestInventoryPage(),
     ),
   ],
 );

@@ -4,7 +4,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 
 class GoogleMapsService {
-  final String apiKey = "AIzaSyBtciSghWgfoM4B2-Ews_QjM3azDYz4ZWY";
+  final String apiKey = "AIzaSyAflftNedMvJ812sMI1l0h7kqj1-HBYDE8";
 
   Future<Map<String, dynamic>?> getDirections(LatLng origin, LatLng destination) async {
     final String url =

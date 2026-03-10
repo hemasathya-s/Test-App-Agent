@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shimmer/shimmer.dart';
 import 'dart:async';
-import '../../../../core/services/Api service.dart';
+import '../../../../core/services/apiservices.dart';
 import '../../../../core/theme/app_theme.dart';
 
 class RequestInventoryPage extends StatefulWidget {

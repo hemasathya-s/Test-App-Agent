@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../providers/dashboard_provider.dart';
 
-class AppDrawer extends StatelessWidget {
+class AppDrawer extends ConsumerWidget {
   const AppDrawer({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final controller = ref.read(dashboardProvider.notifier);
     return Drawer(
       child: Column(
         children: [
@@ -54,10 +57,8 @@ class AppDrawer extends StatelessWidget {
                   Icons.dashboard_rounded,
                   'Dashboard',
                   () {
-                    context.pop(); // Close drawer
-                    context.go(
-                      '/home',
-                    ); // Or just stick to current if likely already there
+                    context.pop();
+                    controller.setTabIndex(0);
                   },
                 ),
                 _buildDrawerItem(
@@ -93,7 +94,7 @@ class AppDrawer extends StatelessWidget {
                   'Inventory',
                   () {
                     context.pop();
-                    // Depending on nav structure, might want to switch tab
+                    controller.setTabIndex(3);
                   },
                 ),
                 const Divider(height: 32),

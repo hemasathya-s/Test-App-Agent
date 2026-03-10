@@ -1,35 +1,74 @@
 import 'dart:io';
+import '../../../../core/services/apiservices.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:urban_agent_app/core/services/Api service.dart';
-import '../../../../Model/OrderDetails.dart';
+import 'package:urban_agent_app/core/model/slot_availability.dart';
+import 'package:urban_agent_app/core/model/order_details.dart';
+import 'package:urban_agent_app/core/model/service_modification.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../providers/job_provider.dart';
 import '../../../order/presentation/providers/order_modification_provider.dart';
 
 class JobDetailsScreen extends ConsumerWidget {
-  const JobDetailsScreen({super.key});
+  final SlotAvailability? slot;
+  final OrderDetails? order;
+
+  const JobDetailsScreen({super.key, this.slot, this.order});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.read(jobProvider.notifier);
-    final modificationState = ref.watch(orderModificationProvider);
-    
-    // Find the latest modification for this order (ORD-123 is hardcoded in mock)
-    final latestModification = modificationState.requestHistory.isNotEmpty 
-        ? modificationState.requestHistory.firstWhere((req) => req.orderId == 'ORD-123', orElse: () => RequestRecord(id: '', orderId: '', type: '', status: '', time: '', items: '', note: ''))
-        : null;
+    final effectiveOrder = order ?? slot?.orderDetails;
 
-    return Scaffold(
+    final customerName = effectiveOrder?.customerName ?? 'Unknown Customer';
+    final customerEmail = effectiveOrder?.userDetails?.email ?? '';
+    final customerMobile = effectiveOrder?.customerNumber ?? '';
+    final orderId = effectiveOrder?.id ?? slot?.orderId ?? 'N/A';
+    final address = effectiveOrder?.address ?? 'No address provided';
+    final items = effectiveOrder?.items ?? [];
+    final totalPrice = effectiveOrder?.totalPrice ?? '0.00';
+
+    // Use fields from OrderDetails/FullDetails if possible, else fallback to slot
+    final date = slot?.date ?? (effectiveOrder?.createdAt?.split('T')[0]) ?? 'N/A';
+    final timeSlot = slot != null
+        ? '${slot?.etaStartTime ?? ""} - ${slot?.etaEndTime ?? ""}'
+        : 'Scheduled';
+    // Real service modifications from API
+    final serviceModifications = effectiveOrder?.serviceModifications ?? [];
+
+    // Latest modification (last in list)
+    final latestMod = serviceModifications.isNotEmpty ? serviceModifications.last : null;
+
+    // Legacy mock — kept so provider-based pending button still works
+    final modificationState = ref.watch(orderModificationProvider);
+    final latestModification = modificationState.requestHistory.isNotEmpty
+        ? modificationState.requestHistory.firstWhere(
+            (req) => req.orderId == 'ORD-123',
+            orElse: () => RequestRecord(id: '', orderId: '', type: '', status: '', time: '', items: '', note: ''),
+          )
+        : null;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/home');
+          }
+        }
+      },
+      child: Scaffold(
       backgroundColor: AppTheme.surfaceColor,
       appBar: AppBar(
         scrolledUnderElevation: 0,
         title: Text(
-          'Job #12345',
+          'Job #$orderId',
           style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
@@ -37,75 +76,63 @@ class JobDetailsScreen extends ConsumerWidget {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/home');
+            }
+          },
         ),
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, color: Colors.black),
             color: Colors.white,
-            surfaceTintColor: Colors.white,
-            elevation: 8,
-            shadowColor: Colors.black.withOpacity(0.2),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            offset: const Offset(0, 50),
-            padding: EdgeInsets.zero,
+            offset: const Offset(0, 56),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             onSelected: (value) {
-              if (value == 'Hub service request') {
-                _showHubServiceRequestSheet(context);
-              } else if (value == 'Slot change request') {
-                _showSlotChangeRequestSheet(context);
-              } else if (value == 'Cancellations') {
-                _showCancellationSheet(context);
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('$value selected'),
-                    behavior: SnackBarBehavior.floating,
-                    backgroundColor: AppTheme.primaryColor,
-                    margin: const EdgeInsets.all(20),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                );
+              if (value == 'hub_service') {
+                final hasHubRequest = effectiveOrder?.serviceModifications?.any((m) {
+                  final type = (m.modificationType ?? '').toUpperCase();
+                  final status = (m.status ?? '').toUpperCase();
+                  final isHubType = type.contains('HUB') || type.contains('SERVICE') || type.isEmpty;
+                  final isActive = status == 'PENDING' || status == 'APPROVED' || status == 'APPLIED';
+                  return isHubType && isActive;
+                }) ?? false;
+
+                if (hasHubRequest) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('The request is already pending'),
+                      behavior: SnackBarBehavior.floating,
+                      duration: Duration(seconds: 2),
+                    )
+                  );
+                } else {
+                  _showHubServiceRequestSheet(context, effectiveOrder);
+                }
+              } else if (value == 'slot_change') {
+                _showSlotChangeRequestSheet(context, effectiveOrder);
+              } else if (value == 'cancellation') {
+                _showCancellationSheet(context, effectiveOrder);
               }
             },
             itemBuilder: (context) => [
               PopupMenuItem(
-                value: 'Hub service request',
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text('Hub service request',
-                      style: GoogleFonts.outfit(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          color: AppTheme.textPrimary)),
-                ),
+                value: 'hub_service',
+                child: Text('Hub service', style: GoogleFonts.outfit(fontWeight: FontWeight.w500)),
               ),
               PopupMenuItem(
-                value: 'Slot change request',
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text('Slot change request',
-                      style: GoogleFonts.outfit(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          color: AppTheme.textPrimary)),
-                ),
+                value: 'slot_change',
+                child: Text('Slot change request', style: GoogleFonts.outfit(fontWeight: FontWeight.w500)),
               ),
               PopupMenuItem(
-                value: 'Cancellations',
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text('Cancellations',
-                      style: GoogleFonts.outfit(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.red.shade600)),
-                ),
+                value: 'cancellation',
+                child: Text('Cancellations', style: GoogleFonts.outfit(fontWeight: FontWeight.w500, color: Colors.red)),
               ),
             ],
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: Column(
@@ -116,12 +143,18 @@ class JobDetailsScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(24),
             child: Row(
               children: [
-                const CircleAvatar(
-                  radius: 30,
-                  backgroundImage: NetworkImage(
-                    'https://i.pravatar.cc/150?img=5',
-                  ), // Mock Image
-                  backgroundColor: Colors.grey,
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.person_rounded,
+                    size: 36,
+                    color: AppTheme.primaryColor,
+                  ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -129,23 +162,18 @@ class JobDetailsScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Jane Doe',
+                        customerName,
                         style: GoogleFonts.outfit(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      Row(
-                        children: [
-                          const Icon(Icons.star, color: Colors.amber, size: 16),
-                          const SizedBox(width: 4),
-                          Text(
-                            '4.8 (12 jobs)',
-                            style: GoogleFonts.outfit(
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                        ],
+                      Text(
+                        customerEmail,
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          color: AppTheme.textSecondary,
+                        ),
                       ),
                     ],
                   ),
@@ -157,15 +185,15 @@ class JobDetailsScreen extends ConsumerWidget {
                         Icons.phone,
                         color: AppTheme.successColor,
                       ),
-                      onPressed: () {}, // Mock Call
+                      onPressed: () => _makePhoneCall(customerMobile),
                     ),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.message,
-                        color: AppTheme.primaryColor,
-                      ),
-                      onPressed: () {}, // Mock Chat
-                    ),
+                    // IconButton(
+                    //   icon: const Icon(
+                    //     Icons.message,
+                    //     color: AppTheme.primaryColor,
+                    //   ),
+                    //   onPressed: () => _sendSMS(customerMobile),
+                    // ),
                   ],
                 ),
               ],
@@ -178,8 +206,12 @@ class JobDetailsScreen extends ConsumerWidget {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                // 🔹 New Modification Status Card (Only if a request exists)
-                if (latestModification != null && latestModification.id.isNotEmpty) ...[
+                // 🔹 Real Modification Request Section (from API data)
+                if (latestMod != null) ...[
+                  _buildSectionHeader('Modification Request'),
+                  _buildServiceModificationCard(context, latestMod),
+                  const SizedBox(height: 24),
+                ] else if (latestModification != null && latestModification.id.isNotEmpty) ...[
                   _buildSectionHeader('Modification Request'),
                   _buildModificationStatusCard(context, latestModification),
                   const SizedBox(height: 24),
@@ -194,31 +226,43 @@ class JobDetailsScreen extends ConsumerWidget {
                   ),
                   child: Column(
                     children: [
-                      _buildDetailRow(
-                        Icons.cleaning_services,
-                        'Service',
-                        'Deep Cleaning (3h)',
-                      ),
-                      const Divider(height: 24),
+                      // List each item in the order
+                      ...items.map((item) {
+                        return Column(
+                          children: [
+                            _buildDetailRow(
+                              Icons.build_circle_outlined,
+                              'Service/Product',
+                              '${item.itemDetails?.name ?? "Unknown"} (x${item.quantity ?? 1})',
+                            ),
+                            const Divider(height: 24),
+                          ],
+                        );
+                      }).toList(),
+
                       _buildDetailRow(
                         Icons.calendar_today,
                         'Date & Time',
-                        'Today, 02:30 PM',
+                        '$date, $timeSlot',
                       ),
                       const Divider(height: 24),
                       _buildDetailRow(
                         Icons.location_on,
                         'Address',
-                        '4521 Elm Street, Apt 4B',
+                        address,
                       ),
                       const Divider(height: 24),
-                      _buildDetailRow(Icons.attach_money, 'Payout', '₹85.00'),
+                      _buildDetailRow(
+                        Icons.payments_outlined,
+                        'Total Payout',
+                        '₹ $totalPrice',
+                      ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 24),
 
-                _buildSectionHeader('Requirements'),
+                _buildSectionHeader('Status Info'),
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -228,9 +272,9 @@ class JobDetailsScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildCheckItem('Bring Vacuum Cleaner'),
-                      _buildCheckItem('Wear Mask & Gloves'),
-                      _buildCheckItem('Take Photos before start'),
+                      _buildStatusItem('Order Status', order?.orderStatus ?? 'N/A'),
+                      _buildStatusItem('Payment Status', order?.paymentStatus ?? 'N/A'),
+                      _buildStatusItem('Approval', order?.agentApproval ?? 'N/A'),
                     ],
                   ),
                 ),
@@ -273,10 +317,11 @@ class JobDetailsScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  // Modify Order button logic: hide if pending
-                  if (latestModification == null || latestModification.status != 'Pending')
+                  // Modify Order button — driven by real API serviceModifications
+                  if (latestMod == null)
+                    // No modification exists → show Modify Order button
                     TextButton.icon(
-                      onPressed: () => context.push('/modify-order'),
+                      onPressed: () => context.push('/modify-order', extra: effectiveOrder),
                       icon: const Icon(Icons.edit_note, color: AppTheme.primaryColor),
                       label: Text(
                         'Modify Order',
@@ -286,16 +331,18 @@ class JobDetailsScreen extends ConsumerWidget {
                         ),
                       ),
                     )
-                  else
+                  else if ((latestMod.status ?? '').toUpperCase() == 'PENDING')
+                    // Modification pending → show waiting label, no tap
                     Container(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.hourglass_empty, size: 16, color: Colors.orange),
+                          const Icon(Icons.hourglass_empty,
+                              size: 16, color: Colors.orange),
                           const SizedBox(width: 8),
                           Text(
-                            'Request Pending Approval',
+                            'Waiting for Request Approval',
                             style: GoogleFonts.outfit(
                               fontWeight: FontWeight.bold,
                               color: Colors.orange,
@@ -303,14 +350,18 @@ class JobDetailsScreen extends ConsumerWidget {
                           ),
                         ],
                       ),
-                    ),
+                    )
+                  // APPROVED / APPLIED / REJECTED → show nothing
+                  else
+                    const SizedBox.shrink(),
                 ],
               ),
             ),
           ),
         ],
       ),
-    );
+    )  // Scaffold
+    );  // PopScope
   }
 
   Widget _buildSectionHeader(String title) {
@@ -327,10 +378,201 @@ class JobDetailsScreen extends ConsumerWidget {
     );
   }
 
+  /// Card for real ServiceModification data from the API
+  Widget _buildServiceModificationCard(BuildContext context, ServiceModification mod) {
+    final st = (mod.status ?? '').toUpperCase();
+    final isFinal = st == 'APPLIED' || st == 'APPROVED' || st == 'REJECTED' || st == 'DECLINED';
+    final isApproved = st == 'APPLIED' || st == 'APPROVED';
+
+    Color statusColor = Colors.orange;
+    IconData statusIcon = Icons.hourglass_top;
+    String statusLabel = 'Waiting for Approval';
+
+    if (isFinal) {
+      if (isApproved) {
+        statusColor = AppTheme.successColor;
+        statusIcon = Icons.check_circle;
+        statusLabel = 'Approved';
+      } else {
+        statusColor = AppTheme.errorColor;
+        statusIcon = Icons.cancel;
+        statusLabel = 'Rejected';
+      }
+    }
+
+    // Get item info
+    final originalName = mod.originalServiceName ?? 'Original Service';
+    final newName = mod.newServiceName ?? 'New Service';
+    final originalPrice = mod.originalPrice ?? '—';
+    final newPrice = mod.newPrice ?? '—';
+    final reason = mod.reason;
+    final modId = (mod.id ?? '').length > 8
+        ? '#${(mod.id ?? '').substring(0, 8).toUpperCase()}'
+        : '#${mod.id ?? '—'}';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: statusColor.withOpacity(0.3), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: statusColor.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header: status badge + ID
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Status badge — only visible for final states
+              if (isFinal)
+                Row(
+                  children: [
+                    Icon(statusIcon, size: 18, color: statusColor),
+                    const SizedBox(width: 6),
+                    Text(
+                      statusLabel,
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: statusColor,
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Row(
+                  children: [
+                    Icon(statusIcon, size: 18, color: statusColor),
+                    const SizedBox(width: 6),
+                    Text(
+                      statusLabel,
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                        color: statusColor,
+                      ),
+                    ),
+                  ],
+                ),
+              Text(
+                modId,
+                style: GoogleFonts.outfit(
+                  fontSize: 11,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+
+          // Requested Service Section
+          Text(
+            'Requested Service',
+            style: GoogleFonts.outfit(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Original',
+                      style: GoogleFonts.outfit(fontSize: 11, color: AppTheme.textSecondary),
+                    ),
+                    Text(
+                      originalName,
+                      style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w500),
+                    ),
+                    Text(
+                      '₹ $originalPrice',
+                      style: GoogleFonts.outfit(fontSize: 13, color: AppTheme.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward, size: 18, color: Colors.grey),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'New',
+                      style: GoogleFonts.outfit(fontSize: 11, color: AppTheme.textSecondary),
+                    ),
+                    Text(
+                      newName,
+                      style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600),
+                      textAlign: TextAlign.end,
+                    ),
+                    Text(
+                      '₹ $newPrice',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.primaryColor,
+                      ),
+                      textAlign: TextAlign.end,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          // Note / Reason (only if not null/empty)
+          if (reason != null && reason.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceColor,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.notes, size: 16, color: Colors.grey),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      reason,
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        color: AppTheme.textSecondary,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildModificationStatusCard(BuildContext context, RequestRecord record) {
     Color statusColor;
     IconData statusIcon;
-    
+
     switch (record.status) {
       case 'Approved':
         statusColor = AppTheme.successColor;
@@ -474,804 +716,824 @@ class JobDetailsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildCheckItem(String text) {
+  Widget _buildStatusItem(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Icon(
-            Icons.check_circle_outline,
-            size: 18,
-            color: AppTheme.successColor,
+          Text(
+            label,
+            style: GoogleFonts.outfit(fontSize: 14, color: AppTheme.textSecondary),
           ),
-          const SizedBox(width: 12),
-          Text(text, style: GoogleFonts.outfit(fontSize: 16)),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryColor.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              value,
+              style: GoogleFonts.outfit(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.primaryColor,
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
-
-  void _showHubServiceRequestSheet(BuildContext context) {
-    final TextEditingController notesController = TextEditingController();
-    final TextEditingController serialController = TextEditingController();
-    final ImagePicker picker = ImagePicker();
-    final ApiService apiService = ApiService();
-    List<File> selectedImages = [];
-    List<File> selectedVideos = [];
-    bool isSubmitting = false;
-    bool isLoadingOrder = true;
-    OrderDetails? currentOrder;
-
-    // Fetch orders to get real IDs
-    void fetchOrderDetails(Function setSheetState) async {
-      try {
-        final orders = await ApiService.agentOrder();
-        if (orders != null && orders.isNotEmpty) {
-          // For now, take the first active order as simplified context
-          currentOrder = orders.first;
-        }
-      } catch (e) {
-        print('Error fetching orders: $e');
-      } finally {
-        setSheetState(() => isLoadingOrder = false);
-      }
-    }
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) {
-          if (isLoadingOrder && currentOrder == null) {
-            fetchOrderDetails(setSheetState);
-          }
-          
-          return Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 12),
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                
-                // Header
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Row(
-                    children: [
-                      /*Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.hub_outlined, color: AppTheme.primaryColor),
-                      ),*/
-                      Text(
-                        'Hub Service Request',
-                        style: GoogleFonts.outfit(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close, color: AppTheme.textSecondary),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 10),
-                const SizedBox(height: 12),
-
-                Flexible(
-                  child: ListView(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    children: [
-                      // Images Section
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Images (${selectedImages.length}/3)',
-                            style: GoogleFonts.outfit(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                          if (selectedImages.length < 3)
-                            GestureDetector(
-                              onTap: () async {
-                                final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-                                if (image != null) {
-                                  setSheetState(() => selectedImages.add(File(image.path)));
-                                }
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10,vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.add_a_photo, size: 18, color: Colors.white),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Add',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )
-                        ],
-                      ),
-                      if (selectedImages.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          height: 90,
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: selectedImages.length,
-                            itemBuilder: (context, index) {
-                              return Stack(
-                                children: [
-                                  Container(
-                                    width: 80,
-                                    margin: const EdgeInsets.only(right: 12),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(12),
-                                      image: DecorationImage(
-                                        image: FileImage(selectedImages[index]),
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  ),
-                                  Positioned(
-                                    right: 4,
-                                    top: -4,
-                                    child: IconButton(
-                                      icon: const Icon(Icons.cancel, color: Colors.red, size: 20),
-                                      onPressed: () => setSheetState(() => selectedImages.removeAt(index)),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 24),
-
-                      // Video Section
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Video (${selectedVideos.length}/1)',
-                            style: GoogleFonts.outfit(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                          if (selectedVideos.length < 1)
-                            GestureDetector(
-                              onTap:  () async {
-                                final XFile? video = await picker.pickVideo(source: ImageSource.gallery);
-                                if (video != null) {
-                                  setSheetState(() => selectedVideos.add(File(video.path)));
-                                }
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10,vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.videocam, size: 18, color: Colors.white),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Add',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 12,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )
-                        ],
-                      ),
-                      if (selectedVideos.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppTheme.surfaceColor,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppTheme.primaryColor.withOpacity(0.1)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.movie_outlined, color: AppTheme.primaryColor),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  selectedVideos[0].path.split('/').last,
-                                  style: GoogleFonts.outfit(fontSize: 13),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                                onPressed: () => setSheetState(() => selectedVideos.clear()),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 24),
-                      
-                      // Serial Number Section
-                      _buildLabel('Device Serial Number'),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: serialController,
-                        decoration: InputDecoration(
-                          hintText: 'Enter serial number...',
-                          fillColor: AppTheme.surfaceColor,
-                          hintStyle: GoogleFonts.outfit(fontSize: 14),
-                        ),
-                        style: GoogleFonts.outfit(fontSize: 14),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Notes Section
-                      _buildLabel('Device Condition Notes'),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: notesController,
-                        maxLines: 3,
-                        decoration: InputDecoration(
-                          hintText: 'Enter condition notes...',
-                          fillColor: AppTheme.surfaceColor,
-                          hintStyle: GoogleFonts.outfit(fontSize: 14),
-                        ),
-                        style: GoogleFonts.outfit(fontSize: 14),
-                      ),
-                      const SizedBox(height: 14),
-                    ],
-                  ),
-                ),
-
-                // Footer Actions
-                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: isSubmitting || (isLoadingOrder && currentOrder == null) 
-                        ? null 
-                        : () async {
-                            setSheetState(() => isSubmitting = true);
-                            
-                            final orderId = currentOrder?.id ?? '00000000-0000-4000-a000-000000000000'; // Fallback to valid UUID format
-                            final orderItemId = currentOrder?.items?.isNotEmpty == true ? currentOrder!.items!.first.id : null;
-
-                            final response = await apiService.createHubServiceRequest(
-                              orderId: orderId,
-                              orderItemId: orderItemId,
-                              deviceSerialNumber: serialController.text,
-                              deviceConditionNotes: notesController.text,
-                              images: selectedImages,
-                              videos: selectedVideos,
-                            );
-
-                            if (context.mounted) {
-                              setSheetState(() => isSubmitting = false);
-                              if (response.isSuccess) {
-                                Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: const Text('✅ Hub Service Request submitted!'),
-                                    backgroundColor: AppTheme.successColor,
-                                    behavior: SnackBarBehavior.floating,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  ),
-                                );
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('❌ ${response.error}'),
-                                    backgroundColor: Colors.red,
-                                    behavior: SnackBarBehavior.floating,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  ),
-                                );
-                              }
-                            }
-                        },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryColor,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                      child: isSubmitting
-                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : Text(
-                            isLoadingOrder && currentOrder == null ? 'Loading Order...' : 'Submit Request',
-                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16),
-                          ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  void _showSlotChangeRequestSheet(BuildContext context) {
-    DateTime? selectedDate;
-    TimeOfDay? startTime;
-    TimeOfDay? endTime;
-    String? selectedReason;
-    final TextEditingController descriptionController = TextEditingController();
-    bool isSubmitting = false;
-
-    final reasons = [
-      'AGENT_UNAVAILABLE',
-      'CUSTOMER_REQUEST',
-      'HEAVY_TRAFFIC',
-      'VEHICLE_BREAKDOWN',
-      'OTHER',
-    ];
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) {
-          return Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 12),
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Header
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Row(
-                    children: [
-                      /*Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.schedule_outlined, color: AppTheme.primaryColor),
-                      ),
-                      const SizedBox(width: 16),*/
-                      Text(
-                        'Slot Change Request',
-                        style: GoogleFonts.outfit(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close, color: AppTheme.textSecondary),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 32),
-
-                Flexible(
-                  child: ListView(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    children: [
-                      // Date Picker
-                      _buildLabel('Requested Date'),
-                      const SizedBox(height: 8),
-                      InkWell(
-                        onTap: () async {
-                          final date = await showDatePicker(
-                            context: context,
-                            initialDate: DateTime.now(),
-                            firstDate: DateTime.now(),
-                            lastDate: DateTime.now().add(const Duration(days: 30)),
-                            builder: (context, child) => Theme(
-                              data: Theme.of(context).copyWith(
-                                colorScheme: const ColorScheme.light(primary: AppTheme.primaryColor),
-                              ),
-                              child: child!,
-                            ),
-                          );
-                          if (date != null) setSheetState(() => selectedDate = date);
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: AppTheme.surfaceColor,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.calendar_month, color: AppTheme.textSecondary, size: 20),
-                              const SizedBox(width: 12),
-                              Text(
-                                selectedDate == null ? 'Select Date' : DateFormat('yyyy-MM-dd').format(selectedDate!),
-                                style: GoogleFonts.outfit(color: selectedDate == null ? AppTheme.textSecondary : AppTheme.textPrimary),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Time Pickers
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _buildLabel('Start Time'),
-                                const SizedBox(height: 8),
-                                InkWell(
-                                  onTap: () async {
-                                    final time = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-                                    if (time != null) setSheetState(() => startTime = time);
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                    decoration: BoxDecoration(color: AppTheme.surfaceColor, borderRadius: BorderRadius.circular(12)),
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.access_time, color: AppTheme.textSecondary, size: 20),
-                                        const SizedBox(width: 8),
-                                        Text(startTime?.format(context) ?? '00:00', style: GoogleFonts.outfit(fontSize: 13)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _buildLabel('End Time'),
-                                const SizedBox(height: 8),
-                                InkWell(
-                                  onTap: () async {
-                                    final time = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-                                    if (time != null) setSheetState(() => endTime = time);
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                    decoration: BoxDecoration(color: AppTheme.surfaceColor, borderRadius: BorderRadius.circular(12)),
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.access_time, color: AppTheme.textSecondary, size: 20),
-                                        const SizedBox(width: 8),
-                                        Text(endTime?.format(context) ?? '00:00', style: GoogleFonts.outfit(fontSize: 13)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Reason Selection
-                      _buildLabel('Reason Type'),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        decoration: BoxDecoration(color: AppTheme.surfaceColor, borderRadius: BorderRadius.circular(12)),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: selectedReason,
-                            hint: Text('Select reason type', style: GoogleFonts.outfit(fontSize: 14)),
-                            isExpanded: true,
-                            items: reasons.map((r) => DropdownMenuItem(value: r, child: Text(r, style: GoogleFonts.outfit(fontSize: 14)))).toList(),
-                            onChanged: (val) => setSheetState(() => selectedReason = val),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Description
-                      _buildLabel('Reason Description'),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: descriptionController,
-                        maxLines: 2,
-                        decoration: InputDecoration(
-                          hintText: 'Enter more details...',
-                          fillColor: AppTheme.surfaceColor,
-                          hintStyle: GoogleFonts.outfit(fontSize: 14),
-                        ),
-                        style: GoogleFonts.outfit(fontSize: 14),
-                      ),
-                      const SizedBox(height: 24),
-                    ],
-                  ),
-                ),
-
-                // Footer Actions
-                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: isSubmitting || selectedDate == null || startTime == null || endTime == null || selectedReason == null
-                          ? null
-                          : () {
-                              setSheetState(() => isSubmitting = true);
-                              // Mock Request Payload
-                              // final payload = {
-                              //   "requested_date": DateFormat('yyyy-MM-dd').format(selectedDate!),
-                              //   "requested_start_time": "${startTime!.hour}:${startTime!.minute}:00Z",
-                              //   "requested_end_time": "${endTime!.hour}:${endTime!.minute}:00Z",
-                              //   "slot_change_reason_type": selectedReason,
-                              //   "slot_change_reason_description": descriptionController.text,
-                              // };
-                              Future.delayed(const Duration(seconds: 2), () {
-                                if (context.mounted) {
-                                  Navigator.pop(context);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('✅ Slot Change Request submitted!'),
-                                      backgroundColor: AppTheme.successColor,
-                                      behavior: SnackBarBehavior.floating,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                    ),
-                                  );
-                                }
-                              });
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryColor,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                      child: isSubmitting
-                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : Text('Submit Slot Change', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16)),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  void _showCancellationSheet(BuildContext context) {
-    final TextEditingController reasonController = TextEditingController();
-    bool isSubmitting = false;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) {
-          return Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 12),
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Header
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.cancel_outlined, color: Colors.red),
-                      ),
-                      const SizedBox(width: 16),
-                      Text(
-                        'Cancel Job',
-                        style: GoogleFonts.outfit(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close, color: AppTheme.textSecondary),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 32),
-
-                Flexible(
-                  child: ListView(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    children: [
-                      _buildLabel('Cancellation Reason'),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: reasonController,
-                        maxLines: 4,
-                        decoration: InputDecoration(
-                          hintText: 'Tell us why you need to cancel this job...',
-                          fillColor: AppTheme.surfaceColor,
-                          hintStyle: GoogleFonts.outfit(fontSize: 14),
-                        ),
-                        style: GoogleFonts.outfit(fontSize: 14),
-                        onChanged: (val) => setSheetState(() {}),
-                      ),
-                      const SizedBox(height: 24),
-                      
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.orange.shade100),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.info_outline, color: Colors.orange.shade700, size: 20),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                'Note: Cancellations may be subject to approval or policy terms.',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 12,
-                                  color: Colors.orange.shade900,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                    ],
-                  ),
-                ),
-
-                // Footer Actions
-                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: isSubmitting || reasonController.text.trim().isEmpty
-                          ? null
-                          : () {
-                              setSheetState(() => isSubmitting = true);
-                              
-                              Future.delayed(const Duration(seconds: 2), () {
-                                if (context.mounted) {
-                                  Navigator.pop(context);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text('✅ Cancellation request submitted'),
-                                      backgroundColor: AppTheme.successColor,
-                                      behavior: SnackBarBehavior.floating,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                    ),
-                                  );
-                                }
-                              });
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        disabledBackgroundColor: Colors.red.withOpacity(0.3),
-                      ),
-                      child: isSubmitting
-                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : Text('Confirm Cancellation', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
+  
   Widget _buildLabel(String text) {
     return Text(
       text,
       style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
     );
   }
+
+  Future<void> _makePhoneCall(String phoneNumber) async {
+    final Uri launchUri = Uri(
+      scheme: 'tel',
+      path: phoneNumber,
+    );
+    if (await canLaunchUrl(launchUri)) {
+      await launchUrl(launchUri);
+    }
+  }
+
+  Future<void> _sendSMS(String phoneNumber) async {
+    final Uri launchUri = Uri(
+      scheme: 'sms',
+      path: phoneNumber,
+    );
+    if (await canLaunchUrl(launchUri)) {
+      await launchUrl(launchUri);
+    }
+  }
+
+  void _showHubServiceRequestSheet(BuildContext context, OrderDetails? order) {
+    if (order == null) return;
+    final idController = TextEditingController();
+    final notesController = TextEditingController();
+    List<File> selectedImages = [];
+    List<File> selectedVideos = [];
+
+    bool isLoading = false;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+        bool isSubmitting = false;
+        return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
+                  const SizedBox(height: 24),
+                  Text('Hub Service Request', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Text('Submit a request for device repair or service at the hub.', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
+                  const SizedBox(height: 24),
+                  _buildLabel('Device Serial Number'),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: idController,
+                    decoration: AppTheme.inputDecoration('Enter serial number', Icons.confirmation_number_outlined),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildLabel('Condition Notes'),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: notesController,
+                    maxLines: 3,
+                    decoration: AppTheme.inputDecoration('Describe device condition...', Icons.note_alt_outlined),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildLabel('Photos & Videos'),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      _buildMediaButton(Icons.add_a_photo, 'Add Photo', () {
+                        _showMediaSourceSheet(context, isVideo: false, onPicked: (file) {
+                          if (file != null) setState(() => selectedImages.add(file));
+                        });
+                      }),
+                      const SizedBox(width: 12),
+                      _buildMediaButton(Icons.video_call, 'Add Video', () {
+                        _showMediaSourceSheet(context, isVideo: true, onPicked: (file) {
+                          if (file != null) setState(() => selectedVideos.add(file));
+                        });
+                      }),
+                    ],
+                  ),
+                  if (selectedImages.isNotEmpty || selectedVideos.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      height: 80,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          ...selectedImages.map((f) => _buildMediaPreview(f, true, () => setState(() => selectedImages.remove(f)))),
+                          ...selectedVideos.map((f) => _buildMediaPreview(f, false, () => setState(() => selectedVideos.remove(f)))),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 32),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: isLoading ? null : () async {
+                        setState(() => isLoading = true);
+                        try {
+                          final res = await ApiService.createHubServiceRequest(
+                            orderId: order.id ?? '',
+                            orderItemId: order.items?.isNotEmpty == true ? order.items!.first.id : null,
+                            deviceSerialNumber: idController.text,
+                            deviceConditionNotes: notesController.text,
+                            images: selectedImages,
+                            videos: selectedVideos,
+                          );
+                          if (context.mounted) {
+                            if (res.isSuccess) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Request submitted successfully')));
+                            } else {
+                              // Close sheet if it's a duplicate request error, else keep open to show error
+                              if (res.error?.contains('already pending or approved') == true) {
+                                Navigator.pop(context);
+                              }
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res.error ?? 'Unknown error')));
+                            }
+                          }
+                        } finally {
+                          if (context.mounted) setState(() => isLoading = false);
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      child: isLoading 
+                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : Text('Submit Request', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showSlotChangeRequestSheet(BuildContext context, OrderDetails? order) {
+    if (order == null) return;
+    DateTime selectedDate = DateTime.now();
+    TimeOfDay? selectedStartTime;
+    TimeOfDay? selectedEndTime;
+    String? selectedSlotId;
+    bool isLoadingSlots = false;
+    String? slotCheckError;
+    List<SlotAvailability> availableSlots = [];
+    final reasonController = TextEditingController();
+    final reasonTypeController = TextEditingController(text: 'AGENT_UNAVAILABLE');
+    bool isSubmitting = false;
+
+    // Zone related state
+    List<SlotAvailability> availableZones = [];
+    bool isLoadingZones = false;
+    SlotAvailability? selectedZone;
+    String? zoneError;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          void fetchZones() async {
+            if (order.latitude == null || order.longitude == null) {
+              print('⚠️ LAT/LNG missing for Zone fetch');
+              return;
+            }
+            setState(() {
+              isLoadingZones = true;
+              zoneError = null;
+            });
+            print('📡 Fetching slots for Lat: ${order.latitude}, Lng: ${order.longitude}');
+            final res = await ApiService().getAvailableSlotsByLocation(
+              lat: order.latitude!,
+              lng: order.longitude!,
+            );
+            if (context.mounted) {
+              setState(() {
+                isLoadingZones = false;
+                if (res.isSuccess) {
+                  availableZones = res.data ?? [];
+                  print('✅ Found ${availableZones.length} slots');
+                  for (var s in availableZones) {
+                    print('🔎 Slot Map: ID=${s.slot}, Start=${s.etaStartTime}, End=${s.etaEndTime}');
+                  }
+                } else {
+                  zoneError = res.error;
+                  print('❌ Zone fetch error: ${res.error}');
+                }
+              });
+            }
+          }
+
+          if (availableZones.isEmpty && !isLoadingZones && zoneError == null) {
+            fetchZones();
+          }
+
+          void updateTimeFromZone(SlotAvailability? zone) {
+            if (zone == null) return;
+            try {
+              if (zone.etaStartTime != null) {
+                final parts = zone.etaStartTime!.split(':');
+                selectedStartTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+              }
+              if (zone.etaEndTime != null) {
+                final parts = zone.etaEndTime!.split(':');
+                selectedEndTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+              }
+            } catch (e) {
+              print('❌ Error parsing zone times: $e');
+            }
+          }
+
+          Future<void> fetchSlotsBackground() async {
+            if (isLoadingSlots) return;
+            setState(() {
+              isLoadingSlots = true;
+              slotCheckError = null;
+            });
+            try {
+              final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
+              final slots = await ApiService.getAgentSlotAvailability(dateStr);
+              if (context.mounted) {
+                setState(() {
+                  availableSlots = slots;
+                  isLoadingSlots = false;
+                  
+                  if (slots.isNotEmpty && selectedStartTime == null) {
+                    try {
+                      if (slots.first.etaStartTime != null) {
+                        final parts = slots.first.etaStartTime!.split(':');
+                        selectedStartTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+                      }
+                      if (slots.first.etaEndTime != null) {
+                        final parts = slots.first.etaEndTime!.split(':');
+                        selectedEndTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+                      }
+                    } catch (_) {}
+                  }
+                });
+              }
+            } catch (e) {
+              if (context.mounted) {
+                setState(() {
+                  isLoadingSlots = false;
+                  slotCheckError = "Failed to check availability";
+                });
+              }
+            }
+          }
+
+          void updateSelectedSlot() {
+            if (selectedStartTime == null || selectedEndTime == null || availableSlots.isEmpty) return;
+            final startMinutes = selectedStartTime!.hour * 60 + selectedStartTime!.minute;
+            final endMinutes = selectedEndTime!.hour * 60 + selectedEndTime!.minute;
+            String? foundSlotId;
+            for (var slotAvail in availableSlots) {
+              try {
+                final sParts = slotAvail.etaStartTime!.split(':');
+                final eParts = slotAvail.etaEndTime!.split(':');
+                final sMin = int.parse(sParts[0]) * 60 + int.parse(sParts[1]);
+                final eMin = int.parse(eParts[0]) * 60 + int.parse(eParts[1]);
+                if (startMinutes >= sMin && endMinutes <= eMin) {
+                  foundSlotId = slotAvail.slot;
+                  break;
+                }
+              } catch (_) {}
+            }
+            if (foundSlotId != selectedSlotId) {
+              setState(() => selectedSlotId = foundSlotId);
+            }
+          }
+
+          if (availableSlots.isEmpty && !isLoadingSlots && slotCheckError == null) {
+            fetchSlotsBackground();
+          }
+          
+          // Only auto-update slot if user hasn't manually picked a zone from the location-based list
+          if (selectedZone == null) {
+            updateSelectedSlot();
+          }
+
+          // Find the current matched slot object for displaying times
+          SlotAvailability? matchedSlot;
+          if (selectedSlotId != null) {
+            // Search in both standard slots and location-based slots
+            matchedSlot = availableSlots.firstWhere(
+              (s) => s.slot == selectedSlotId,
+              orElse: () => availableZones.firstWhere(
+                (z) => z.slot == selectedSlotId,
+                orElse: () => SlotAvailability(),
+              ),
+            );
+            if (matchedSlot?.slot == null) matchedSlot = null;
+          }
+
+          String formatTimeOfDay(TimeOfDay? tod) {
+            if (tod == null) return '--:--';
+            final hour = tod.hour.toString().padLeft(2, '0');
+            final minute = tod.minute.toString().padLeft(2, '0');
+            return '$hour:$minute';
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
+                  const SizedBox(height: 24),
+                  Text('Slot Change Request', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Text('Request a different time for this job.', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
+                  const SizedBox(height: 24),
+                   _buildLabel('Select Slot (Based on Location)'),
+                   const SizedBox(height: 8),
+                   if (isLoadingZones)
+                     const Center(child: CircularProgressIndicator())
+                   else if (zoneError != null)
+                     Text('Error: $zoneError', style: GoogleFonts.outfit(color: Colors.red, fontSize: 13))
+                   else if (availableZones.isEmpty)
+                     Text('No slots found for this location.', style: GoogleFonts.outfit(color: Colors.orange, fontSize: 13))
+                   else
+                     DropdownButtonFormField<SlotAvailability>(
+                       isExpanded: true,
+                       value: selectedZone,
+                       decoration: AppTheme.inputDecoration('Choose a slot', Icons.timer_outlined),
+                       items: availableZones.map((z) => DropdownMenuItem(
+                         value: z,
+                         child: Text('${z.zoneName ?? "Slot"} (${z.etaStartTime ?? ""} - ${z.etaEndTime ?? ""})', 
+                           style: GoogleFonts.outfit(fontSize: 14)),
+                       )).toList(),
+                       onChanged: (val) {
+                         print('🎯 Selected Slot: ${val?.zoneName}');
+                         print('🆔 Slot ID: ${val?.slot}');
+                         print('⏰ Times: ${val?.etaStartTime} - ${val?.etaEndTime}');
+                         setState(() {
+                           selectedZone = val;
+                           selectedSlotId = val?.slot;
+                           updateTimeFromZone(val);
+                         });
+                       },
+                     ),
+                   const SizedBox(height: 16),
+                   _buildLabel('Requested Date'),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(DateFormat('yyyy-MM-dd').format(selectedDate), style: GoogleFonts.outfit(fontSize: 16)),
+                    trailing: const Icon(Icons.calendar_month, color: AppTheme.primaryColor),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: selectedDate,
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime.now().add(const Duration(days: 30)),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          selectedDate = picked;
+                          selectedSlotId = null; // Re-fetch for new date
+                        });
+                        fetchSlotsBackground();
+                      }
+                    },
+                  ),
+                  const Divider(),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildLabel('Start Time'),
+                            InkWell(
+                              onTap: () async {
+                                final picked = await showTimePicker(
+                                  context: context,
+                                  initialTime: selectedStartTime ?? TimeOfDay.now(),
+                                );
+                                if (picked != null) {
+                                  setState(() => selectedStartTime = picked);
+                                }
+                              },
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                margin: const EdgeInsets.only(top: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[50],
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.grey[200]!),
+                                ),
+                                child: Text(formatTimeOfDay(selectedStartTime), 
+                                  style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w500, color: selectedStartTime != null ? Colors.black : Colors.grey)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildLabel('End Time'),
+                            InkWell(
+                              onTap: () async {
+                                final picked = await showTimePicker(
+                                  context: context,
+                                  initialTime: selectedEndTime ?? TimeOfDay.now(),
+                                );
+                                if (picked != null) {
+                                  setState(() => selectedEndTime = picked);
+                                }
+                              },
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                margin: const EdgeInsets.only(top: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[50],
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.grey[200]!),
+                                ),
+                                child: Text(formatTimeOfDay(selectedEndTime), 
+                                  style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w500, color: selectedEndTime != null ? Colors.black : Colors.grey)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (matchedSlot != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(8)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.check_circle_outline, size: 14, color: Colors.green),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Available in slot: ${matchedSlot.etaStartTime} - ${matchedSlot.etaEndTime}',
+                            style: GoogleFonts.outfit(color: Colors.green[700], fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (!isLoadingSlots && availableSlots.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Times fall outside your available slots.',
+                            style: GoogleFonts.outfit(color: Colors.orange[700], fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 24),
+                   _buildLabel('Reason Type (Manual Code)'),
+                   const SizedBox(height: 8),
+                   TextField(
+                     controller: reasonTypeController,
+                     decoration: AppTheme.inputDecoration('Enter reason code...', Icons.label_important_outline),
+                   ),
+                   const SizedBox(height: 8),
+                   SingleChildScrollView(
+                     scrollDirection: Axis.horizontal,
+                     child: Row(
+                       children: ['AGENT_UNAVAILABLE', 'CUSTOMER_UNAVAILABLE', 'LOCATION_ISSUE', 'OTHER'].map((code) => Padding(
+                         padding: const EdgeInsets.only(right: 8),
+                         child: ActionChip(
+                           label: Text(code, style: const TextStyle(fontSize: 10)),
+                           onPressed: () => setState(() => reasonTypeController.text = code),
+                         ),
+                       )).toList(),
+                     ),
+                   ),
+                  const SizedBox(height: 16),
+                  _buildLabel('Reason Description'),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: reasonController,
+                    maxLines: 2,
+                    decoration: AppTheme.inputDecoration('Tell us why...', Icons.description_outlined),
+                  ),
+                  if (selectedSlotId == null && !isLoadingSlots)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Text(
+                        'Unable to find an available slot for this date. Please try another date.',
+                        style: GoogleFonts.outfit(color: Colors.red, fontSize: 13, fontWeight: FontWeight.w500),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  SizedBox(height: 15,),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: (isSubmitting || selectedStartTime == null || selectedEndTime == null || selectedSlotId == null)
+                          ? null
+                          : () async {
+                              final currentId = order.slotId;
+                              final originalDateStr = order.createdAt?.split('T')[0];
+                              final isSameDate = originalDateStr != null && DateFormat('yyyy-MM-dd').format(selectedDate) == originalDateStr;
+                              
+                              if (isSameDate && selectedSlotId == currentId) {
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                  content: Text('Please select a different slot or date to request a change.'),
+                                  backgroundColor: Colors.orange,
+                                ));
+                                return;
+                              }
+
+                              setState(() => isSubmitting = true);
+                              final startStr = formatTimeOfDay(selectedStartTime);
+                              final endStr = formatTimeOfDay(selectedEndTime);
+                              
+                              final res = await ApiService.createSlotChangeRequest(
+                                orderId: order.id ?? '',
+                                orderItemId: order.items?.isNotEmpty == true ? order.items!.first.id : null,
+                                currentSlotId: order.slotId,
+                                requestedSlotId: selectedSlotId,
+                                requestedDate: DateFormat('yyyy-MM-dd').format(selectedDate),
+                                requestedStartTime: '$startStr:00Z',
+                                requestedEndTime: '$endStr:00Z',
+                                reasonType: reasonTypeController.text,
+                                reasonDescription: reasonController.text,
+                              );
+                              if (context.mounted) {
+                                setState(() => isSubmitting = false);
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                    content: Text(res.isSuccess ? 'Slot change requested' : 'Error: ${res.error ?? "Unknown error"}')));
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                      child: isSubmitting
+                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : Text(isLoadingSlots ? 'Checking availability...' : 'Submit Request',
+                              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showCancellationSheet(BuildContext context, OrderDetails? order) {
+    if (order == null) return;
+    final reasonController = TextEditingController();
+    String cancellationReasonType = 'CUSTOMER_CHANGE_OF_MIND';
+    bool isSubmitting = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+        return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
+                const SizedBox(height: 24),
+                Text('Cancel Job', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.red)),
+                const SizedBox(height: 8),
+                Text('Please provide a reason for canceling this job.', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
+                const SizedBox(height: 24),
+                _buildLabel('Cancellation Reason Type'),
+                const SizedBox(height: 8),
+                DropdownButton<String>(
+                  isExpanded: true,
+                  value: cancellationReasonType,
+                  items: const [
+                    DropdownMenuItem(value: 'CUSTOMER_CHANGE_OF_MIND', child: Text('Customer Change of Mind')),
+                    DropdownMenuItem(value: 'AGENT_UNAVAILABLE', child: Text('Agent Unavailable')),
+                    DropdownMenuItem(value: 'LOCATION_ISSUE', child: Text('Location Issue')),
+                    DropdownMenuItem(value: 'NOT_REQUIRED_NOW', child: Text('Not Required Now')),
+                    DropdownMenuItem(value: 'OTHER', child: Text('Others')),
+                  ],
+                  onChanged: (val) => setState(() => cancellationReasonType = val!),
+                ),
+                const SizedBox(height: 16),
+                _buildLabel('Cancellation Reason Description'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: reasonController,
+                  maxLines: 3,
+                  decoration: AppTheme.inputDecoration('Why are you canceling?', Icons.cancel_presentation_outlined),
+                ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: isSubmitting
+                        ? null
+                        : () async {
+                            setState(() => isSubmitting = true);
+                            final res = await ApiService.createCancellationRequest(
+                              orderId: order.id ?? '',
+                              orderItemId: order.items?.isNotEmpty == true ? order.items!.first.id : null,
+                              cancellationReasonType: cancellationReasonType,
+                              reasonDescription: reasonController.text,
+                            );
+                            if (context.mounted) {
+                              setState(() => isSubmitting = false);
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                  content: Text(res.isSuccess ? 'Job cancelled' : 'Error: ${res.error ?? "Unknown error"}')));
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                    child: isSubmitting
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : Text('Confirm Cancellation',
+                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                  ),
+                ),
+                const SizedBox(height: 32),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildMediaButton(IconData icon, String label, VoidCallback onTap) {
+    return Expanded(
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 20),
+        label: Text(label, style: GoogleFonts.outfit(fontSize: 14)),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          side: BorderSide(color: AppTheme.primaryColor.withOpacity(0.5)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMediaPreview(File file, bool isImage, VoidCallback onRemove) {
+    return Container(
+      width: 80,
+      margin: const EdgeInsets.only(right: 8),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey[200]!)),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(11),
+            child: isImage ? Image.file(file, fit: BoxFit.cover) : const Center(child: Icon(Icons.videocam, color: Colors.grey)),
+          ),
+          Positioned(
+            top: 2,
+            right: 2,
+            child: GestureDetector(
+              onTap: onRemove,
+              child: Container(padding: const EdgeInsets.all(2), decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle), child: const Icon(Icons.close, size: 12, color: Colors.white)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMediaSourceSheet(BuildContext context, {required bool isVideo, required Function(File?) onPicked}) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                isVideo ? 'Select Video Source' : 'Select Photo Source',
+                style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildSourceOption(
+                    context,
+                    icon: Icons.camera_alt_outlined,
+                    label: 'Camera',
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final picker = ImagePicker();
+                      if (isVideo) {
+                        final video = await picker.pickVideo(source: ImageSource.camera);
+                        if (video != null) onPicked(File(video.path));
+                      } else {
+                        final image = await picker.pickImage(source: ImageSource.camera);
+                        if (image != null) onPicked(File(image.path));
+                      }
+                    },
+                  ),
+                  _buildSourceOption(
+                    context,
+                    icon: Icons.photo_library_outlined,
+                    label: 'Gallery',
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final picker = ImagePicker();
+                      if (isVideo) {
+                        final video = await picker.pickVideo(source: ImageSource.gallery);
+                        if (video != null) onPicked(File(video.path));
+                      } else {
+                        final image = await picker.pickImage(source: ImageSource.gallery);
+                        if (image != null) onPicked(File(image.path));
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSourceOption(BuildContext context, {required IconData icon, required String label, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        width: 120,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 32, color: AppTheme.primaryColor),
+            const SizedBox(height: 8),
+            Text(label, style: GoogleFonts.outfit(fontWeight: FontWeight.w500)),
+          ],
+        ),
+      ),
+    );
+  }
 }
+
+

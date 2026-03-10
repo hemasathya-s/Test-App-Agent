@@ -5,8 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:urban_agent_app/core/services/Api%20service.dart';
-
+import '../../../../core/services/apiservices.dart';
 import '../../../../Model/AgentRegistrationRequest.dart';
 import '../../../dashboard/presentation/pages/dashboard_shell.dart';
 import 'login_screen.dart';

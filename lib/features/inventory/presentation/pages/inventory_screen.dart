@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:dropdown_button2/dropdown_button2.dart';
@@ -6,7 +7,7 @@ import '../../../../Model/Product.dart';
 import '../../../../Model/ToolStock.dart';
 import '../../../../Model/ProductStock.dart';
 import '../../../../Model/Tool.dart';
-import '../../../../core/services/Api service.dart';
+import '../../../../core/services/apiservices.dart';
 import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
@@ -139,9 +140,12 @@ class _InventoryScreenState extends State<InventoryScreen>
   Future<void> _loadToolsCatalog() async {
     final res = await _apiService.getTools();
     if (res.isSuccess && mounted) {
+      print('📦 InventoryScreen: Fetched ${res.data?.length} tools');
       setState(() {
         _apiTools = res.data ?? [];
       });
+    } else {
+      print('❌ InventoryScreen: Failed to fetch tools: ${res.error}');
     }
   }
 
@@ -176,7 +180,10 @@ class _InventoryScreenState extends State<InventoryScreen>
   Future<void> _loadProducts() async {
     final response = await _apiService.getProducts();
     if (response.isSuccess && response.data != null && mounted) {
+      print('📦 InventoryScreen: Fetched ${response.data?.length} products');
       setState(() => _apiProducts = response.data!);
+    } else {
+      print('❌ InventoryScreen: Failed to fetch products: ${response.error}');
     }
   }
 
@@ -210,7 +217,7 @@ class _InventoryScreenState extends State<InventoryScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.history, color: AppTheme.textSecondary),
-            onPressed: () {},
+            onPressed: () => context.push('/request-inventory'),
           ),
         ],
       ),
@@ -656,7 +663,9 @@ class _InventoryScreenState extends State<InventoryScreen>
                         ),
                       ),
                       hint: Text(
-                        'Choose an item',
+                        _activeTab == 'Tools' 
+                            ? (_apiTools.isEmpty ? 'Loading tools...' : 'Choose a tool')
+                            : (_apiProducts.isEmpty ? 'Loading products...' : 'Choose a product'),
                         style: GoogleFonts.outfit(fontSize: 14, color: Colors.grey.shade400),
                       ),
                       items: _activeTab == 'Tools'
@@ -668,9 +677,9 @@ class _InventoryScreenState extends State<InventoryScreen>
                                 value: p.name,
                                 child: Text(p.name, style: GoogleFonts.outfit(fontSize: 14)),
                               )).toList(),
-                      onChanged: isRequesting
-                          ? null
-                          : (value) {
+                      onChanged: (isRequesting || (_activeTab == 'Tools' ? _apiTools.isEmpty : _apiProducts.isEmpty))
+? null
+: (value) {
                               setDialogState(() {
                                 selectedItemName = value;
                                 if (_activeTab == 'Tools') {

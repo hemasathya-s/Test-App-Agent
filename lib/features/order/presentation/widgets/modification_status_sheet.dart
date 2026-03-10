@@ -14,7 +14,8 @@ class ModificationStatusSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SafeArea(
+      child: Container(
       padding: const EdgeInsets.all(24),
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -80,6 +81,7 @@ class ModificationStatusSheet extends StatelessWidget {
           ),
         ],
       ),
+    ),  // SafeArea
     );
   }
 }
