@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../core/model/order_details.dart';
 import '../core/model/slot_availability.dart';
@@ -7,6 +8,7 @@ import '../features/auth/presentation/pages/login_screen.dart';
 import '../features/auth/presentation/pages/permissions_screen.dart';
 import '../features/auth/presentation/pages/kyc_status_screen.dart';
 import '../features/dashboard/presentation/pages/AgentProfilePage.dart';
+import '../features/dashboard/presentation/pages/ForceUpdateScreen.dart';
 import '../features/dashboard/presentation/pages/edit_profile_screen.dart';
 import '../features/dashboard/presentation/pages/dashboard_shell.dart';
 import '../features/map/presentation/pages/service_area_screen.dart';
@@ -59,6 +61,7 @@ final router = GoRouter(
         final extra = state.extra;
         print("Router extra: $extra");
         print("Router extra type: ${extra.runtimeType}");
+        debugPrint('DEBUG: Navigating to /job-details with extra type: ${extra.runtimeType}');
         if (extra is SlotAvailability) {
           print("Router: extra matches SlotAvailability");
           return JobDetailsScreen(slot: extra);
@@ -73,17 +76,45 @@ final router = GoRouter(
     GoRoute(
       path: "/navigation",
       builder: (context, state) {
-        final order = state.extra as OrderDetails;
+        final extra = state.extra;
+        debugPrint('DEBUG: Router /navigation extra type: ${extra.runtimeType}');
 
-        return NavigationScreen( order: order,);
+        if (extra is OrderDetails) {
+          debugPrint('DEBUG: Found OrderDetails in extra');
+          return NavigationScreen(order: extra);
+        } else if (extra is SlotAvailability) {
+          debugPrint('DEBUG: Found SlotAvailability in extra');
+          if (extra.orderDetails != null) {
+            debugPrint('DEBUG: Using orderDetails from slot');
+            return NavigationScreen(order: extra.orderDetails!);
+          } else {
+             debugPrint('DEBUG: SlotAvailability orderDetails is NULL');
+          }
+        } else if (extra == null) {
+          debugPrint('DEBUG: extra is NULL');
+        } else {
+          debugPrint('DEBUG: extra is of unknown type: ${extra.runtimeType}');
+        }
+
+        return const Scaffold(
+          body: Center(child: Text("Navigation error: Order details missing")),
+        );
       },
     ),
     GoRoute(
       path: '/agent-tracking',
       builder: (context, state) {
-        final order = state.extra as OrderDetails;
+        final extra = state.extra;
+        debugPrint('DEBUG: Router /agent-tracking extra type: ${extra.runtimeType}');
 
-        return NavigationScreen( order: order,);
+        if (extra is OrderDetails) {
+          return NavigationScreen(order: extra);
+        } else if (extra is SlotAvailability && extra.orderDetails != null) {
+          return NavigationScreen(order: extra.orderDetails!);
+        }
+        return const Scaffold(
+          body: Center(child: Text("Tracking error: Order details missing")),
+        );
       },
     ),
     GoRoute(

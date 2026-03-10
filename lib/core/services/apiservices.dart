@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -244,7 +245,6 @@ class ApiService {
       }
       return null;
     } catch (e) {
-      print("Error on agent Order $e");
       return null;
     }
   }
@@ -576,7 +576,7 @@ class ApiService {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $accessToken',
         },
-        body: jsonEncode({"status": status}),
+        body: jsonEncode({"order_status": status}),
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -589,7 +589,6 @@ class ApiService {
       return false;
     }
   }
-
   static Future<bool?> toggleActiveStatus() async {
     try {
       final userId = await getUserId();
@@ -601,6 +600,9 @@ class ApiService {
         return false;
       }
       String url = '$baseUrl/api/user/toggle-active';
+
+      print("Calling Toggle API: $url");
+
       final response = await http.patch(
         Uri.parse(url),
         headers: {
@@ -609,14 +611,107 @@ class ApiService {
         },
       );
 
+      print("Status Code: ${response.statusCode}");
+      print("Raw Response: ${response.body}");
+
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data['data']['is_active'] as bool?;
+
+        bool? isActive = data['data']['is_active'];
+
+        print("Toggle Success - is_active value: $isActive");
+
+        return isActive;
+      } else {
+        print("Toggle Failed with status code: ${response.statusCode}");
       }
     } catch (e) {
       print("Error toggling active status: $e");
     }
+
     return null;
+  }
+
+  // static Future<List<LatLng>> getAgentZone() async {
+  //   try {
+  //     final url = Uri.parse("$baseUrl/api/agent-zones/agent/");
+  //
+  //     final response = await http.get(
+  //       url,
+  //       headers: {
+  //         "accept": "application/json",
+  //         "Authorization": "Bearer $accessToken",
+  //       },
+  //     );
+  //
+  //     print("ZONE API STATUS: ${response.statusCode}");
+  //     print("ZONE API BODY: ${response.body}");
+  //
+  //     if (response.statusCode == 200) {
+  //       final data = jsonDecode(response.body);
+  //
+  //       List zones = data["data"]["zone_details"];
+  //       List<LatLng> zonePoints = [];
+  //
+  //       for (var zone in zones) {
+  //         List coordinates = zone["coordinates"];
+  //
+  //         for (var point in coordinates) {
+  //           zonePoints.add(
+  //             LatLng(point["lat"], point["lng"]),
+  //           );
+  //         }
+  //       }
+  //
+  //       return zonePoints;
+  //     }
+  //   } catch (e) {
+  //     print("ZONE API ERROR: $e");
+  //   }
+  //
+  //   return [];
+  // }
+  static Future<List<Map<String, dynamic>>> getAgentZones() async {
+    try {
+      final url = Uri.parse("$baseUrl/api/agent-zones/agent/");
+      final response = await http.get(
+        url,
+        headers: {
+          "accept": "application/json",
+          "Authorization": "Bearer $accessToken",
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        List zones = data["data"]["zone_details"] ?? [];
+
+        return zones.map((zone) {
+          List coords = zone["coordinates"] ?? [];
+          List<LatLng> points = [];
+
+          for (var p in coords) {
+            double? lat = (p["lat"] ?? p["latitude"])?.toDouble();
+            double? lng = (p["lng"] ?? p["longitude"])?.toDouble();
+
+            // Filter out 0,0 points which cause "too long lines"
+            if (lat != null && lng != null && (lat != 0 || lng != 0)) {
+               // Verify order in console: If lines still stretch, try swapping to LatLng(lng, lat)
+               points.add(LatLng(lat, lng));
+            }
+          }
+
+          return {
+            "name": zone["name"] ?? "Unnamed Zone",
+            "points": points,
+          };
+        }).toList();
+      }
+    } catch (e) {
+      log("ZONE API ERROR: $e");
+    }
+    return [];
   }
 
   static Future<ApiResponse<AuthResponse>> unifiedLogin(LoginRequestModel request) async {

@@ -282,8 +282,21 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                 children: [
                   ElevatedButton.icon(
                     onPressed: () {
+                      debugPrint('DEBUG: Get Directions button pressed');
+                      debugPrint('DEBUG: order is null? ${effectiveOrder == null}');
+                      debugPrint('DEBUG: slot is null? ${effectiveOrder == null}');
+
                       controller.startNavigation();
-                      context.push('/navigation');
+
+                      if (effectiveOrder != null) {
+                        debugPrint('DEBUG: Pushing /navigation with OrderDetails. ID: ${effectiveOrder?.id}');
+                        context.push('/navigation', extra: effectiveOrder);
+                      } else if (widget.slot != null) {
+                        debugPrint('DEBUG: Pushing /navigation with SlotAvailability. OrderID: ${widget.slot?.orderId ?? ''}');
+                        context.push('/navigation', extra: widget.slot);
+                      } else {
+                         debugPrint('DEBUG: ERROR - Both order and slot are NULL');
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryColor,

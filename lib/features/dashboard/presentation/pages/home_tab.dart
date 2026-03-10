@@ -390,7 +390,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     );
   }
 
-  Widget _buildJobCard(
+  Widget   _buildJobCard(
     OrderDetails order,
     BuildContext context,
     WidgetRef ref,
