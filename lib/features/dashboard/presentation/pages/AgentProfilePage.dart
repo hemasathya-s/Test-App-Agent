@@ -1,19 +1,105 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:shimmer/shimmer.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/services/apiservices.dart';
+import '../../../../Model/AgentProfileResponse.dart';
 
-class AgentProfilePage extends StatelessWidget {
+class AgentProfilePage extends StatefulWidget {
   const AgentProfilePage({super.key});
 
   @override
+  State<AgentProfilePage> createState() => _AgentProfilePageState();
+}
+
+class _AgentProfilePageState extends State<AgentProfilePage> {
+  bool _isLoading = true;
+  String? _error;
+  AgentProfileData? _agentData;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchProfile();
+  }
+
+  Future<void> _fetchProfile() async {
+    print("📡 AgentProfilePage: Fetching profile...");
+    setState(() {
+      _isLoading = true;
+      _error = null;
+      _agentData = null; // Clear old data while loading
+    });
+
+    final token = await ApiService.getAccessToken();
+    if (token == null) {
+      print("❌ AgentProfilePage: No token found. Redirecting to login...");
+      if (mounted) {
+        context.go('/login');
+      }
+      return;
+    }
+
+    final result = await ApiService.getAgentProfile();
+
+    if (mounted) {
+      if (result.isSuccess && result.data != null) {
+        print("✅ AgentProfilePage: Profile loaded for ${result.data!.agent.userDetails.name}");
+        setState(() {
+          _agentData = result.data!.agent;
+          _isLoading = false;
+        });
+      } else {
+        print("❌ AgentProfilePage: Error loading profile: ${result.error}");
+        setState(() {
+          _isLoading = false;
+          _error = result.error ?? "Failed to load profile";
+        });
+      }
+    }
+  }
+
+  Future<void> _performLogout() async {
+    setState(() => _isLoading = true);
+    final result = await ApiService().logoutUser();
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (result.isSuccess) {
+        context.go('/login');
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.error ?? 'Logout failed')),
+        );
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        body: _buildShimmerLoading(),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SingleChildScrollView(
         child: Column(
           children: [
-            const SizedBox(height: 60),
+            Padding(
+              padding: const EdgeInsets.only(top: 48, left: 16),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new, size: 20, color: AppTheme.textPrimary),
+                  onPressed: () => context.pop(),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             
             // Profile Header
             Center(
@@ -24,15 +110,22 @@ class AgentProfilePage extends StatelessWidget {
                       shape: BoxShape.circle,
                       border: Border.all(color: AppTheme.primaryColor.withOpacity(0.2), width: 4),
                     ),
-                    child: const CircleAvatar(
+                    child: CircleAvatar(
                       radius: 60,
-                      backgroundColor: Color(0xFFF1F1F1),
-                      child: Icon(Icons.person_rounded, size: 60, color: Colors.grey),
+                      backgroundColor: const Color(0xFFF1F1F1),
+                      backgroundImage: _agentData?.profileImageUrl != null 
+                          ? NetworkImage("${_agentData!.profileImageUrl!}?v=${DateTime.now().millisecondsSinceEpoch}") 
+                          : null,
+                      child: _agentData?.profileImageUrl == null 
+                          ? const Icon(Icons.person_rounded, size: 60, color: Colors.grey)
+                          : null,
                     ),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    "Syed",
+                    _agentData?.userDetails.name.isNotEmpty == true 
+                        ? _agentData!.userDetails.name 
+                        : (_agentData?.userName.isNotEmpty == true ? _agentData!.userName : "Agent"),
                     style: GoogleFonts.outfit(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -40,7 +133,7 @@ class AgentProfilePage extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    "Agent ID: #UC1234",
+                    "Agent ID: #${_agentData?.id.substring(0, 8).toUpperCase() ?? "N/A"}",
                     style: GoogleFonts.outfit(
                       fontSize: 14,
                       color: AppTheme.textSecondary,
@@ -57,13 +150,29 @@ class AgentProfilePage extends StatelessWidget {
               context,
               icon: Icons.edit_outlined,
               title: "Edit Profile",
-              onTap: () => context.push('/edit-profile'),
+              onTap: () async {
+                if (_agentData != null) {
+                  print("🚀 AgentProfilePage: Navigating to edit-profile...");
+                  final result = await context.push('/edit-profile', extra: _agentData);
+                  print("🚀 AgentProfilePage: Returned from edit-profile with result: $result");
+                  if (result == true) {
+                    print("🔄 AgentProfilePage: Refreshing profile...");
+                    _fetchProfile();
+                  }
+                }
+              },
             ),
             _buildMenuItem(
               context,
               icon: Icons.history_rounded,
               title: "Order Details",
               onTap: () => context.push('/orders'),
+            ),
+            _buildMenuItem(
+              context,
+              icon: Icons.inventory_2_outlined,
+              title: "Request Inventory",
+              onTap: () => context.push('/request-inventory'),
             ),
             _buildMenuItem(
               context,
@@ -78,7 +187,7 @@ class AgentProfilePage extends StatelessWidget {
               icon: Icons.headset_mic_outlined,
               title: "Support",
               onTap: () {
-                // Open support chat or dialer
+                // Open support
               },
             ),
             
@@ -155,6 +264,7 @@ class AgentProfilePage extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
           "Logout",
@@ -175,7 +285,7 @@ class AgentProfilePage extends StatelessWidget {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              context.go('/login');
+              _performLogout();
             },
             child: Text(
               "Logout",
@@ -183,6 +293,47 @@ class AgentProfilePage extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildShimmerLoading() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey[300]!,
+      highlightColor: Colors.grey[100]!,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.only(top: 48),
+        child: Column(
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 16),
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Center(
+              child: Container(
+                width: 120, height: 120,
+                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(width: 150, height: 24, color: Colors.white),
+            const SizedBox(height: 8),
+            Container(width: 100, height: 16, color: Colors.white),
+            const SizedBox(height: 40),
+            ...List.generate(5, (index) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              child: Container(width: double.infinity, height: 56, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15))),
+            )),
+          ],
+        ),
       ),
     );
   }

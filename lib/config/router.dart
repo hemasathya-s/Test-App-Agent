@@ -8,8 +8,9 @@ import '../features/auth/presentation/pages/login_screen.dart';
 import '../features/auth/presentation/pages/permissions_screen.dart';
 import '../features/auth/presentation/pages/kyc_status_screen.dart';
 import '../features/dashboard/presentation/pages/AgentProfilePage.dart';
+import '../features/dashboard/presentation/pages/AgentEditProfilePage.dart';
+import '../Model/AgentProfileResponse.dart';
 import '../features/dashboard/presentation/pages/ForceUpdateScreen.dart';
-import '../features/dashboard/presentation/pages/edit_profile_screen.dart';
 import '../features/dashboard/presentation/pages/dashboard_shell.dart';
 import '../features/map/presentation/pages/service_area_screen.dart';
 import '../features/jobs/presentation/pages/new_job_request_screen.dart';
@@ -22,6 +23,7 @@ import '../features/order/presentation/pages/approval_waiting_screen.dart';
 import '../features/order/presentation/pages/request_tracking_screen.dart';
 import '../features/dashboard/presentation/pages/ForceUpdateScreen.dart';
 import '../features/orders/presentation/pages/orders_history_screen.dart';
+import '../features/inventory/presentation/pages/RequestInventoryPage.dart';
 
 final router = GoRouter(
   initialLocation: '/',
@@ -153,7 +155,14 @@ final router = GoRouter(
     ),
     GoRoute(
       path: '/edit-profile',
-      builder: (context, state) => const EditProfileScreen(),
+      builder: (context, state) {
+        final agentData = state.extra as AgentProfileData;
+        return AgentEditProfilePage(agentData: agentData);
+      },
+    ),
+    GoRoute(
+      path: '/request-inventory',
+      builder: (context, state) => const RequestInventoryPage(),
     ),
     GoRoute(
       path: '/force-update',

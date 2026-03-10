@@ -5,8 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hugeicons/hugeicons.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:urban_agent_app/core/services/apiservices.dart';
+import '../../../../core/services/apiservices.dart';
 import '../../../../Model/AgentRegistrationRequest.dart';
+import '../../../dashboard/presentation/pages/dashboard_shell.dart';
 import 'login_screen.dart';
 
 
@@ -22,7 +23,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
 
-  // ────────────────── Controllers ─────────────────────────────────
+  // ── Controllers ───────────────────────────────────────────────────────────
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   late final TextEditingController _mobileController;
@@ -89,7 +90,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
     super.dispose();
   }
 
-  // ────────────────── File Picker ─────────────────────────────────
+  // ── File Picker ───────────────────────────────────────────────────────────
 
   Future<void> _pickFile({
     required bool isImage,
@@ -179,7 +180,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
     );
   }
 
-  // ────────────────── Time Picker ─────────────────────────────────
+  // ── Time Picker ───────────────────────────────────────────────────────────
 
   Future<void> _pickTime({required bool isStart}) async {
     final picked = await showTimePicker(
@@ -230,7 +231,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
   }
 */
 
-  // ────────────────── Submit ──────────────────────────────────────
+  // ── Submit ────────────────────────────────────────────────────────────────
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
@@ -275,7 +276,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
       // dlExpiryDate: _dlExpiryController.text.trim(),
     );
 
-    final result = await ApiService.registerAgent(
+    final result = await ApiService().registerAgent(
       request: request,
       profileImage: _profileImage,
       aadharDoc: _aadharDoc,
@@ -345,7 +346,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
     );
   }
 
-  // ────────────────── Build ───────────────────────────────────────
+  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -387,7 +388,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                 padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
                 child: Column(
                   children: [
-                    // ────────────────── Profile Image (Top Circle) ──────────────────
+                    // ── Profile Image (Top Circle) ──────────────────
                     Center(
                       child: Stack(
                         children: [
@@ -441,7 +442,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    // ────────────────── 1. Basic Information ────────────────────────
+                    // ── 1. Basic Information ────────────────────────
                     _sectionCard(
                       icon: Icons.person_rounded,
                       title: 'Basic Information',
@@ -551,7 +552,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
 
                     const SizedBox(height: 16),
 
-                    // ────────────────── 2. Vehicle Details ──────────────────────────
+                    // ── 2. Vehicle Details ──────────────────────────
                     _sectionCard(
                       icon: Icons.directions_bike_rounded,
                       title: 'Vehicle Details',
@@ -608,7 +609,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
 
                     const SizedBox(height: 16),
 
-                    // ────────────────── 3. Bank Details ─────────────────────────────
+                    // ── 3. Bank Details ─────────────────────────────
                     _sectionCard(
                       icon: Icons.account_balance_rounded,
                       title: 'Bank Details',
@@ -681,7 +682,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
 
                     const SizedBox(height: 16),
 
-                    // ────────────────── 4. Documents & KYC ──────────────────────────
+                    // ── 4. Documents & KYC ──────────────────────────
                     _sectionCard(
                       icon: Icons.folder_rounded,
                       title: 'Documents & KYC',
@@ -701,7 +702,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                         const SizedBox(height: 12),
                         _uploadTile(
                           label: 'PAN Card *',
-                          subtitle: 'JPG / PNG â€” Clear scan',
+                          subtitle: 'JPG / PNG — Clear scan',
                           icon: Icons.badge_rounded,
                           file: _panCard,
                           isVideo: false,
@@ -713,7 +714,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                         const SizedBox(height: 12),
                         _uploadTile(
                           label: 'Video KYC (Optional)',
-                          subtitle: 'MP4 â€” Short selfie video',
+                          subtitle: 'MP4 — Short selfie video',
                           icon: Icons.videocam_rounded,
                           file: _videoKyc,
                           isVideo: true,
@@ -727,7 +728,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
 
                     const SizedBox(height: 28),
 
-                    // ────────────────── Submit Button ────────────────────────────────
+                    // ── Submit Button ───────────────────────────────
                     _submitButton(),
                   ],
                 ),
@@ -739,7 +740,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
     );
   }
 
-  // ────────────────── Widget Builders ─────────────────────────────────────
+  // ── Widget Builders ───────────────────────────────────────────────────────
 
   Widget _sectionCard({
     required IconData icon,

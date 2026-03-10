@@ -1,7 +1,11 @@
+import 'dart:io';
+import '../../../../core/services/apiservices.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:urban_agent_app/core/model/slot_availability.dart';
 import 'package:urban_agent_app/core/model/order_details.dart';
@@ -295,7 +299,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                         debugPrint('DEBUG: Pushing /navigation with SlotAvailability. OrderID: ${widget.slot?.orderId ?? ''}');
                         context.push('/navigation', extra: widget.slot);
                       } else {
-                         debugPrint('DEBUG: ERROR - Both order and slot are NULL');
+                        debugPrint('DEBUG: ERROR - Both order and slot are NULL');
                       }
                     },
                     style: ElevatedButton.styleFrom(
@@ -319,7 +323,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                   const SizedBox(height: 12),
                   // Modify Order button — driven by real API serviceModifications
                   if (latestMod == null)
-                    // No modification exists ? show Modify Order button
+                  // No modification exists ? show Modify Order button
                     TextButton.icon(
                       onPressed: () => context.push('/modify-order', extra: effectiveOrder),
                       icon: const Icon(Icons.edit_note, color: AppTheme.primaryColor),
@@ -332,7 +336,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                       ),
                     )
                   else if ((latestMod.status ?? '').toUpperCase() == 'PENDING')
-                    // Modification pending → show waiting label, no tap
+                  // Modification pending → show waiting label, no tap
                     Container(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Row(
@@ -362,6 +366,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
       );
     }
 
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -381,23 +386,54 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
           style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
         ),
         actions: [
-          if (isInstant)
-            Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: Chip(
-                label: Text(
-                  'INSTANT',
-                  style: GoogleFonts.outfit(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                backgroundColor: Colors.orange,
-                padding: EdgeInsets.zero,
-                visualDensity: VisualDensity.compact,
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.black),
+            color: Colors.white,
+            offset: const Offset(0, 56),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            onSelected: (value) {
+              if (value == 'hub_service') {
+                final hasHubRequest = effectiveOrder?.serviceModifications?.any((m) {
+                  final type = (m.modificationType ?? '').toUpperCase();
+                  final status = (m.status ?? '').toUpperCase();
+                  final isHubType = type.contains('HUB') || type.contains('SERVICE') || type.isEmpty;
+                  final isActive = status == 'PENDING' || status == 'APPROVED' || status == 'APPLIED';
+                  return isHubType && isActive;
+                }) ?? false;
+
+                if (hasHubRequest) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('The request is already pending'),
+                        behavior: SnackBarBehavior.floating,
+                        duration: Duration(seconds: 2),
+                      )
+                  );
+                } else {
+                  _showHubServiceRequestSheet(context, effectiveOrder);
+                }
+              } else if (value == 'slot_change') {
+                _showSlotChangeRequestSheet(context, effectiveOrder);
+              } else if (value == 'cancellation') {
+                _showCancellationSheet(context, effectiveOrder);
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'hub_service',
+                child: Text('Hub service', style: GoogleFonts.outfit(fontWeight: FontWeight.w500)),
               ),
-            ),
+              PopupMenuItem(
+                value: 'slot_change',
+                child: Text('Slot change request', style: GoogleFonts.outfit(fontWeight: FontWeight.w500)),
+              ),
+              PopupMenuItem(
+                value: 'cancellation',
+                child: Text('Cancellations', style: GoogleFonts.outfit(fontWeight: FontWeight.w500, color: Colors.red)),
+              ),
+            ],
+          ),
+          const SizedBox(width: 8),
         ],
         centerTitle: true,
         backgroundColor: Colors.white,
@@ -800,6 +836,13 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
     );
   }
 
+  Widget _buildLabel(String text) {
+    return Text(
+      text,
+      style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+    );
+  }
+
   Future<void> _makePhoneCall(String phoneNumber) async {
     final Uri launchUri = Uri(
       scheme: 'tel',
@@ -819,5 +862,768 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
       await launchUrl(launchUri);
     }
   }
+
+  void _showHubServiceRequestSheet(BuildContext context, OrderDetails? order) {
+    if (order == null) return;
+    final idController = TextEditingController();
+    final notesController = TextEditingController();
+    List<File> selectedImages = [];
+    List<File> selectedVideos = [];
+
+    bool isLoading = false;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+        bool isSubmitting = false;
+        return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
+                  const SizedBox(height: 24),
+                  Text('Hub Service Request', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Text('Submit a request for device repair or service at the hub.', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
+                  const SizedBox(height: 24),
+                  _buildLabel('Device Serial Number'),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: idController,
+                    decoration: AppTheme.inputDecoration('Enter serial number', Icons.confirmation_number_outlined),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildLabel('Condition Notes'),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: notesController,
+                    maxLines: 3,
+                    decoration: AppTheme.inputDecoration('Describe device condition...', Icons.note_alt_outlined),
+                  ),
+                  const SizedBox(height: 24),
+                  _buildLabel('Photos & Videos'),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      _buildMediaButton(Icons.add_a_photo, 'Add Photo', () {
+                        _showMediaSourceSheet(context, isVideo: false, onPicked: (file) {
+                          if (file != null) setState(() => selectedImages.add(file));
+                        });
+                      }),
+                      const SizedBox(width: 12),
+                      _buildMediaButton(Icons.video_call, 'Add Video', () {
+                        _showMediaSourceSheet(context, isVideo: true, onPicked: (file) {
+                          if (file != null) setState(() => selectedVideos.add(file));
+                        });
+                      }),
+                    ],
+                  ),
+                  if (selectedImages.isNotEmpty || selectedVideos.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      height: 80,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          ...selectedImages.map((f) => _buildMediaPreview(f, true, () => setState(() => selectedImages.remove(f)))),
+                          ...selectedVideos.map((f) => _buildMediaPreview(f, false, () => setState(() => selectedVideos.remove(f)))),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 32),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: isLoading ? null : () async {
+                        setState(() => isLoading = true);
+                        try {
+                          final res = await ApiService.createHubServiceRequest(
+                            orderId: order.id ?? '',
+                            orderItemId: order.items?.isNotEmpty == true ? order.items!.first.id : null,
+                            deviceSerialNumber: idController.text,
+                            deviceConditionNotes: notesController.text,
+                            images: selectedImages,
+                            videos: selectedVideos,
+                          );
+                          if (context.mounted) {
+                            if (res.isSuccess) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Request submitted successfully')));
+                            } else {
+                              // Close sheet if it's a duplicate request error, else keep open to show error
+                              if (res.error?.contains('already pending or approved') == true) {
+                                Navigator.pop(context);
+                              }
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res.error ?? 'Unknown error')));
+                            }
+                          }
+                        } finally {
+                          if (context.mounted) setState(() => isLoading = false);
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      child: isLoading
+                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : Text('Submit Request', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showSlotChangeRequestSheet(BuildContext context, OrderDetails? order) {
+    if (order == null) return;
+    DateTime selectedDate = DateTime.now();
+    TimeOfDay? selectedStartTime;
+    TimeOfDay? selectedEndTime;
+    String? selectedSlotId;
+    bool isLoadingSlots = false;
+    String? slotCheckError;
+    List<SlotAvailability> availableSlots = [];
+    final reasonController = TextEditingController();
+    final reasonTypeController = TextEditingController(text: 'AGENT_UNAVAILABLE');
+    bool isSubmitting = false;
+
+    // Zone related state
+    List<SlotAvailability> availableZones = [];
+    bool isLoadingZones = false;
+    SlotAvailability? selectedZone;
+    String? zoneError;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          void fetchZones() async {
+            if (order.latitude == null || order.longitude == null) {
+              print('⚠️ LAT/LNG missing for Zone fetch');
+              return;
+            }
+            setState(() {
+              isLoadingZones = true;
+              zoneError = null;
+            });
+            print('📡 Fetching slots for Lat: ${order.latitude}, Lng: ${order.longitude}');
+            final res = await ApiService().getAvailableSlotsByLocation(
+              lat: order.latitude!,
+              lng: order.longitude!,
+            );
+            if (context.mounted) {
+              setState(() {
+                isLoadingZones = false;
+                if (res.isSuccess) {
+                  availableZones = res.data ?? [];
+                  print('✅ Found ${availableZones.length} slots');
+                  for (var s in availableZones) {
+                    print('🔎 Slot Map: ID=${s.slot}, Start=${s.etaStartTime}, End=${s.etaEndTime}');
+                  }
+                } else {
+                  zoneError = res.error;
+                  print('❌ Zone fetch error: ${res.error}');
+                }
+              });
+            }
+          }
+
+          if (availableZones.isEmpty && !isLoadingZones && zoneError == null) {
+            fetchZones();
+          }
+
+          void updateTimeFromZone(SlotAvailability? zone) {
+            if (zone == null) return;
+            try {
+              if (zone.etaStartTime != null) {
+                final parts = zone.etaStartTime!.split(':');
+                selectedStartTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+              }
+              if (zone.etaEndTime != null) {
+                final parts = zone.etaEndTime!.split(':');
+                selectedEndTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+              }
+            } catch (e) {
+              print('❌ Error parsing zone times: $e');
+            }
+          }
+
+          Future<void> fetchSlotsBackground() async {
+            if (isLoadingSlots) return;
+            setState(() {
+              isLoadingSlots = true;
+              slotCheckError = null;
+            });
+            try {
+              final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
+              final slots = await ApiService.getAgentSlotAvailability(dateStr);
+              if (context.mounted) {
+                setState(() {
+                  availableSlots = slots;
+                  isLoadingSlots = false;
+
+                  if (slots.isNotEmpty && selectedStartTime == null) {
+                    try {
+                      if (slots.first.etaStartTime != null) {
+                        final parts = slots.first.etaStartTime!.split(':');
+                        selectedStartTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+                      }
+                      if (slots.first.etaEndTime != null) {
+                        final parts = slots.first.etaEndTime!.split(':');
+                        selectedEndTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+                      }
+                    } catch (_) {}
+                  }
+                });
+              }
+            } catch (e) {
+              if (context.mounted) {
+                setState(() {
+                  isLoadingSlots = false;
+                  slotCheckError = "Failed to check availability";
+                });
+              }
+            }
+          }
+
+          void updateSelectedSlot() {
+            if (selectedStartTime == null || selectedEndTime == null || availableSlots.isEmpty) return;
+            final startMinutes = selectedStartTime!.hour * 60 + selectedStartTime!.minute;
+            final endMinutes = selectedEndTime!.hour * 60 + selectedEndTime!.minute;
+            String? foundSlotId;
+            for (var slotAvail in availableSlots) {
+              try {
+                final sParts = slotAvail.etaStartTime!.split(':');
+                final eParts = slotAvail.etaEndTime!.split(':');
+                final sMin = int.parse(sParts[0]) * 60 + int.parse(sParts[1]);
+                final eMin = int.parse(eParts[0]) * 60 + int.parse(eParts[1]);
+                if (startMinutes >= sMin && endMinutes <= eMin) {
+                  foundSlotId = slotAvail.slot;
+                  break;
+                }
+              } catch (_) {}
+            }
+            if (foundSlotId != selectedSlotId) {
+              setState(() => selectedSlotId = foundSlotId);
+            }
+          }
+
+          if (availableSlots.isEmpty && !isLoadingSlots && slotCheckError == null) {
+            fetchSlotsBackground();
+          }
+
+          // Only auto-update slot if user hasn't manually picked a zone from the location-based list
+          if (selectedZone == null) {
+            updateSelectedSlot();
+          }
+
+          // Find the current matched slot object for displaying times
+          SlotAvailability? matchedSlot;
+          if (selectedSlotId != null) {
+            // Search in both standard slots and location-based slots
+            matchedSlot = availableSlots.firstWhere(
+              (s) => s.slot == selectedSlotId,
+              orElse: () => availableZones.firstWhere(
+                (z) => z.slot == selectedSlotId,
+                orElse: () => SlotAvailability(),
+              ),
+            );
+            if (matchedSlot?.slot == null) matchedSlot = null;
+          }
+
+          String formatTimeOfDay(TimeOfDay? tod) {
+            if (tod == null) return '--:--';
+            final hour = tod.hour.toString().padLeft(2, '0');
+            final minute = tod.minute.toString().padLeft(2, '0');
+            return '$hour:$minute';
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
+                  const SizedBox(height: 24),
+                  Text('Slot Change Request', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Text('Request a different time for this job.', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
+                  const SizedBox(height: 24),
+                   _buildLabel('Select Slot (Based on Location)'),
+                   const SizedBox(height: 8),
+                   if (isLoadingZones)
+                     const Center(child: CircularProgressIndicator())
+                   else if (zoneError != null)
+                     Text('Error: $zoneError', style: GoogleFonts.outfit(color: Colors.red, fontSize: 13))
+                   else if (availableZones.isEmpty)
+                     Text('No slots found for this location.', style: GoogleFonts.outfit(color: Colors.orange, fontSize: 13))
+                   else
+                     DropdownButtonFormField<SlotAvailability>(
+                       isExpanded: true,
+                       value: selectedZone,
+                       decoration: AppTheme.inputDecoration('Choose a slot', Icons.timer_outlined),
+                       items: availableZones.map((z) => DropdownMenuItem(
+                         value: z,
+                         child: Text('${z.zoneName ?? "Slot"} (${z.etaStartTime ?? ""} - ${z.etaEndTime ?? ""})',
+                           style: GoogleFonts.outfit(fontSize: 14)),
+                       )).toList(),
+                       onChanged: (val) {
+                         print('🎯 Selected Slot: ${val?.zoneName}');
+                         print('🆔 Slot ID: ${val?.slot}');
+                         print('⏰ Times: ${val?.etaStartTime} - ${val?.etaEndTime}');
+                         setState(() {
+                           selectedZone = val;
+                           selectedSlotId = val?.slot;
+                           updateTimeFromZone(val);
+                         });
+                       },
+                     ),
+                   const SizedBox(height: 16),
+                   _buildLabel('Requested Date'),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(DateFormat('yyyy-MM-dd').format(selectedDate), style: GoogleFonts.outfit(fontSize: 16)),
+                    trailing: const Icon(Icons.calendar_month, color: AppTheme.primaryColor),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: selectedDate,
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime.now().add(const Duration(days: 30)),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          selectedDate = picked;
+                          selectedSlotId = null; // Re-fetch for new date
+                        });
+                        fetchSlotsBackground();
+                      }
+                    },
+                  ),
+                  const Divider(),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildLabel('Start Time'),
+                            InkWell(
+                              onTap: () async {
+                                final picked = await showTimePicker(
+                                  context: context,
+                                  initialTime: selectedStartTime ?? TimeOfDay.now(),
+                                );
+                                if (picked != null) {
+                                  setState(() => selectedStartTime = picked);
+                                }
+                              },
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                margin: const EdgeInsets.only(top: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[50],
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.grey[200]!),
+                                ),
+                                child: Text(formatTimeOfDay(selectedStartTime),
+                                  style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w500, color: selectedStartTime != null ? Colors.black : Colors.grey)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildLabel('End Time'),
+                            InkWell(
+                              onTap: () async {
+                                final picked = await showTimePicker(
+                                  context: context,
+                                  initialTime: selectedEndTime ?? TimeOfDay.now(),
+                                );
+                                if (picked != null) {
+                                  setState(() => selectedEndTime = picked);
+                                }
+                              },
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                margin: const EdgeInsets.only(top: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[50],
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.grey[200]!),
+                                ),
+                                child: Text(formatTimeOfDay(selectedEndTime),
+                                  style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w500, color: selectedEndTime != null ? Colors.black : Colors.grey)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (matchedSlot != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(8)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.check_circle_outline, size: 14, color: Colors.green),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Available in slot: ${matchedSlot.etaStartTime} - ${matchedSlot.etaEndTime}',
+                            style: GoogleFonts.outfit(color: Colors.green[700], fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (!isLoadingSlots && availableSlots.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Times fall outside your available slots.',
+                            style: GoogleFonts.outfit(color: Colors.orange[700], fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 24),
+                   _buildLabel('Reason Type (Manual Code)'),
+                   const SizedBox(height: 8),
+                   TextField(
+                     controller: reasonTypeController,
+                     decoration: AppTheme.inputDecoration('Enter reason code...', Icons.label_important_outline),
+                   ),
+                   const SizedBox(height: 8),
+                   SingleChildScrollView(
+                     scrollDirection: Axis.horizontal,
+                     child: Row(
+                       children: ['AGENT_UNAVAILABLE', 'CUSTOMER_UNAVAILABLE', 'LOCATION_ISSUE', 'OTHER'].map((code) => Padding(
+                         padding: const EdgeInsets.only(right: 8),
+                         child: ActionChip(
+                           label: Text(code, style: const TextStyle(fontSize: 10)),
+                           onPressed: () => setState(() => reasonTypeController.text = code),
+                         ),
+                       )).toList(),
+                     ),
+                   ),
+                  const SizedBox(height: 16),
+                  _buildLabel('Reason Description'),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: reasonController,
+                    maxLines: 2,
+                    decoration: AppTheme.inputDecoration('Tell us why...', Icons.description_outlined),
+                  ),
+                  if (selectedSlotId == null && !isLoadingSlots)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Text(
+                        'Unable to find an available slot for this date. Please try another date.',
+                        style: GoogleFonts.outfit(color: Colors.red, fontSize: 13, fontWeight: FontWeight.w500),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  SizedBox(height: 15,),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: (isSubmitting || selectedStartTime == null || selectedEndTime == null || selectedSlotId == null)
+                          ? null
+                          : () async {
+                              final currentId = order.slotId;
+                              final originalDateStr = order.createdAt?.split('T')[0];
+                              final isSameDate = originalDateStr != null && DateFormat('yyyy-MM-dd').format(selectedDate) == originalDateStr;
+
+                              if (isSameDate && selectedSlotId == currentId) {
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                  content: Text('Please select a different slot or date to request a change.'),
+                                  backgroundColor: Colors.orange,
+                                ));
+                                return;
+                              }
+
+                              setState(() => isSubmitting = true);
+                              final startStr = formatTimeOfDay(selectedStartTime);
+                              final endStr = formatTimeOfDay(selectedEndTime);
+
+                              final res = await ApiService.createSlotChangeRequest(
+                                orderId: order.id ?? '',
+                                orderItemId: order.items?.isNotEmpty == true ? order.items!.first.id : null,
+                                currentSlotId: order.slotId,
+                                requestedSlotId: selectedSlotId,
+                                requestedDate: DateFormat('yyyy-MM-dd').format(selectedDate),
+                                requestedStartTime: '$startStr:00Z',
+                                requestedEndTime: '$endStr:00Z',
+                                reasonType: reasonTypeController.text,
+                                reasonDescription: reasonController.text,
+                              );
+                              if (context.mounted) {
+                                setState(() => isSubmitting = false);
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                    content: Text(res.isSuccess ? 'Slot change requested' : 'Error: ${res.error ?? "Unknown error"}')));
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                      child: isSubmitting
+                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : Text(isLoadingSlots ? 'Checking availability...' : 'Submit Request',
+                              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showCancellationSheet(BuildContext context, OrderDetails? order) {
+    if (order == null) return;
+    final reasonController = TextEditingController();
+    String cancellationReasonType = 'CUSTOMER_CHANGE_OF_MIND';
+    bool isSubmitting = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+        return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
+                const SizedBox(height: 24),
+                Text('Cancel Job', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.red)),
+                const SizedBox(height: 8),
+                Text('Please provide a reason for canceling this job.', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
+                const SizedBox(height: 24),
+                _buildLabel('Cancellation Reason Type'),
+                const SizedBox(height: 8),
+                DropdownButton<String>(
+                  isExpanded: true,
+                  value: cancellationReasonType,
+                  items: const [
+                    DropdownMenuItem(value: 'CUSTOMER_CHANGE_OF_MIND', child: Text('Customer Change of Mind')),
+                    DropdownMenuItem(value: 'AGENT_UNAVAILABLE', child: Text('Agent Unavailable')),
+                    DropdownMenuItem(value: 'LOCATION_ISSUE', child: Text('Location Issue')),
+                    DropdownMenuItem(value: 'NOT_REQUIRED_NOW', child: Text('Not Required Now')),
+                    DropdownMenuItem(value: 'OTHER', child: Text('Others')),
+                  ],
+                  onChanged: (val) => setState(() => cancellationReasonType = val!),
+                ),
+                const SizedBox(height: 16),
+                _buildLabel('Cancellation Reason Description'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: reasonController,
+                  maxLines: 3,
+                  decoration: AppTheme.inputDecoration('Why are you canceling?', Icons.cancel_presentation_outlined),
+                ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: isSubmitting
+                        ? null
+                        : () async {
+                            setState(() => isSubmitting = true);
+                            final res = await ApiService.createCancellationRequest(
+                              orderId: order.id ?? '',
+                              orderItemId: order.items?.isNotEmpty == true ? order.items!.first.id : null,
+                              cancellationReasonType: cancellationReasonType,
+                              reasonDescription: reasonController.text,
+                            );
+                            if (context.mounted) {
+                              setState(() => isSubmitting = false);
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                  content: Text(res.isSuccess ? 'Job cancelled' : 'Error: ${res.error ?? "Unknown error"}')));
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                    child: isSubmitting
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : Text('Confirm Cancellation',
+                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                  ),
+                ),
+                const SizedBox(height: 32),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildMediaButton(IconData icon, String label, VoidCallback onTap) {
+    return Expanded(
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 20),
+        label: Text(label, style: GoogleFonts.outfit(fontSize: 14)),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          side: BorderSide(color: AppTheme.primaryColor.withOpacity(0.5)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMediaPreview(File file, bool isImage, VoidCallback onRemove) {
+    return Container(
+      width: 80,
+      margin: const EdgeInsets.only(right: 8),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey[200]!)),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(11),
+            child: isImage ? Image.file(file, fit: BoxFit.cover) : const Center(child: Icon(Icons.videocam, color: Colors.grey)),
+          ),
+          Positioned(
+            top: 2,
+            right: 2,
+            child: GestureDetector(
+              onTap: onRemove,
+              child: Container(padding: const EdgeInsets.all(2), decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle), child: const Icon(Icons.close, size: 12, color: Colors.white)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMediaSourceSheet(BuildContext context, {required bool isVideo, required Function(File?) onPicked}) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                isVideo ? 'Select Video Source' : 'Select Photo Source',
+                style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildSourceOption(
+                    context,
+                    icon: Icons.camera_alt_outlined,
+                    label: 'Camera',
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final picker = ImagePicker();
+                      if (isVideo) {
+                        final video = await picker.pickVideo(source: ImageSource.camera);
+                        if (video != null) onPicked(File(video.path));
+                      } else {
+                        final image = await picker.pickImage(source: ImageSource.camera);
+                        if (image != null) onPicked(File(image.path));
+                      }
+                    },
+                  ),
+                  _buildSourceOption(
+                    context,
+                    icon: Icons.photo_library_outlined,
+                    label: 'Gallery',
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final picker = ImagePicker();
+                      if (isVideo) {
+                        final video = await picker.pickVideo(source: ImageSource.gallery);
+                        if (video != null) onPicked(File(video.path));
+                      } else {
+                        final image = await picker.pickImage(source: ImageSource.gallery);
+                        if (image != null) onPicked(File(image.path));
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSourceOption(BuildContext context, {required IconData icon, required String label, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        width: 120,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 32, color: AppTheme.primaryColor),
+            const SizedBox(height: 8),
+            Text(label, style: GoogleFonts.outfit(fontWeight: FontWeight.w500)),
+          ],
+        ),
+      ),
+    );
+  }
 }
+
 

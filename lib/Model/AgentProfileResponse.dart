@@ -63,28 +63,35 @@ class AgentProfileData {
   });
 
   factory AgentProfileData.fromJson(Map<String, dynamic> json) {
+    final details = json['agent_details'] as Map<String, dynamic>? ?? {};
+    
+    String? profileUrl = details['profile_image_url']?.toString();
+    if (profileUrl != null && profileUrl.startsWith('/')) {
+      profileUrl = 'https://api.itfixer199.com$profileUrl';
+    }
+
     return AgentProfileData(
-      id: json['id']?.toString() ?? '',
-      userId: json['user']?.toString() ?? '',
-      userName: json['user_name']?.toString() ?? '',
-      userDetails: AgentUserDetails.fromJson(json['user_details'] ?? {}),
-      aadharDocUrl: json['aadhar_doc_url'],
-      panCardUrl: json['pan_card_url'],
-      videoKycUrl: json['video_kyc_url'],
-      isPanVerified: json['is_pan_verified']?.toString() ?? 'PENDING',
-      isAadharVerified: json['is_aadhar_verified']?.toString() ?? 'PENDING',
-      cumulativeRating: json['cumulative_rating']?.toString() ?? '0.00',
-      profileImageUrl: json['profile_image_url'],
-      startTime: json['start_time'],
-      endTime: json['end_time'],
-      agentType: json['agent_type'],
-      isAdminPermissionRequired: json['is_admin_permission_required'] ?? false,
-      bankName: json['bank_name'],
-      accountNumber: json['account_number'],
-      ifscCode: json['ifsc_code'],
-      upiId: json['upi_id'],
-      vehicleType: json['vehicle_type'],
-      vehicleNumber: json['vehicle_number'],
+      id: details['agent_id']?.toString() ?? json['id']?.toString() ?? '',
+      userId: json['id']?.toString() ?? '', 
+      userName: json['name']?.toString() ?? '',
+      userDetails: AgentUserDetails.fromJson(json),
+      aadharDocUrl: details['aadhar_doc_url'],
+      panCardUrl: details['pan_card_url'],
+      videoKycUrl: details['video_kyc_url'],
+      isPanVerified: details['is_pan_verified']?.toString() ?? 'PENDING',
+      isAadharVerified: details['is_aadhar_verified']?.toString() ?? 'PENDING',
+      cumulativeRating: details['cumulative_rating']?.toString() ?? '0.00',
+      profileImageUrl: profileUrl,
+      startTime: details['start_time'],
+      endTime: details['end_time'],
+      agentType: details['agent_type'],
+      isAdminPermissionRequired: details['is_admin_permission_required'] ?? false,
+      bankName: details['bank_name'],
+      accountNumber: details['account_number'],
+      ifscCode: details['ifsc_code'],
+      upiId: details['upi_id'],
+      vehicleType: details['vehicle_type'],
+      vehicleNumber: details['vehicle_number'],
     );
   }
 }
@@ -119,9 +126,11 @@ class AgentUserDetails {
   });
 
   factory AgentUserDetails.fromJson(Map<String, dynamic> json) {
+    final details = json['agent_details'] as Map<String, dynamic>? ?? {};
+    
     return AgentUserDetails(
       id: json['id']?.toString() ?? '',
-      agentId: json['agent_id']?.toString() ?? '',
+      agentId: details['agent_id']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
       email: json['email']?.toString() ?? '',
       mobileNumber: json['mobile_number']?.toString() ?? '',
