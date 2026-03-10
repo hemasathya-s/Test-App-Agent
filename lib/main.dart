@@ -1,5 +1,5 @@
-﻿import 'dart:convert';
-
+import 'dart:convert';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:urban_agent_app/config/router.dart' as app_router;
+import 'package:urban_agent_app/core/services/apiservices.dart';
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
 
@@ -172,13 +173,73 @@ void main()async{
   );
 }
 
-class MyApp extends StatelessWidget {
+
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  bool _versionChecked = false;
+  bool _updateRequired = false;
+  int? _currentBuildNumber;
+  int? _requiredBuildNumber;
+  String _storeUrl = '';
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkVersion();
+  }
+
+  Future<void> _checkVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final current = int.tryParse(packageInfo.buildNumber) ?? 0;
+
+      final versionInfo = await ApiService.fetchVersionInfo();
+      final serverMin = versionInfo['minBuild'] as int;
+      final storeUrl = versionInfo['storeUrl'] as String? ?? '';
+
+      if (!mounted) return;
+
+      setState(() {
+        _currentBuildNumber = current;
+        _requiredBuildNumber = serverMin;
+        _storeUrl = storeUrl;
+        _updateRequired = current < serverMin;
+        _versionChecked = true;
+      });
+
+      if (_updateRequired) {
+        // We use a small delay to ensure the router is ready
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            app_router.router.go('/force-update', extra: {
+              'currentBuild': _currentBuildNumber,
+              'requiredBuild': _requiredBuildNumber,
+              'storeUrl': _storeUrl,
+            });
+          }
+        });
+      }
+    } catch (e) {
+      print("❌ [main] Version check failed: $e");
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = 'Unable to check app version.\nPlease check your internet.';
+        _versionChecked = true;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'UC Agent',
+      title: 'IT Fixer Partner',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       routerConfig: app_router.router,

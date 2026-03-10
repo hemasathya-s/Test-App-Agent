@@ -96,7 +96,6 @@ class OrderModificationState {
     );
   }
 
-  // Original total is based on the prices/quantities when the order was first loaded
   double get originalTotal =>
       items.where((i) => !i.isNew).fold(0, (sum, i) => sum + (i.originalPrice * i.originalQuantity));
 

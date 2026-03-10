@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
 import 'dart:io';
@@ -9,24 +9,142 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:urban_agent_app/core/model/ServiceModal.dart';
 import 'package:urban_agent_app/core/model/order_details.dart';
 import 'package:urban_agent_app/core/model/agent_order_response.dart';
+import '../model/slot_availability.dart';
 import 'package:urban_agent_app/core/model/slot_availability.dart';
 import 'package:urban_agent_app/Model/AuthResponse.dart';
 import 'package:urban_agent_app/Model/AgentRegistrationRequest.dart';
 import 'package:urban_agent_app/Model/AgentProfileResponse.dart';
 import 'package:urban_agent_app/Model/LoginRequestModel.dart';
 import 'package:urban_agent_app/Model/OtpUser.dart';
+import 'package:urban_agent_app/Model/AppSettings.dart';
 
-class ApiService{
+class ApiService {
+  static const String baseUrl = 'https://api.itfixer199.com';
+  static const String wsBaseUrl = "wss://api.itfixer199.com";
 
-  static String baseUrl ='https://api.itfixer199.com';
-  static String accessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzcyNTA0MzYyLCJpYXQiOjE3NzI0NTAzNjIsImp0aSI6ImQwYmEyNGYzYmIwNDRmYzg4NGYzNDU4OGZjNjRiOWEzIiwidXNlcl9pZCI6ImUzYWM4OTQ3LTdhYzktNDYwOS05NGVlLTczZjNjYmU4ZWM1NiJ9.8jK-xjkw31bE7irf1LD161Tke8IZehDTL4dkB267E-I';
+  static String accessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzczMTc5MTQ3LCJpYXQiOjE3NzMxMjUxNDcsImp0aSI6IjhmZWQ0YWRkZDk0OTRiODk4MzBhNzY1ZmQzOTczZGIzIiwidXNlcl9pZCI6ImUzYWM4OTQ3LTdhYzktNDYwOS05NGVlLTczZjNjYmU4ZWM1NiJ9.djd9pcmI_FapifZ7cn4OM3h_hJDCrFBFIdggVBYHRZU";
+  static String refresh = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc3MzM3NzQ3NSwiaWF0IjoxNzcyNzcyNjc1LCJqdGkiOiI0NTU0NDdlZTJmZWI0Y2M4OWZiYTU4YWEzZjYxNzQ5NiIsInVzZXJfaWQiOiJlM2FjODk0Ny03YWM5LTQ2MDktOTRlZS03M2YzY2JlOGVjNTYifQ.hsKt1SQSqlyBHaEGi0VKu57aHwtbfFunOZxs1qwMa34";
 
+  /// Connects once to the order WebSocket and stays connected.
+  /// - Emits [true]  when service_modifications[].status == APPROVED or APPLIED
+  /// - Emits [false] when service_modifications[].status == REJECTED or DECLINED
+  /// - Emits nothing while status == PENDING (stream stays open)
+  static Stream<bool> orderUpdatedStream(String orderId) {
+    final controller = StreamController<bool>();
+    WebSocketChannel? channel;
+    StreamSubscription? sub;
 
-  static Future<List<SlotAvailability>> getAgentSlotAvailability([String? date])async{
+    void close(bool? result) {
+      if (controller.isClosed) return;
+      sub?.cancel();
+      channel?.sink.close();
+      if (result != null) {
+        controller.add(result);
+      }
+      controller.close();
+    }
+
+    try {
+      final wsUrl = "$wsBaseUrl/ws/order/$orderId/?token=$accessToken";
+      print("WS CONNECTING → $wsUrl");
+      channel = WebSocketChannel.connect(Uri.parse(wsUrl));
+
+      sub = channel.stream.listen(
+        (message) {
+          try {
+            final data = jsonDecode(message);
+            print("WS MESSAGE → $data");
+            final modification = data["modification"];
+            if (modification != null) {
+              final status = (modification["status"] ?? "").toString().toUpperCase();
+              print("WS STATUS → $status");
+              if (status == "APPROVED" || status == "APPLIED") {
+                close(true);
+                return;
+              }
+              if (status == "REJECTED" || status == "DECLINED") {
+                close(false);
+                return;
+              }
+              print("WS PENDING → waiting...");
+            }
+          } catch (e) {
+            print("WS PARSE ERROR → $e");
+          }
+        },
+        onError: (error) {
+          print("WS ERROR → $error");
+          close(null);
+        },
+        onDone: () {
+          print("WS CLOSED BY SERVER");
+          close(null);
+        },
+      );
+
+      controller.onCancel = () {
+        sub?.cancel();
+        channel?.sink.close();
+      };
+    } catch (e) {
+      print("WS CONNECT ERROR → $e");
+      if (!controller.isClosed) {
+        controller.addError(e);
+        controller.close();
+      }
+    }
+    return controller.stream;
+  }
+
+  /// TRACKING STREAM
+  /// Receives live GPS updates from backend
+  static Stream<Map<String, dynamic>> trackingStream() {
+    final controller = StreamController<Map<String, dynamic>>();
+    WebSocketChannel? channel;
+    StreamSubscription? subscription;
+
+    try {
+      final wsUrl = "$wsBaseUrl/ws/api/tracking/log/?token=$accessToken";
+      print("[TRACKING] CONNECTING → $wsUrl");
+      channel = WebSocketChannel.connect(Uri.parse(wsUrl));
+
+      subscription = channel.stream.listen(
+        (message) {
+          try {
+            final data = jsonDecode(message);
+            print("[TRACKING] DATA → $data");
+            controller.add(data);
+          } catch (e) {
+            print("[TRACKING] PARSE ERROR → $e");
+          }
+        },
+        onError: (error) {
+          print("[TRACKING] WS ERROR → $error");
+          controller.addError(error);
+        },
+        onDone: () {
+          print("[TRACKING] WS CLOSED");
+          controller.close();
+        },
+      );
+
+      controller.onCancel = () {
+        subscription?.cancel();
+        channel?.sink.close();
+      };
+    } catch (e) {
+      print("[TRACKING] CONNECT ERROR → $e");
+      controller.addError(e);
+      controller.close();
+    }
+    return controller.stream;
+  }
+
+  static Future<List<SlotAvailability>> getAgentSlotAvailability([String? date]) async {
     String fetchDate = date ?? DateTime.now().toString().split(' ')[0];
    try{
      final userId = await getUserId();
-     final accessToken = await _getAccessToken();
+     final accessToken1 = await _getAccessToken();
 
      if (accessToken == null || userId == null || userId.isEmpty) {
        // Even if session is missing, we ensure local tokens are cleared
@@ -47,7 +165,7 @@ class ApiService{
      print("Response Code ${response.statusCode}");
      if(response.statusCode == 200){
        final dynamic decodedData = json.decode(response.body);
-       
+
        List<dynamic> list;
        if (decodedData is List) {
          list = decodedData;
@@ -60,7 +178,7 @@ class ApiService{
          print("Unexpected JSON format: $decodedData");
          return [];
        }
-       
+
        return list.map((json) => SlotAvailability.fromJson(json)).toList();
      }
      return [];
@@ -74,7 +192,7 @@ class ApiService{
   Future<List<dynamic>> getMySlots() async {
     try {
       final userId = await getUserId();
-      final accessToken = await _getAccessToken();
+      final accessToken1 = await _getAccessToken();
 
       if (accessToken == null || userId == null || userId.isEmpty) {
         // Even if session is missing, we ensure local tokens are cleared
@@ -101,7 +219,7 @@ class ApiService{
   static Future<List<OrderDetails>?> agentOrder() async {
     try {
       final userId = await getUserId();
-      final accessToken = await _getAccessToken();
+      final accessToken1 = await _getAccessToken();
 
       if (accessToken == null || userId == null || userId.isEmpty) {
         // Even if session is missing, we ensure local tokens are cleared
@@ -169,7 +287,7 @@ class ApiService{
   static Future<bool> agentApprovalOrder(String orderID, String status, {String? reason}) async {
     try {
       final userId = await getUserId();
-      final accessToken = await _getAccessToken();
+      final accessToken1 = await _getAccessToken();
 
       if (accessToken == null || userId == null || userId.isEmpty) {
         // Even if session is missing, we ensure local tokens are cleared
@@ -202,26 +320,23 @@ class ApiService{
     }
   }
 
-  static Future<List<ServiceModal>> listService({ String? lat,
-    String? lng,})async{
-    try{
+  static Future<Map<String, dynamic>> listService({
+    int page = 1,
+    int pageSize = 1,
+    String? lat,
+    String? lng,
+  }) async {
+    try {
       final userId = await getUserId();
-      final accessToken = await _getAccessToken();
+      final token = await _getAccessToken();
 
-      if (accessToken == null || userId == null || userId.isEmpty) {
-        // Even if session is missing, we ensure local tokens are cleared
+      if (token == null || userId == null || userId.isEmpty) {
         await AuthResponse.clearTokens();
-        return [];
+        return {'services': <ServiceModal>[], 'hasMore': false};
       }
-      // final prefs = await SharedPreferences.getInstance();
-      // final effectiveLat = lat ?? prefs.getDouble('user_latitude')?.toString();
-      // final effectiveLng = lng ?? prefs.getDouble('user_longitude')?.toString();
 
-      String url = '$baseUrl/api/services/?include_categories=true&include_media=true&include_pricing=true&include_zones=true';
-      // if (effectiveLat != null && effectiveLat.isNotEmpty &&
-      //     effectiveLng != null && effectiveLng.isNotEmpty) {
-      //   url += '&lat=$effectiveLat&lng=$effectiveLng';
-      // }
+      String url =
+          '$baseUrl/api/services/?include_categories=true&include_media=true&include_pricing=true&include_zones=true&page=$page&size=$pageSize';
 
       final response = await http.get(
         Uri.parse(url),
@@ -231,35 +346,52 @@ class ApiService{
         },
       );
 
+      print('listService [page=$page] status=${response.statusCode}');
+
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
         List<dynamic> list = [];
-        
+        bool hasMore = false;
+
         if (data['success'] == true && data['services'] != null) {
           list = data['services'];
+          // Check pagination metadata
+          final pagination = data['pagination'];
+          if (pagination != null) {
+            hasMore = pagination['has_next'] == true ||
+                pagination['next'] != null;
+          } else {
+            // If no pagination metadata, assume more data if we got a full page
+            hasMore = list.length >= pageSize;
+          }
         } else if (data.containsKey('results')) {
           list = data['results'];
+          hasMore = data['next'] != null;
         } else if (data.containsKey('data')) {
           list = data['data'];
+          hasMore = list.length >= pageSize;
         }
 
-        return list.map((json) {
+        print('listService [page=$page] count=${list.length} hasMore=$hasMore');
+
+        final services = list.map((json) {
           final service = Service.fromJson(json);
           return ServiceModal.fromService(service);
         }).toList();
+
+        return {'services': services, 'hasMore': hasMore};
       }
-      return [];
-    }
-    catch(e){
-      print("Error on list Service $e");
-      return [];
+      return {'services': <ServiceModal>[], 'hasMore': false};
+    } catch (e) {
+      print('Error on listService: $e');
+      return {'services': <ServiceModal>[], 'hasMore': false};
     }
   }
 
   static Future<void> serviceModification(String orderId, String orderItemId, String serviceId, String? reason) async {
     try {
       final userId = await getUserId();
-      final accessToken = await _getAccessToken();
+      final accessToken1 = await _getAccessToken();
 
       if (accessToken == null || userId == null || userId.isEmpty) {
         // Even if session is missing, we ensure local tokens are cleared
@@ -295,7 +427,7 @@ class ApiService{
   /// - Emits [false] when service_modifications[].status == REJECTED or DECLINED
   /// - Emits nothing while status == PENDING (stream stays open)
   /// - On unexpected server close: caller (ApprovalWaitingScreen) reconnects
-  static Future<Stream<bool>> orderUpdatedStream(String orderId)async{
+ /* static Future<Stream<bool>> orderUpdatedStream(String orderId)async{
     final ctrl = StreamController<bool>();
     WebSocketChannel? channel;
     StreamSubscription? sub;
@@ -364,7 +496,7 @@ class ApiService{
     }
 
     return ctrl.stream;
-  }
+  }*/
 
   static Future<bool> deliveryVerifyOtp(String orderId,String otp)async{
     try{
@@ -398,7 +530,7 @@ class ApiService{
   static Future<OrderDetails?> getOrderbyId(String orderId) async {
     try {
       final userId = await getUserId();
-      final accessToken = await _getAccessToken();
+      final accessToken1 = await _getAccessToken();
 
       if (accessToken == null || userId == null || userId.isEmpty) {
         // Even if session is missing, we ensure local tokens are cleared
@@ -425,6 +557,7 @@ class ApiService{
     }
     return null;
   }
+
   static Future<bool> updateJobStatus(String orderId, String status) async {
     try {
       final userId = await getUserId();
@@ -460,7 +593,7 @@ class ApiService{
   static Future<bool?> toggleActiveStatus() async {
     try {
       final userId = await getUserId();
-      final accessToken = await _getAccessToken();
+      final accessToken1 = await _getAccessToken();
 
       if (accessToken == null || userId == null || userId.isEmpty) {
         // Even if session is missing, we ensure local tokens are cleared
@@ -1177,7 +1310,7 @@ class ApiService{
       if (response.statusCode == 200 || response.statusCode == 204) {
         return AgentApiResult.success(true);
       } else {
-        // Return success anyway because local session is cleared, 
+        // Return success anyway because local session is cleared,
         // but maybe log the error
         print('?? Server logout failed but local tokens cleared: ${response.body}');
         return AgentApiResult.success(true);
@@ -1315,5 +1448,38 @@ class ApiService{
   static Future<String?> getUserId() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('user_id');
+  }
+
+  static Future<Map<String, dynamic>> fetchVersionInfo() async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/app-settings');
+      final response = await http.get(uri);
+
+      //print('Status code: ${response.statusCode}');
+      //print('Response body: ${response.body}');
+
+      if (response.statusCode != 200) {
+        throw Exception('Version API failed');
+      }
+
+      final jsonData = jsonDecode(response.body);
+      final appSettings = AppSettings.fromJson(jsonData);
+
+      if (!appSettings.success) {
+        throw Exception(appSettings.message);
+      }
+
+      final int serverMinBuild = appSettings.data.appVersion;
+      // Use fallback if playStoreUrl is null
+      final String? storeUrl = appSettings.data.playStoreUrl;
+
+      return {
+        'minBuild': serverMinBuild,
+        'storeUrl': storeUrl,
+      };
+    } catch (e) {
+      //print("❌ Error fetching version info: $e");
+      rethrow;
+    }
   }
 }

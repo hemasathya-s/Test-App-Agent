@@ -1,17 +1,16 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:urban_agent_app/core/theme/app_theme.dart';
-import 'package:urban_agent_app/core/services/apiservices.dart';
-import 'package:urban_agent_app/core/services/tracking_service.dart';
-import 'package:urban_agent_app/features/orders/presentation/pages/orders_history_screen.dart';
-import 'package:urban_agent_app/features/dashboard/presentation/providers/dashboard_provider.dart';
-import 'package:urban_agent_app/features/dashboard/presentation/widgets/sos_bottom_sheet.dart';
-import 'package:urban_agent_app/features/dashboard/presentation/pages/agent_verification_screen.dart';
-import 'package:urban_agent_app/core/model/slot_availability.dart';
-import 'package:urban_agent_app/core/model/order_details.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/services/apiservices.dart';
+import '../../../orders/presentation/pages/orders_history_screen.dart';
+import '../providers/dashboard_provider.dart';
+import '../widgets/sos_bottom_sheet.dart';
+import 'agent_verification_screen.dart';
+import '../../../../core/model/slot_availability.dart';
+import '../../../../core/model/order_details.dart';
 
 class HomeTab extends ConsumerStatefulWidget {
   const HomeTab({super.key});
@@ -233,7 +232,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
               ),
             )
           else
-            ...state.upcomingOrders.map((order) => _buildJobCard(order, context)),
+              ...state.upcomingOrders.map((order) => _buildJobCard(order, context, ref, state.isAvailable)),
         ],
       ),
     ),
@@ -287,14 +286,13 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     return GestureDetector(
       onTap: () async {
         if (!state.isAvailable) {
-          // GOING ONLINE logic
-          final isNowActive = await ApiService.toggleActiveStatus();
-          if (isNowActive != null) {
-            controller.toggleAvailability(isNowActive);
-            TrackingService().setOnlineStatus(isNowActive);
-          }
+          // GOING ONLINE — toggle local state immediately so the button responds
+          // even if the API is slow or the token is expired.
+          await controller.toggleAvailability(true);
+          // Notify backend in the background (fire-and-forget).
+          ApiService.toggleActiveStatus();
         } else {
-          // GOING OFFLINE logic - show dialog first
+          // GOING OFFLINE — show confirmation dialog first
           final shouldTurnOff = await showDialog<bool>(
             context: context,
             builder: (ctx) => AlertDialog(
@@ -331,11 +329,9 @@ class _HomeTabState extends ConsumerState<HomeTab> {
           );
 
           if (shouldTurnOff == true) {
-            final isNowActive = await ApiService.toggleActiveStatus();
-            if (isNowActive != null) {
-              controller.toggleAvailability(isNowActive);
-              TrackingService().setOnlineStatus(isNowActive);
-            }
+            // Toggle local state immediately, then notify backend.
+            await controller.toggleAvailability(false);
+            ApiService.toggleActiveStatus();
           }
         }
       },
@@ -397,6 +393,8 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   Widget _buildJobCard(
     OrderDetails order,
     BuildContext context,
+    WidgetRef ref,
+    bool isAgentOnline,
   ) {
     print("Home Page Order Details $order");
     final title = (order.items != null && order.items!.isNotEmpty)
@@ -520,28 +518,32 @@ class _HomeTabState extends ConsumerState<HomeTab> {
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () =>
-                        _showAcceptBottomSheet(context, order),
+                    onPressed: isAgentOnline ? () =>
+                        _showAcceptBottomSheet(context, order):null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryColor,
+                      disabledBackgroundColor: Colors.grey.shade300,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     child: Text(
                       'Accept',
-                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.bold,
+                        color: isAgentOnline ? Colors.white : Colors.grey.shade500,
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () {
+                    onPressed: isAgentOnline ? () {
                       if (order.id != null) {
                         _showRejectBottomSheet(context, order.id!);
                       }
-                    },
+                    } : null,
                     style: OutlinedButton.styleFrom(
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
@@ -602,6 +604,18 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () {
+                      // context.push(
+                      //   '/agent-tracking',
+                      //   extra: {
+                      //     'destination': LatLng(
+                      //       order.latitude??0,
+                      //       order.longitude??0,
+                      //     ),
+                      //     'customerName': order.customerName ?? 'Customer',
+                      //     'customerPhone': order.customerNumber ?? '',
+                      //     'orderId': order.id ?? '',
+                      //   },
+                      // );
                       context.push(
                         '/agent-tracking',
                         extra: {

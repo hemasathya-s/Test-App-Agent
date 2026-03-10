@@ -1,24 +1,25 @@
-﻿import 'package:go_router/go_router.dart';
-import 'package:urban_agent_app/core/model/order_details.dart';
-import 'package:urban_agent_app/core/model/slot_availability.dart';
-import 'package:urban_agent_app/features/auth/presentation/pages/splash_screen.dart';
-import 'package:urban_agent_app/features/auth/presentation/pages/login_screen.dart';
-import 'package:urban_agent_app/features/auth/presentation/pages/permissions_screen.dart';
-import 'package:urban_agent_app/features/auth/presentation/pages/kyc_status_screen.dart';
-import 'package:urban_agent_app/features/dashboard/presentation/pages/AgentProfilePage.dart';
-import 'package:urban_agent_app/features/dashboard/presentation/pages/edit_profile_screen.dart';
-import 'package:urban_agent_app/features/dashboard/presentation/pages/dashboard_shell.dart';
-import 'package:urban_agent_app/features/auth/presentation/pages/CreateAgent.dart';
-import 'package:urban_agent_app/features/map/presentation/pages/service_area_screen.dart';
-import 'package:urban_agent_app/features/jobs/presentation/pages/new_job_request_screen.dart';
-import 'package:urban_agent_app/features/jobs/presentation/pages/job_details_screen.dart';
-import 'package:urban_agent_app/features/jobs/presentation/pages/navigation_screen.dart';
-import 'package:urban_agent_app/features/jobs/presentation/pages/service_checklist_screen.dart';
-import 'package:urban_agent_app/features/order/presentation/pages/modify_order_screen.dart';
-import 'package:urban_agent_app/features/order/presentation/pages/modification_summary_screen.dart';
-import 'package:urban_agent_app/features/order/presentation/pages/approval_waiting_screen.dart';
-import 'package:urban_agent_app/features/order/presentation/pages/request_tracking_screen.dart';
-import 'package:urban_agent_app/features/orders/presentation/pages/orders_history_screen.dart';
+import 'package:go_router/go_router.dart';
+import '../core/model/order_details.dart';
+import '../core/model/slot_availability.dart';
+import '../features/auth/presentation/pages/CreateAgent.dart';
+import '../features/auth/presentation/pages/splash_screen.dart';
+import '../features/auth/presentation/pages/login_screen.dart';
+import '../features/auth/presentation/pages/permissions_screen.dart';
+import '../features/auth/presentation/pages/kyc_status_screen.dart';
+import '../features/dashboard/presentation/pages/AgentProfilePage.dart';
+import '../features/dashboard/presentation/pages/edit_profile_screen.dart';
+import '../features/dashboard/presentation/pages/dashboard_shell.dart';
+import '../features/map/presentation/pages/service_area_screen.dart';
+import '../features/jobs/presentation/pages/new_job_request_screen.dart';
+import '../features/jobs/presentation/pages/job_details_screen.dart';
+import '../features/jobs/presentation/pages/navigation_screen.dart';
+import '../features/jobs/presentation/pages/service_checklist_screen.dart';
+import '../features/order/presentation/pages/modify_order_screen.dart';
+import '../features/order/presentation/pages/modification_summary_screen.dart';
+import '../features/order/presentation/pages/approval_waiting_screen.dart';
+import '../features/order/presentation/pages/request_tracking_screen.dart';
+import '../features/dashboard/presentation/pages/ForceUpdateScreen.dart';
+import '../features/orders/presentation/pages/orders_history_screen.dart';
 
 final router = GoRouter(
   initialLocation: '/',
@@ -70,12 +71,20 @@ final router = GoRouter(
       },
     ),
     GoRoute(
-      path: '/navigation',
-      builder: (context, state) => const NavigationScreen(),
+      path: "/navigation",
+      builder: (context, state) {
+        final order = state.extra as OrderDetails;
+
+        return NavigationScreen( order: order,);
+      },
     ),
     GoRoute(
       path: '/agent-tracking',
-      builder: (context, state) => const NavigationScreen(),
+      builder: (context, state) {
+        final order = state.extra as OrderDetails;
+
+        return NavigationScreen( order: order,);
+      },
     ),
     GoRoute(
       path: '/checklist',
@@ -114,6 +123,17 @@ final router = GoRouter(
     GoRoute(
       path: '/edit-profile',
       builder: (context, state) => const EditProfileScreen(),
+    ),
+    GoRoute(
+      path: '/force-update',
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>;
+        return ForceUpdateScreen(
+          currentBuild: extra['currentBuild'] as int?,
+          requiredBuild: extra['requiredBuild'] as int?,
+          storeUrl: extra['storeUrl'] as String,
+        );
+      },
     ),
   ],
 );

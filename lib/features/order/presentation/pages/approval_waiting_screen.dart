@@ -1,5 +1,7 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:urban_agent_app/main.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -42,13 +44,12 @@ class _ApprovalWaitingScreenState extends ConsumerState<ApprovalWaitingScreen> {
   /// • Emits once when status becomes APPROVED/APPLIED or REJECTED/DECLINED
   /// • If the server closes the socket before a final status arrives,
   ///   reconnects automatically after 5 s (so the buffer never disappears)
-  void _connectWs(String orderId) async {
+  void _connectWs(String orderId) {
     if (_done) return;
     _wsSub?.cancel();
     debugPrint('WS: connecting for order $orderId');
 
-    final stream = await ApiService.orderUpdatedStream(orderId);
-    _wsSub = stream.listen(
+    _wsSub = ApiService.orderUpdatedStream(orderId).listen(
       // ── Final status received ────────────────────────────────────
       (bool approved) {
         _done = true;
@@ -80,12 +81,30 @@ class _ApprovalWaitingScreenState extends ConsumerState<ApprovalWaitingScreen> {
     super.dispose();
   }
 
-  // ────────────────────────────────────────────────────────────────
+  // ──────────────────────────────────────────────────────────────────
   // Called once with the final approved / rejected result
-  // ────────────────────────────────────────────────────────────────
+  // ──────────────────────────────────────────────────────────────────
   void _onStatusReceived(bool approved) async {
     debugPrint('Status received — approved: $approved');
     _wsSub?.cancel();
+
+    // Trigger local notification
+    await flutterLocalNotificationsPlugin.show(
+      DateTime.now().millisecond,
+      approved ? 'Order Modification Approved!' : 'Order Modification Declined',
+      approved
+          ? 'The customer has agreed to your changes. You can now proceed.'
+          : 'The customer has declined your changes.',
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'modification_alert_channel',
+          'Modification Alerts',
+          importance: Importance.max,
+          priority: Priority.high,
+          playSound: true,
+        ),
+      ),
+    );
 
     final orderId = widget.orderId;
 
@@ -139,9 +158,9 @@ class _ApprovalWaitingScreenState extends ConsumerState<ApprovalWaitingScreen> {
     });
   }
 
-  // ────────────────────────────────────────────────────────────────
+  // ──────────────────────────────────────────────────────────────────
   // UI — unchanged spinner screen
-  // ────────────────────────────────────────────────────────────────
+  // ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(

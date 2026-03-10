@@ -1,7 +1,7 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-
+import 'package:permission_handler/permission_handler.dart';
 import '../../../../core/theme/app_theme.dart';
 
 class PermissionsScreen extends StatefulWidget {
@@ -12,14 +12,58 @@ class PermissionsScreen extends StatefulWidget {
 }
 
 class _PermissionsScreenState extends State<PermissionsScreen> {
-  // Mock permission states
   bool _locationGranted = false;
   bool _cameraGranted = false;
   bool _notificationGranted = false;
   bool _micGranted = false;
 
-  bool get _allGranted =>
-      _locationGranted && _cameraGranted && _notificationGranted && _micGranted;
+  @override
+  void initState() {
+    super.initState();
+    _checkInitialPermissions();
+  }
+
+  Future<void> _checkInitialPermissions() async {
+    final location = await Permission.location.isGranted;
+    final camera = await Permission.camera.isGranted;
+    final notification = await Permission.notification.isGranted;
+    final mic = await Permission.microphone.isGranted;
+
+    if (mounted) {
+      setState(() {
+        _locationGranted = location;
+        _cameraGranted = camera;
+        _notificationGranted = notification;
+        _micGranted = mic;
+      });
+    }
+  }
+
+  Future<void> _requestLocation() async {
+    final status = await Permission.location.request();
+    if (status.isGranted) {
+      // For background tracking in Android 10+, we also need background location
+      await Permission.locationAlways.request();
+      setState(() => _locationGranted = true);
+    }
+  }
+
+  Future<void> _requestCamera() async {
+    final status = await Permission.camera.request();
+    if (status.isGranted) setState(() => _cameraGranted = true);
+  }
+
+  Future<void> _requestNotification() async {
+    final status = await Permission.notification.request();
+    if (status.isGranted) setState(() => _notificationGranted = true);
+  }
+
+  Future<void> _requestMic() async {
+    final status = await Permission.microphone.request();
+    if (status.isGranted) setState(() => _micGranted = true);
+  }
+
+  bool get _allRequiredGranted => _locationGranted && _notificationGranted;
 
   @override
   Widget build(BuildContext context) {
@@ -73,18 +117,14 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                       title: 'Location Access',
                       description: 'Required to verify service addresses and track agent arrival.',
                       isGranted: _locationGranted,
-                      onToggle: () {
-                        setState(() => _locationGranted = !_locationGranted);
-                      },
+                      onToggle: _requestLocation,
                     ),
                     _buildPermissionCard(
                       icon: Icons.camera_alt_rounded,
                       title: 'Camera Access',
                       description: 'Needed to scan documents or upload photos of service items.',
                       isGranted: _cameraGranted,
-                      onToggle: () {
-                        setState(() => _cameraGranted = !_cameraGranted);
-                      },
+                      onToggle: _requestCamera,
                     ),
                     _buildPermissionCard(
                       icon: Icons.notifications_active_rounded,
@@ -93,9 +133,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                       isGranted: _notificationGranted,
                       color: const Color(0xFFFFE0B2),
                       iconColor: Colors.orange[800]!,
-                      onToggle: () {
-                        setState(() => _notificationGranted = !_notificationGranted);
-                      },
+                      onToggle: _requestNotification,
                     ),
                     _buildPermissionCard(
                       icon: Icons.mic_rounded,
@@ -104,9 +142,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
                       isGranted: _micGranted,
                       color: const Color(0xFFE8F5E9),
                       iconColor: Colors.green[800]!,
-                      onToggle: () {
-                        setState(() => _micGranted = !_micGranted);
-                      },
+                      onToggle: _requestMic,
                     ),
                   ],
                 ),
@@ -114,9 +150,9 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
               
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: _allGranted
+                onPressed: _allRequiredGranted
                     ? () => context.go('/kyc')
-                    : null, // Disable if not all granted? Or allow skip? User implies "Continue"
+                    : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primaryColor,
                   minimumSize: const Size(double.infinity, 56),

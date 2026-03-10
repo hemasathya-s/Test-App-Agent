@@ -2,11 +2,11 @@
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:urban_agent_app/core/theme/app_theme.dart';
-import 'package:urban_agent_app/core/services/apiservices.dart';
-import 'package:urban_agent_app/core/model/order_details.dart';
-import 'package:urban_agent_app/core/model/slot_availability.dart';
-import 'package:urban_agent_app/features/jobs/presentation/pages/job_details_screen.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/services/apiservices.dart';
+import '../../../../core/model/order_details.dart';
+import '../../../../core/model/slot_availability.dart';
+import '../../../jobs/presentation/pages/job_details_screen.dart';
 
 class OrdersHistoryScreen extends StatefulWidget {
   const OrdersHistoryScreen({super.key});

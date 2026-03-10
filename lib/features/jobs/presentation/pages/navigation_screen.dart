@@ -1,9 +1,10 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:math';
 import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
@@ -12,14 +13,17 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../../../core/model/slot_availability.dart';
+import '../../../../core/model/order_details.dart';
 import '../../../../core/services/apiservices.dart';
 import '../../../../core/services/tracking_service.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../providers/job_provider.dart';
 
 class NavigationScreen extends ConsumerStatefulWidget {
-  const NavigationScreen({super.key});
+  final OrderDetails order;
+  const NavigationScreen({super.key, required this.order});
 
   @override
   ConsumerState<NavigationScreen> createState() => _NavigationScreenState();
@@ -29,6 +33,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
   GoogleMapController? _mapController;
   final String apiKey = "AIzaSyAflftNedMvJ812sMI1l0h7kqj1-HBYDE8";
   final TrackingService _trackingService = TrackingService();
+  final _bgService = FlutterBackgroundService();
 
   String? currentOrderId;
   String? customerPhone;
@@ -71,15 +76,27 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
     print("DEBUG: --- START NAVIGATION INITIALIZATION ---");
 
     try {
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        print("DEBUG: Requesting location permissions...");
-        permission = await Geolocator.requestPermission();
+      // 1. Request essential permissions for navigation
+      final status = await [
+        Permission.location,
+        Permission.notification,
+      ].request();
+
+      if (status[Permission.location]?.isDenied ?? true) {
+         if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+             const SnackBar(content: Text("Location permission is required for navigation.")),
+           );
+         }
+         setState(() => isLoading = false);
+         return;
       }
 
       // Use bestAccuracy for initial position as well
       Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.bestForNavigation,
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+        ),
       );
       riderPosition = LatLng(position.latitude, position.longitude);
       print("DEBUG: Current Agent Position: $riderPosition");
@@ -88,53 +105,55 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
       final List<SlotAvailability> slots = await ApiService.getAgentSlotAvailability();
       print("DEBUG: API My Slots Response Length: ${slots.length}");
 
+      OrderDetails? targetOrder;
+
       if (slots.isNotEmpty) {
         final activeSlot = slots.firstWhere(
-          (s) => s.status == 'PENDING' || s.status == 'ACCEPTED',
+          (s) => ['PENDING', 'ACCEPTED', 'NAVIGATING', 'ARRIVED'].contains(s.status?.toUpperCase()),
           orElse: () => slots.first,
         );
 
         print("DEBUG: Selected Active Slot: ${activeSlot.id} (Status: ${activeSlot.status})");
         currentOrderId = activeSlot.orderId;
-        print("DEBUG: Associated Order ID: $currentOrderId");
-
-        final details = activeSlot.orderDetails;
-        if (details != null) {
-          if (details.latitude != null && details.longitude != null) {
-            destination = LatLng(details.latitude!, details.longitude!);
-            print("DEBUG: Successfully set destination from OrderDetails: $destination");
-          } else {
-            print("DEBUG: OrderDetails found but Lat/Lng are null in the model.");
-          }
-          
-          customerPhone = details.customerNumber;
-          print("DEBUG: Customer Phone extracted: $customerPhone");
-        } else {
-          print("DEBUG: orderDetails is NULL in the active slot object.");
-        }
-
+        targetOrder = activeSlot.orderDetails;
         destinationName = activeSlot.slotName ?? "Job Location";
       } else {
-        print("DEBUG: CRITICAL - No slots returned from API. Navigation cannot proceed with real data.");
+        final activeOrders = await ApiService.agentOrder();
+        if (activeOrders != null && activeOrders.isNotEmpty) {
+          targetOrder = widget.order;
+          currentOrderId = targetOrder.id;
+          destinationName = targetOrder.address ?? "Job Location";
+        }
       }
 
-      if (destination == null) {
-        print("DEBUG: FALLBACK TRIGGERED - No destination found in API response. Defaulting to T Nagar (13.0418, 80.2337)");
-        destination = const LatLng(13.0418, 80.2337);
+      if (targetOrder != null) {
+        if (targetOrder.latitude != null && targetOrder.longitude != null) {
+          destination = LatLng(targetOrder.latitude!, targetOrder.longitude!);
+
+          // Ensure background service is configured/running if it isn't already
+          final isRunning = await _bgService.isRunning();
+          if (!isRunning) {
+            await _bgService.startService();
+          }
+
+          _bgService.invoke('updateDestination', {
+            'latitude': targetOrder.latitude,
+            'longitude': targetOrder.longitude,
+          });
+        }
+        customerPhone = targetOrder.customerNumber;
       }
 
-      print("DEBUG: Final Destination for Map: $destination (Name: $destinationName)");
-
-      if (riderPosition != null && destination != null) {
-        distanceToDestination = _calculateDistance(riderPosition!, destination!);
+      if (destination != null) {
+        if (riderPosition != null) {
+          distanceToDestination = _calculateDistance(riderPosition!, destination!);
+        }
+        await _createNavigationIcon();
+        await fetchRoute();
       }
-
-      await _createNavigationIcon();
-      await fetchRoute();
     } catch (e) {
-      print("DEBUG: ERROR during _initializeNavigation: $e");
+      debugPrint("DEBUG: ERROR during _initializeNavigation: $e");
     } finally {
-      print("DEBUG: --- END NAVIGATION INITIALIZATION ---");
       if (mounted) setState(() => isLoading = false);
     }
   }
@@ -286,13 +305,16 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
       }
     }
 
-    _trackingService.startTracking();
+    final isRunning = await _bgService.isRunning();
+    if (!isRunning) {
+      await _bgService.startService();
+    }
 
     setState(() => isStarted = true);
 
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.bestForNavigation, // Highest accuracy for moving
+        accuracy: LocationAccuracy.bestForNavigation,
         distanceFilter: 2,
       ),
     ).listen((Position position) {
@@ -411,7 +433,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
             },
             markers: markers,
             polylines: polylines,
-            myLocationEnabled: false, // Enabled myLocation to compare visual accuracy
+            myLocationEnabled: false,
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             mapToolbarEnabled: false,
@@ -488,7 +510,6 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
             ),
           ),
 
-          // Navigation Overlay (Bottom)
           Positioned(
             bottom: 0,
             left: 0,

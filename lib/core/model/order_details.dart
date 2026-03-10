@@ -1,5 +1,5 @@
-﻿import 'dart:convert';
-import 'package:urban_agent_app/core/model/service_modification.dart';
+import 'dart:convert';
+import 'service_modification.dart';
 
 class OrderDetails {
   final String? id;
@@ -621,6 +621,7 @@ class UserDetails {
   final String? dateJoined;
   final dynamic createdBy;
   final dynamic hubId;
+  final dynamic hub;
 
   UserDetails({
     this.id,
@@ -637,6 +638,7 @@ class UserDetails {
     this.isSuperuser,
     this.dateJoined,
     this.createdBy,
+    this.hub,
     this.hubId,
   });
 
@@ -657,6 +659,7 @@ class UserDetails {
       dateJoined: json['date_joined'],
       createdBy: json['created_by'],
       hubId: json['hub_id'],
+      hub: json['hub'],
     );
   }
 
@@ -676,6 +679,7 @@ class UserDetails {
       'is_superuser': isSuperuser,
       'date_joined': dateJoined,
       'created_by': createdBy,
+      'hub': hub,
       'hub_id': hubId,
     };
   }
@@ -702,6 +706,7 @@ class AgentDetails {
   final String? agentType;
   final bool? isAdminPermissionRequired;
   final dynamic hubId;
+  final dynamic hub;
   final dynamic hubName;
   final dynamic bankName;
   final dynamic accountNumber;
@@ -734,6 +739,7 @@ class AgentDetails {
     this.agentType,
     this.isAdminPermissionRequired,
     this.hubId,
+    this.hub,
     this.hubName,
     this.bankName,
     this.accountNumber,
@@ -770,6 +776,7 @@ class AgentDetails {
       agentType: json['agent_type'],
       isAdminPermissionRequired: json['is_admin_permission_required'],
       hubId: json['hub_id'],
+      hub: json['hub'],
       hubName: json['hub_name'],
       bankName: json['bank_name'],
       accountNumber: json['account_number'],
@@ -809,6 +816,7 @@ class AgentDetails {
       'agent_type': agentType,
       'is_admin_permission_required': isAdminPermissionRequired,
       'hub_id': hubId,
+      'hub': hub,
       'hub_name': hubName,
       'bank_name': bankName,
       'account_number': accountNumber,

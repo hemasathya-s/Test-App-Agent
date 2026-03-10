@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -6,10 +6,11 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:urban_agent_app/core/model/slot_availability.dart';
 import 'package:urban_agent_app/core/model/order_details.dart';
 import 'package:urban_agent_app/core/model/service_modification.dart';
-import 'package:urban_agent_app/core/theme/app_theme.dart';
-import 'package:urban_agent_app/core/services/apiservices.dart';
-import 'package:urban_agent_app/features/jobs/presentation/providers/job_provider.dart';
-import 'package:urban_agent_app/features/order/presentation/providers/order_modification_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../../core/services/apiservices.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../providers/job_provider.dart';
+import '../../../order/presentation/providers/order_modification_provider.dart';
 
 class JobDetailsScreen extends ConsumerStatefulWidget {
   final SlotAvailability? slot;
@@ -76,7 +77,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
     final timeSlot = widget.slot != null
         ? '${widget.slot?.etaStartTime ?? ""} - ${widget.slot?.etaEndTime ?? ""}'
         : (effectiveOrder?.slotTime is String ? effectiveOrder?.slotTime as String : 'Scheduled');
-    
+
     final isInstant = effectiveOrder?.isInstantSlot ?? false;
 
     // Real service modifications from API
@@ -318,7 +319,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                       ),
                     )
                   else if ((latestMod.status ?? '').toUpperCase() == 'PENDING')
-                    // Modification pending ? show waiting label, no tap
+                    // Modification pending → show waiting label, no tap
                     Container(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Row(
