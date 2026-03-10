@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../core/model/order_details.dart';
 import '../core/model/slot_availability.dart';
@@ -42,6 +43,7 @@ final router = GoRouter(
       path: '/job-details',
       builder: (context, state) {
         final extra = state.extra;
+        debugPrint('DEBUG: Navigating to /job-details with extra type: ${extra.runtimeType}');
         if (extra is SlotAvailability) {
           return JobDetailsScreen(slot: extra);
         } else if (extra is OrderDetails) {
@@ -53,17 +55,45 @@ final router = GoRouter(
     GoRoute(
       path: "/navigation",
       builder: (context, state) {
-        final order = state.extra as OrderDetails;
-
-        return NavigationScreen( order: order,);
+        final extra = state.extra;
+        debugPrint('DEBUG: Router /navigation extra type: ${extra.runtimeType}');
+        
+        if (extra is OrderDetails) {
+          debugPrint('DEBUG: Found OrderDetails in extra');
+          return NavigationScreen(order: extra);
+        } else if (extra is SlotAvailability) {
+          debugPrint('DEBUG: Found SlotAvailability in extra');
+          if (extra.orderDetails != null) {
+            debugPrint('DEBUG: Using orderDetails from slot');
+            return NavigationScreen(order: extra.orderDetails!);
+          } else {
+             debugPrint('DEBUG: SlotAvailability orderDetails is NULL');
+          }
+        } else if (extra == null) {
+          debugPrint('DEBUG: extra is NULL');
+        } else {
+          debugPrint('DEBUG: extra is of unknown type: ${extra.runtimeType}');
+        }
+        
+        return const Scaffold(
+          body: Center(child: Text("Navigation error: Order details missing")),
+        );
       },
     ),
     GoRoute(
       path: '/agent-tracking',
       builder: (context, state) {
-        final order = state.extra as OrderDetails;
+        final extra = state.extra;
+        debugPrint('DEBUG: Router /agent-tracking extra type: ${extra.runtimeType}');
 
-        return NavigationScreen( order: order,);
+        if (extra is OrderDetails) {
+          return NavigationScreen(order: extra);
+        } else if (extra is SlotAvailability && extra.orderDetails != null) {
+          return NavigationScreen(order: extra.orderDetails!);
+        }
+        return const Scaffold(
+          body: Center(child: Text("Tracking error: Order details missing")),
+        );
       },
     ),
     GoRoute(

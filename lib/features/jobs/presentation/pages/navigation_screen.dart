@@ -100,21 +100,29 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
 
       OrderDetails? targetOrder;
 
-      if (slots.isNotEmpty) {
-        final activeSlot = slots.firstWhere(
-          (s) => ['PENDING', 'ACCEPTED', 'NAVIGATING', 'ARRIVED'].contains(s.status?.toUpperCase()),
-          orElse: () => slots.first,
-        );
+// PRIORITY 1: use order passed from previous screen
+      targetOrder = widget.order;
 
-        currentOrderId = activeSlot.orderId;
-        targetOrder = activeSlot.orderDetails;
-        destinationName = activeSlot.slotName ?? "Job Location";
-      } else {
-        final activeOrders = await ApiService.agentOrder();
-        if (activeOrders != null && activeOrders.isNotEmpty) {
-          targetOrder = widget.order;
-          currentOrderId = targetOrder.id;
-          destinationName = targetOrder.address ?? "Job Location";
+      currentOrderId = targetOrder.id;
+      destinationName = targetOrder.address ?? "Job Location";
+
+// fallback if needed
+      if (targetOrder.latitude == null || targetOrder.longitude == null) {
+        debugPrint("DEBUG: Order has no lat/lng, checking slots API");
+
+        final List<SlotAvailability> slots =
+        await ApiService.getAgentSlotAvailability();
+
+        if (slots.isNotEmpty) {
+          final activeSlot = slots.firstWhere(
+                (s) => ['PENDING', 'ACCEPTED', 'NAVIGATING', 'ARRIVED']
+                .contains(s.status?.toUpperCase()),
+            orElse: () => slots.first,
+          );
+
+          targetOrder = activeSlot.orderDetails;
+          currentOrderId = activeSlot.orderId;
+          destinationName = activeSlot.slotName ?? "Job Location";
         }
       }
 

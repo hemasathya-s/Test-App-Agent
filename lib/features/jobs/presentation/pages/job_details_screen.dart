@@ -240,9 +240,21 @@ class JobDetailsScreen extends ConsumerWidget {
                 children: [
                   ElevatedButton.icon(
                     onPressed: () {
+                      debugPrint('DEBUG: Get Directions button pressed');
+                      debugPrint('DEBUG: order is null? ${order == null}');
+                      debugPrint('DEBUG: slot is null? ${slot == null}');
+                      
                       controller.startNavigation();
-                      // PASS THE ORDER/SLOT DATA HERE
-                      context.push('/navigation', extra: order ?? slot);
+                      
+                      if (order != null) {
+                        debugPrint('DEBUG: Pushing /navigation with OrderDetails. ID: ${order?.id}');
+                        context.push('/navigation', extra: order);
+                      } else if (slot != null) {
+                        debugPrint('DEBUG: Pushing /navigation with SlotAvailability. OrderID: ${slot?.orderId ?? ''}');
+                        context.push('/navigation', extra: slot);
+                      } else {
+                         debugPrint('DEBUG: ERROR - Both order and slot are NULL');
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryColor,

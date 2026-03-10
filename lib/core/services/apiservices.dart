@@ -1,6 +1,7 @@
 ﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,7 +14,7 @@ class ApiService {
   static const String baseUrl = 'https://api.itfixer199.com';
   static const String wsBaseUrl = "wss://api.itfixer199.com";
 
-  static String accessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzczMTEyODkzLCJpYXQiOjE3NzMwNTg4OTMsImp0aSI6IjMzNzBhOTIxZDM3ZDQ3NGU4NTM1YTdiZTA5MzE2ODhhIiwidXNlcl9pZCI6ImUzYWM4OTQ3LTdhYzktNDYwOS05NGVlLTczZjNjYmU4ZWM1NiJ9.hoAKhIlBgc9uoSKTrFON-inKjWAxyMOrkzDZrl6RFDE";
+  static String accessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzczMTc5MTQ3LCJpYXQiOjE3NzMxMjUxNDcsImp0aSI6IjhmZWQ0YWRkZDk0OTRiODk4MzBhNzY1ZmQzOTczZGIzIiwidXNlcl9pZCI6ImUzYWM4OTQ3LTdhYzktNDYwOS05NGVlLTczZjNjYmU4ZWM1NiJ9.djd9pcmI_FapifZ7cn4OM3h_hJDCrFBFIdggVBYHRZU";
   static String refresh = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc3MzM3NzQ3NSwiaWF0IjoxNzcyNzcyNjc1LCJqdGkiOiI0NTU0NDdlZTJmZWI0Y2M4OWZiYTU4YWEzZjYxNzQ5NiIsInVzZXJfaWQiOiJlM2FjODk0Ny03YWM5LTQ2MDktOTRlZS03M2YzY2JlOGVjNTYifQ.hsKt1SQSqlyBHaEGi0VKu57aHwtbfFunOZxs1qwMa34";
 
   /// Connects once to the order WebSocket and stays connected.
@@ -198,7 +199,6 @@ class ApiService {
       }
       return null;
     } catch (e) {
-      print("Error on agent Order $e");
       return null;
     }
   }
@@ -337,7 +337,7 @@ class ApiService {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $accessToken',
         },
-        body: jsonEncode({"status": status}),
+        body: jsonEncode({"order_status": status}),
       );
       if (response.statusCode == 200 || response.statusCode == 201) {
         return true;
@@ -348,10 +348,12 @@ class ApiService {
       return false;
     }
   }
-
   static Future<bool?> toggleActiveStatus() async {
     try {
       String url = '$baseUrl/api/user/toggle-active';
+
+      print("Calling Toggle API: $url");
+
       final response = await http.patch(
         Uri.parse(url),
         headers: {
@@ -359,13 +361,106 @@ class ApiService {
           'Authorization': 'Bearer $accessToken',
         },
       );
+
+      print("Status Code: ${response.statusCode}");
+      print("Raw Response: ${response.body}");
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data['data']['is_active'] as bool?;
+
+        bool? isActive = data['data']['is_active'];
+
+        print("Toggle Success - is_active value: $isActive");
+
+        return isActive;
+      } else {
+        print("Toggle Failed with status code: ${response.statusCode}");
       }
     } catch (e) {
       print("Error toggling active status: $e");
     }
+
     return null;
+  }
+
+  // static Future<List<LatLng>> getAgentZone() async {
+  //   try {
+  //     final url = Uri.parse("$baseUrl/api/agent-zones/agent/");
+  //
+  //     final response = await http.get(
+  //       url,
+  //       headers: {
+  //         "accept": "application/json",
+  //         "Authorization": "Bearer $accessToken",
+  //       },
+  //     );
+  //
+  //     print("ZONE API STATUS: ${response.statusCode}");
+  //     print("ZONE API BODY: ${response.body}");
+  //
+  //     if (response.statusCode == 200) {
+  //       final data = jsonDecode(response.body);
+  //
+  //       List zones = data["data"]["zone_details"];
+  //       List<LatLng> zonePoints = [];
+  //
+  //       for (var zone in zones) {
+  //         List coordinates = zone["coordinates"];
+  //
+  //         for (var point in coordinates) {
+  //           zonePoints.add(
+  //             LatLng(point["lat"], point["lng"]),
+  //           );
+  //         }
+  //       }
+  //
+  //       return zonePoints;
+  //     }
+  //   } catch (e) {
+  //     print("ZONE API ERROR: $e");
+  //   }
+  //
+  //   return [];
+  // }
+  static Future<List<Map<String, dynamic>>> getAgentZones() async {
+    try {
+      final url = Uri.parse("$baseUrl/api/agent-zones/agent/");
+      final response = await http.get(
+        url,
+        headers: {
+          "accept": "application/json",
+          "Authorization": "Bearer $accessToken",
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        List zones = data["data"]["zone_details"] ?? [];
+
+        return zones.map((zone) {
+          List coords = zone["coordinates"] ?? [];
+          List<LatLng> points = [];
+
+          for (var p in coords) {
+            double? lat = (p["lat"] ?? p["latitude"])?.toDouble();
+            double? lng = (p["lng"] ?? p["longitude"])?.toDouble();
+
+            // Filter out 0,0 points which cause "too long lines"
+            if (lat != null && lng != null && (lat != 0 || lng != 0)) {
+               // Verify order in console: If lines still stretch, try swapping to LatLng(lng, lat)
+               points.add(LatLng(lat, lng));
+            }
+          }
+
+          return {
+            "name": zone["name"] ?? "Unnamed Zone",
+            "points": points,
+          };
+        }).toList();
+      }
+    } catch (e) {
+      log("ZONE API ERROR: $e");
+    }
+    return [];
   }
 }

@@ -26,7 +26,7 @@ class DashboardShell extends ConsumerWidget {
         children: [
           const HomeTab(),
           const SlotManagementScreen(),
-          const LiveMapScreen(),
+          const MyZonePage(),
           const InventoryScreen(),
         ],
       ),
