@@ -24,7 +24,6 @@ import '../model/slot_availability.dart';
 class ApiService {
 
   static String baseUrl = 'https://api.itfixer199.com';
-
   static Future<String?> _getAccessToken() async {
     return await ApiService.getAccessToken();
   }
@@ -467,6 +466,17 @@ class ApiService {
   Stream<Map<String, dynamic>> get toolMovementStream =>
       _toolWsController.stream;
 
+  // ── Request WebSocket ───────────────────────────────────────────────────────
+  WebSocketChannel? _requestWsChannel;
+  StreamSubscription? _requestWsSubscription;
+  bool _requestWsIsConnecting = false;
+  bool _requestWsManualDisconnect = false;
+  int _requestWsReconnectAttempts = 0;
+  final StreamController<Map<String, dynamic>> _requestWsController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  Stream<Map<String, dynamic>> get requestStream => _requestWsController.stream;
+
   bool _isDisposed = false;
 
   Future<void> connectMovementWebSocket() async {
@@ -759,7 +769,7 @@ class ApiService {
       ).timeout(const Duration(seconds: 15));
 
       print('📲 [VerifyOtp] Status Code  : ${response.statusCode}');
-      print('📲 [VerifyOtp] Raw Response : ${response.body}');
+      print('FULL RESPONSE: ${response.body}');
 
       final json = jsonDecode(response.body) as Map<String, dynamic>;
 
@@ -2020,5 +2030,127 @@ class ApiService {
       print('❌ Get Slots Error: $e');
       return AgentApiResult.failure('Error: $e');
     }
+  }
+
+  Future<void> connectRequestWebSocket({
+    String? startDate,
+    String? endDate,
+    int? page,
+    int? size,
+  }) async {
+    if (_requestWsIsConnecting) return;
+    _requestWsIsConnecting = true;
+    _requestWsManualDisconnect = false;
+
+    try {
+      final token = await ApiService.getAccessToken();
+      if (token == null) {
+        print('❌ Request WebSocket: No access token');
+        _requestWsIsConnecting = false;
+        return;
+      }
+
+      final wsBase = baseUrl
+          .replaceFirst('https://', 'wss://')
+          .replaceFirst('http://', 'ws://');
+      
+      final queryParams = <String, String>{
+        'token': token,
+        if (startDate != null) 'start_date': startDate,
+        if (endDate != null) 'end_date': endDate,
+        if (page != null) 'page': page.toString(),
+        if (size != null) 'size': size.toString(),
+      };
+
+      final uri = Uri.parse('$wsBase/ws/requests/').replace(queryParameters: queryParams);
+      print('📡 Request WS Connecting: $uri');
+      
+      _requestWsChannel = WebSocketChannel.connect(uri);
+      _requestWsSubscription = _requestWsChannel!.stream.listen(
+        (msg) {
+          _requestWsReconnectAttempts = 0;
+          _requestWsIsConnecting = false;
+          if (_isDisposed) return;
+          print('📦 Request WS Message: $msg');
+          print('📢 Request WS Response Body: $msg');
+          try {
+            if (!_requestWsController.isClosed) {
+              _requestWsController.add(jsonDecode(msg));
+            }
+          } catch (e) {
+            print('❌ Request WS parse error: $e');
+          }
+        },
+        onError: (e) {
+          _requestWsIsConnecting = false;
+          print('❌ Request WS error: $e');
+          if (!_requestWsManualDisconnect) {
+            _requestWsReconnect(startDate: startDate, endDate: endDate, page: page, size: size);
+          }
+        },
+        onDone: () {
+          _requestWsIsConnecting = false;
+          print('🔌 Request WS closed');
+          if (!_requestWsManualDisconnect) {
+            _requestWsReconnect(startDate: startDate, endDate: endDate, page: page, size: size);
+          }
+        },
+      );
+    } catch (e) {
+      _requestWsIsConnecting = false;
+      print('❌ Request WS connect error: $e');
+      if (!_requestWsManualDisconnect) {
+        _requestWsReconnect(startDate: startDate, endDate: endDate, page: page, size: size);
+      }
+    }
+  }
+
+  void _requestWsReconnect({
+    String? startDate,
+    String? endDate,
+    int? page,
+    int? size,
+  }) {
+    if (_isDisposed || _requestWsManualDisconnect) return;
+    _requestWsReconnectAttempts++;
+    final delay = Duration(seconds: (2 * _requestWsReconnectAttempts).clamp(5, 30));
+    print('🔄 Request WS reconnect in ${delay.inSeconds}s (attempt $_requestWsReconnectAttempts)...');
+    Future.delayed(delay, () {
+      if (!_requestWsIsConnecting && !_isDisposed && !_requestWsManualDisconnect) {
+        connectRequestWebSocket(
+          startDate: startDate,
+          endDate: endDate,
+          page: page,
+          size: size,
+        );
+      }
+    });
+  }
+
+  void updateRequestFilters({
+    String? startDate,
+    String? endDate,
+    int? page,
+    int? size,
+  }) {
+    if (_requestWsChannel == null) return;
+    
+    final filterMessage = {
+      if (startDate != null) 'start_date': startDate,
+      if (endDate != null) 'end_date': endDate,
+      if (page != null) 'page': page,
+      if (size != null) 'size': size,
+    };
+    
+    print('📤 Sending Request filter update: $filterMessage');
+    _requestWsChannel!.sink.add(jsonEncode(filterMessage));
+  }
+
+  void disconnectRequestWebSocket() {
+    _requestWsManualDisconnect = true;
+    _requestWsSubscription?.cancel();
+    _requestWsSubscription = null;
+    _requestWsChannel?.sink.close();
+    _requestWsChannel = null;
   }
 }

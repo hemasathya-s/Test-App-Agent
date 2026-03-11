@@ -5,6 +5,7 @@ import '../features/auth/presentation/pages/splash_screen.dart';
 import '../features/auth/presentation/pages/login_screen.dart';
 import '../features/auth/presentation/pages/permissions_screen.dart';
 import '../features/auth/presentation/pages/kyc_status_screen.dart';
+import '../features/auth/presentation/pages/CreateAgent.dart';
 import '../features/dashboard/presentation/pages/AgentProfilePage.dart';
 import '../features/dashboard/presentation/pages/AgentEditProfilePage.dart';
 import '../Model/AgentProfileResponse.dart';
@@ -29,6 +30,13 @@ final router = GoRouter(
     GoRoute(
       path: '/permissions',
       builder: (context, state) => const PermissionsScreen(),
+    ),
+    GoRoute(
+      path: '/register',
+      builder: (context, state) {
+        final mobileNumber = state.extra as String?;
+        return AgentRegistrationPage(mobileNumber: mobileNumber);
+      },
     ),
     GoRoute(path: '/kyc', builder: (context, state) => const KycStatusScreen()),
     GoRoute(path: '/home', builder: (context, state) => const DashboardShell()),

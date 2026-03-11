@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/services/apiservices.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/services/RequestWebSocketService.dart';
 
 class RequestTrackingScreen extends StatefulWidget {
   const RequestTrackingScreen({super.key});
@@ -15,7 +15,7 @@ class RequestTrackingScreen extends StatefulWidget {
 }
 
 class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
-  final RequestWebSocketService _wsService = RequestWebSocketService();
+  final ApiService _apiService = ApiService();
   List<dynamic> _requests = [];
   bool _isLoading = true;
   String? _error;
@@ -31,9 +31,9 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
 
   void _connectWebSocket() {
     final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
-    _wsService.connect(date: dateStr);
+    _apiService.connectRequestWebSocket(startDate: dateStr, endDate: dateStr);
     
-    _subscription = _wsService.messageStream.listen((data) {
+    _subscription = _apiService.requestStream.listen((data) {
       debugPrint('📩 RequestTrackingScreen received: ${jsonEncode(data)}');
       if (mounted) {
         setState(() {
@@ -81,7 +81,7 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
   @override
   void dispose() {
     _subscription?.cancel();
-    _wsService.dispose();
+    _apiService.disconnectRequestWebSocket();
     super.dispose();
   }
 
@@ -97,7 +97,7 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
         _selectedDate = picked;
         _isLoading = true;
       });
-      _wsService.disconnect();
+      _apiService.disconnectRequestWebSocket();
       _connectWebSocket();
     }
   }
@@ -107,6 +107,7 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
     return Scaffold(
       backgroundColor: AppTheme.surfaceColor,
       appBar: AppBar(
+        scrolledUnderElevation:0,
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
@@ -158,8 +159,8 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
                 : _requests.isEmpty
                     ? _buildEmptyState()
                     : RefreshIndicator(
-                        onRefresh: () async {
-                          _wsService.disconnect();
+                    onRefresh: () async {
+                          _apiService.disconnectRequestWebSocket();
                           _connectWebSocket();
                         },
                         child: ListView.builder(
