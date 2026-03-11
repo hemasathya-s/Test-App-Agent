@@ -5,11 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/apiservices.dart';
-import '../../../orders/presentation/pages/orders_history_screen.dart';
 import '../providers/dashboard_provider.dart';
 import '../widgets/sos_bottom_sheet.dart';
-import 'agent_verification_screen.dart';
-import '../../../../core/model/slot_availability.dart';
 import '../../../../core/model/order_details.dart';
 
 class HomeTab extends ConsumerStatefulWidget {

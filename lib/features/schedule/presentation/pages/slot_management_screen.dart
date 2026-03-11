@@ -5,15 +5,19 @@ import 'package:urban_agent_app/core/services/apiservices.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../jobs/presentation/pages/job_details_screen.dart';
 
-class SlotManagementScreen extends StatefulWidget {
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/schedule_refresh_provider.dart';
+
+class SlotManagementScreen extends ConsumerStatefulWidget {
   const SlotManagementScreen({super.key});
 
   @override
-  State<SlotManagementScreen> createState() => _SlotManagementScreenState();
+  ConsumerState<SlotManagementScreen> createState() => _SlotManagementScreenState();
 }
 
-class _SlotManagementScreenState extends State<SlotManagementScreen> {
+class _SlotManagementScreenState extends ConsumerState<SlotManagementScreen> {
   late Future<List<SlotAvailability>> _slotsFuture;
+
   DateTime _selectedDate = DateTime.now();
 
   @override
@@ -21,6 +25,8 @@ class _SlotManagementScreenState extends State<SlotManagementScreen> {
     super.initState();
     _loadSlots();
   }
+
+
 
   void _loadSlots() {
     // Format date as YYYY-MM-DD
@@ -75,6 +81,12 @@ class _SlotManagementScreenState extends State<SlotManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(scheduleRefreshProvider, (previous, next) {
+      if (next > 0) {
+        _refreshSlots();
+      }
+    });
+
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(

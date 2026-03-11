@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -35,14 +36,14 @@ class ApiService {
   static const String baseUrl = 'https://api.itfixer199.com';
   static const String wsBaseUrl = "wss://api.itfixer199.com";
 
-  static String accessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzczMTc5MTQ3LCJpYXQiOjE3NzMxMjUxNDcsImp0aSI6IjhmZWQ0YWRkZDk0OTRiODk4MzBhNzY1ZmQzOTczZGIzIiwidXNlcl9pZCI6ImUzYWM4OTQ3LTdhYzktNDYwOS05NGVlLTczZjNjYmU4ZWM1NiJ9.djd9pcmI_FapifZ7cn4OM3h_hJDCrFBFIdggVBYHRZU";
-  static String refresh = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc3MzM3NzQ3NSwiaWF0IjoxNzcyNzcyNjc1LCJqdGkiOiI0NTU0NDdlZTJmZWI0Y2M4OWZiYTU4YWEzZjYxNzQ5NiIsInVzZXJfaWQiOiJlM2FjODk0Ny03YWM5LTQ2MDktOTRlZS03M2YzY2JlOGVjNTYifQ.hsKt1SQSqlyBHaEGi0VKu57aHwtbfFunOZxs1qwMa34";
+  // static String accessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzczMTc5MTQ3LCJpYXQiOjE3NzMxMjUxNDcsImp0aSI6IjhmZWQ0YWRkZDk0OTRiODk4MzBhNzY1ZmQzOTczZGIzIiwidXNlcl9pZCI6ImUzYWM4OTQ3LTdhYzktNDYwOS05NGVlLTczZjNjYmU4ZWM1NiJ9.djd9pcmI_FapifZ7cn4OM3h_hJDCrFBFIdggVBYHRZU";
+  // static String refresh = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc3MzM3NzQ3NSwiaWF0IjoxNzcyNzcyNjc1LCJqdGkiOiI0NTU0NDdlZTJmZWI0Y2M4OWZiYTU4YWEzZjYxNzQ5NiIsInVzZXJfaWQiOiJlM2FjODk0Ny03YWM5LTQ2MDktOTRlZS03M2YzY2JlOGVjNTYifQ.hsKt1SQSqlyBHaEGi0VKu57aHwtbfFunOZxs1qwMa34";
 
   /// Connects once to the order WebSocket and stays connected.
   /// - Emits [true]  when service_modifications[].status == APPROVED or APPLIED
   /// - Emits [false] when service_modifications[].status == REJECTED or DECLINED
   /// - Emits nothing while status == PENDING (stream stays open)
-  static Stream<bool> orderUpdatedStream(String orderId) {
+  static Stream<bool> orderUpdatedStream(String orderId){
     final controller = StreamController<bool>();
     WebSocketChannel? channel;
     StreamSubscription? sub;
@@ -58,6 +59,9 @@ class ApiService {
     }
 
     try {
+      final userId =  getUserId();
+      final accessToken =  _getAccessToken();
+
       final wsUrl = "$wsBaseUrl/ws/order/$orderId/?accessToken=$accessToken";
       print("WS CONNECTING → $wsUrl");
       channel = WebSocketChannel.connect(Uri.parse(wsUrl));
@@ -117,6 +121,9 @@ class ApiService {
     StreamSubscription? subscription;
 
     try {
+      final userId =  getUserId();
+      final accessToken =  _getAccessToken();
+
       final wsUrl = "$wsBaseUrl/ws/api/tracking/log/?accessToken=$accessToken";
       print("[TRACKING] CONNECTING → $wsUrl");
       channel = WebSocketChannel.connect(Uri.parse(wsUrl));
@@ -242,7 +249,7 @@ class ApiService {
         await AuthResponse.clearTokens();
         return [];
       }
-     
+
       String url = "$baseUrl/api/order/agent-orders/?is_active=true";
 
       final response = await http.get(
@@ -588,7 +595,7 @@ class ApiService {
         await AuthResponse.clearTokens();
         return false;
       }
-      
+
       if (accessToken == null) throw Exception('No access accessToken');
       String url = '$baseUrl/api/order/orders/$orderId/update-status/';
 
@@ -654,7 +661,56 @@ class ApiService {
 
     return null;
   }
+  static Future<void> addFcmToken() async {
+    print("🔔 [addFcmToken] Starting token registration...");
+    try {
+      final token = await _getAccessToken();
+      if (token == null || token.isEmpty) {
+        print("🔔 [addFcmToken] Access token is NULL or EMPTY. User might not be logged in.");
+        return;
+      }
+      print("🔔 [addFcmToken] Getting FCM token...");
+      String? fcmToken;
+      try {
+        fcmToken = await FirebaseMessaging.instance.getToken();
+        print("🔔 [addFcmToken] FCM Token received: $fcmToken");
+      } catch (e) {
+        print("🔔 [addFcmToken] Error getting FCM token from Firebase: $e");
+        return;
+      }
 
+      if (fcmToken == null || fcmToken.isEmpty) {
+        print("🔔 [addFcmToken] FCM token is null/empty. skipping registration.");
+        return;
+      }
+
+      String url = '$baseUrl/api/notifications/register-fcm/';
+      print("🔔 [addFcmToken] Sending to API: $url");
+
+      final response = await http.post(
+          Uri.parse(url),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            "fcm_token": fcmToken,
+          })
+      );
+
+      print("🔔 [addFcmToken] API Response Status: ${response.statusCode}");
+      print("🔔 [addFcmToken] API Response Body: ${response.body}");
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        print("🔔 [addFcmToken] Successfully registered token on server.");
+      } else {
+        print("🔔 [addFcmToken] Server rejected token registration.");
+      }
+    } catch (e, stack) {
+      print("🔔 [addFcmToken] EXCEPTION: $e");
+      print("🔔 [addFcmToken] STACKTRACE: $stack");
+    }
+  }
   // static Future<List<LatLng>> getAgentZone() async {
   //   try {
   //     final url = Uri.parse("$baseUrl/api/agent-zones/agent/");
@@ -696,6 +752,9 @@ class ApiService {
   // }
   static Future<List<Map<String, dynamic>>> getAgentZones() async {
     try {
+      final userId = await getUserId();
+      final accessToken = await _getAccessToken();
+
       final url = Uri.parse("$baseUrl/api/agent-zones/agent/");
       final response = await http.get(
         url,
@@ -967,7 +1026,7 @@ class ApiService {
   // Helper: Get access accessToken
   static Future<String?> _getAccessToken() async {
     final prefs = await SharedPreferences.getInstance();
-    final accessToken = prefs.getString('access_accessToken');
+    final accessToken = prefs.getString('access_token');
     print('?? Getting Access Token: $accessToken');
     return accessToken;
   }
@@ -975,7 +1034,7 @@ class ApiService {
   // Helper: Get refresh accessToken
   static Future<String?> _getRefreshToken() async {
     final prefs = await SharedPreferences.getInstance();
-    final accessToken = prefs.getString('refresh_accessToken');
+    final accessToken = prefs.getString('refresh_token');
     print('?? Getting Refresh Token: $accessToken');
     return accessToken;
   }
@@ -996,7 +1055,7 @@ class ApiService {
 
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/api/accessToken/refresh/'),
+        Uri.parse('$baseUrl/api/token/refresh/'),
         headers: {
           'Content-Type': 'application/json',
         },
@@ -1012,12 +1071,12 @@ class ApiService {
         final jsonData = jsonDecode(response.body);
         final prefs = await SharedPreferences.getInstance();
 
-        await prefs.setString('access_accessToken', jsonData['access']);
+        await prefs.setString('access_token', jsonData['access']);
         print('? New Access Token Saved: ${jsonData['access']}');
 
         if (jsonData['refresh'] != null) {
-          await prefs.setString('refresh_accessToken', jsonData['refresh']);
-          print('? New Refresh Token Saved: ${jsonData['refresh']}');
+          await prefs.setString('refresh_token', jsonData['refresh']);
+          print('✅ New Refresh Token Saved: ${jsonData['refresh']}');
         }
 
         return true;
@@ -1031,6 +1090,9 @@ class ApiService {
       return false;
     }
   }
+
+  /// Public wrapper around [_refreshAccessToken] for use in UI layers.
+  static Future<bool> refreshToken() => _refreshAccessToken();
 
   static Future<http.Response> _authorizedRequest(
       Future<http.Response> Function(String accessToken) request,
@@ -1099,8 +1161,8 @@ class ApiService {
       final String? storeUrl = appSettings.data.playStoreUrl;
 
       return {
-        'minBuild': serverMinBuild,
-        'storeUrl': storeUrl,
+        'app_version': serverMinBuild,
+        'play_store_url': storeUrl,
       };
     } catch (e) {
       //print("❌ Error fetching version info: $e");
@@ -1145,7 +1207,7 @@ class ApiService {
         _wsIsConnecting = false;
         return;
       }
-      final uri = Uri.parse('$_wsUrl?accessToken=$accessToken');
+      final uri = Uri.parse('$_wsUrl?token=$accessToken');
       print('📡 WS Connecting: $uri');
       _wsChannel = WebSocketChannel.connect(uri);
       _wsSubscription = _wsChannel!.stream.listen(
@@ -1203,7 +1265,7 @@ class ApiService {
         return;
       }
 
-      final uri = Uri.parse('$_toolWsUrl?accessToken=$accessToken');
+      final uri = Uri.parse('$_toolWsUrl?token=$accessToken');
       print('📡 Tool WS Connecting to: $uri');
 
       _toolWsChannel = WebSocketChannel.connect(uri);
@@ -1394,7 +1456,7 @@ class ApiService {
     }
   }
 
-  // ── VERIFY OTP ────────────────────────────────────────────────────────────
+// ── VERIFY OTP ────────────────────────────────────────────────────────────
   Future<ApiResponse<VerifyOtpResponse>> verifyOtp({
     required String mobileNumber,
     required String otp,
@@ -1434,30 +1496,30 @@ class ApiService {
         print('📲 [VerifyOtp] Top-level keys:');
         json.forEach((k, v) => print('   "$k" → ${v.runtimeType} = $v'));
 
-        // ── Try to locate user/accessToken data at any nesting level ───────────
-        // Pattern A: { "user": {...}, "accessTokens": {...} }  ← direct
-        // Pattern B: { "data": { "user": {...}, "accessTokens": {...} } }
+        // ── Try to locate user/token data at any nesting level ───────────
+        // Pattern A: { "user": {...}, "tokens": {...} }  ← direct
+        // Pattern B: { "data": { "user": {...}, "tokens": {...} } }
         // Pattern C: { "access": "...", "refresh": "..." , "user": {...} }
 
         Map<String, dynamic>? userMap;
-        Map<String, dynamic>? accessTokensMap;
+        Map<String, dynamic>? tokensMap;
 
-        if (json.containsKey('accessTokens') && json['accessTokens'] is Map) {
+        if (json.containsKey('tokens') && json['tokens'] is Map) {
           // Pattern A
-          accessTokensMap = Map<String, dynamic>.from(json['accessTokens'] as Map);
+          tokensMap = Map<String, dynamic>.from(json['tokens'] as Map);
         } else if (json.containsKey('access') && json.containsKey('refresh')) {
-          // Pattern C — accessTokens are flat at root
-          accessTokensMap = {
+          // Pattern C — tokens are flat at root
+          tokensMap = {
             'access': json['access'],
             'refresh': json['refresh'],
           };
         } else if (json.containsKey('data') && json['data'] is Map) {
           // Pattern B — nested under 'data'
           final data = Map<String, dynamic>.from(json['data'] as Map);
-          if (data.containsKey('accessTokens') && data['accessTokens'] is Map) {
-            accessTokensMap = Map<String, dynamic>.from(data['accessTokens'] as Map);
+          if (data.containsKey('tokens') && data['tokens'] is Map) {
+            tokensMap = Map<String, dynamic>.from(data['tokens'] as Map);
           } else if (data.containsKey('access')) {
-            accessTokensMap = {'access': data['access'], 'refresh': data['refresh']};
+            tokensMap = {'access': data['access'], 'refresh': data['refresh']};
           }
           if (data.containsKey('user') && data['user'] is Map) {
             userMap = Map<String, dynamic>.from(data['user'] as Map);
@@ -1469,24 +1531,24 @@ class ApiService {
           userMap = Map<String, dynamic>.from(json['user'] as Map);
         }
 
-        print('📲 [VerifyOtp] Resolved accessTokensMap : $accessTokensMap');
+        print('📲 [VerifyOtp] Resolved tokensMap : $tokensMap');
         print('📲 [VerifyOtp] Resolved userMap   : $userMap');
 
-        if (accessTokensMap != null) {
-          final accessTokens = OtpTokens.fromJson(accessTokensMap);
+        if (tokensMap != null) {
+          final tokens = OtpTokens.fromJson(tokensMap);
           final user = userMap != null ? OtpUser.fromJson(userMap) : null;
 
           final verifyResponse = VerifyOtpResponse(
             success: true,
             message: json['message']?.toString() ?? 'Login successful',
             user: user,
-            tokens: accessTokens,
+            tokens: tokens,
           );
 
           // Save to SharedPreferences
           final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('access_accessToken', accessTokens.access);
-          await prefs.setString('refresh_accessToken', accessTokens.refresh);
+          await prefs.setString('access_token', tokens.access);
+          await prefs.setString('refresh_token', tokens.refresh);
 
           if (user != null) {
             await prefs.setString('user_id', user.id);
@@ -1501,12 +1563,12 @@ class ApiService {
 
           print('✅ [VerifyOtp] Success — user: ${user?.name}, role: ${user
               ?.role}');
-          print('✅ [VerifyOtp] access_accessToken saved: ${accessTokens.access}');
+          print('✅ [VerifyOtp] access_token saved: ${tokens.access}');
           return ApiResponse(isSuccess: true, data: verifyResponse);
         }
 
         // Still null after all patterns — full dump for diagnosis
-        print('⚠️ [VerifyOtp] Could not resolve accessTokens from 200 response.');
+        print('⚠️ [VerifyOtp] Could not resolve tokens from 200 response.');
         print('⚠️ [VerifyOtp] Full JSON dump: $json');
         return ApiResponse(isSuccess: false, error: 'Failed to parse response');
       }
@@ -1883,7 +1945,7 @@ class ApiService {
   // Helper: Get access accessToken
   static Future<String?> getAccessToken() async {
     final prefs = await SharedPreferences.getInstance();
-    final accessToken = prefs.getString('access_accessToken');
+    final accessToken = prefs.getString('access_token');
     print('🔎 Getting Access Token: $accessToken');
     return accessToken;
   }

@@ -201,16 +201,22 @@ class _MyAppState extends State<MyApp> {
       final current = int.tryParse(packageInfo.buildNumber) ?? 0;
 
       final versionInfo = await ApiService.fetchVersionInfo();
-      final serverMin = versionInfo['minBuild'] as int;
-      final storeUrl = versionInfo['storeUrl'] as String? ?? '';
+      final dynamic rawVersion = versionInfo['app_version'];
+      final storeUrl = versionInfo['play_store_url'] as String? ?? '';
 
       if (!mounted) return;
 
       setState(() {
         _currentBuildNumber = current;
-        _requiredBuildNumber = serverMin;
+        if (rawVersion is int) {
+          _requiredBuildNumber = rawVersion;
+        } else if (rawVersion is String) {
+          _requiredBuildNumber = int.tryParse(rawVersion);
+        } else {
+          _requiredBuildNumber = 0;
+        }
         _storeUrl = storeUrl;
-        _updateRequired = current < serverMin;
+        _updateRequired = current < (_requiredBuildNumber ?? 0);
         _versionChecked = true;
       });
 

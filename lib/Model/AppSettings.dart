@@ -29,8 +29,9 @@ class AppSettingsData {
 
   factory AppSettingsData.fromJson(Map<String, dynamic> json) {
     return AppSettingsData(
-      appVersion: json['app_version'] ?? 0,
-      playStoreUrl: json['play_store_url'],
+      // Parsing app_version as int. It might be a string in the JSON "0"
+      appVersion: int.tryParse(json['partner_app_version'].toString()) ?? 0,
+      playStoreUrl: json['partner_app_play_store_url'],
     );
   }
 }

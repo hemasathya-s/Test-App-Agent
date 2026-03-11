@@ -31,17 +31,17 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       final prefs = await SharedPreferences.getInstance();
       final accessToken = prefs.getString('access_token');
 
-      print('ðŸ”Ž Splash check - Access Token: $accessToken');
+      print('Splash check - Access Token: $accessToken');
 
       if (accessToken != null && accessToken.isNotEmpty) {
-        print('âœ… Token found, navigating to Home');
+        print('Token found, navigating to Home');
         context.go('/home');
       } else {
-        print('âŒ No token found, navigating to Login');
+        print('No token found, navigating to Login');
         context.go('/login');
       }
     } catch (e) {
-      print('âš ï¸ Error checking auth: $e');
+      print('Error checking auth: $e');
       context.go('/login');
     }
   }

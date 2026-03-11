@@ -46,14 +46,14 @@ class TrackingService {
   /// injecting port :0 for an unknown scheme (wss has no default in Dart).
   Uri _buildWsUri() {
     final base = ApiService.wsBaseUrl.replaceAll(RegExp(r'/$'), '');
-    final token = ApiService.accessToken.trim();
+    final token = ApiService.getAccessToken();
     return Uri.parse('$base/ws/api/tracking/log/?token=$token');
   }
 
   /// CONNECT WEBSOCKET
   void _connectWebSocket() {
     if (_channel != null ||
-        ApiService.accessToken.isEmpty ||
+        ApiService.getAccessToken() == null ||
         !_isOnline ||
         _isConnecting) return;
 
