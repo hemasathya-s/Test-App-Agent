@@ -2,14 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/apiservices.dart';
-import '../../../orders/presentation/pages/orders_history_screen.dart';
 import '../providers/dashboard_provider.dart';
 import '../widgets/sos_bottom_sheet.dart';
-import 'agent_verification_screen.dart';
-import '../../../../core/model/slot_availability.dart';
 import '../../../../core/model/order_details.dart';
 
 class HomeTab extends ConsumerWidget {
@@ -19,6 +15,13 @@ class HomeTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(dashboardProvider);
     final controller = ref.read(dashboardProvider.notifier);
+
+    // Show permission dialog when missing
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (state.showPermissionDialog) {
+        _showPermissionDialog(context, ref);
+      }
+    });
 
     return SafeArea(
       child: RefreshIndicator(
@@ -32,7 +35,7 @@ class HomeTab extends ConsumerWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               // Left: Toggle
-              _buildAvailabilityToggle(state, controller, context),
+              _buildAvailabilityToggle(state, controller, context, ref),
               // Right: SOS, Notification, Profile
               Row(
                 children: [
@@ -226,6 +229,88 @@ class HomeTab extends ConsumerWidget {
     );
   }
 
+  void _showPermissionDialog(BuildContext context, WidgetRef ref) {
+    final state = ref.read(dashboardProvider);
+    final controller = ref.read(dashboardProvider.notifier);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Permissions Needed',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'To receive new jobs and track your location, please enable:',
+              style: GoogleFonts.outfit(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 16),
+            ...state.missingPermissions.map((p) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryColor.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          p == 'Location' ? Icons.location_on : Icons.notifications_active,
+                          size: 18,
+                          color: AppTheme.primaryColor,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        p,
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              controller.dismissPermissionDialog();
+              Navigator.pop(ctx);
+            },
+            child: Text(
+              'Later',
+              style: GoogleFonts.outfit(color: AppTheme.textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              controller.requestPermissions();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
+            child: Text(
+              'Allow Now',
+              style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHeaderIcon(IconData icon) {
     return Container(
       width: 42,
@@ -269,15 +354,16 @@ class HomeTab extends ConsumerWidget {
     DashboardState state,
     DashboardController controller,
     BuildContext context,
+    WidgetRef ref,
   ) {
     return GestureDetector(
       onTap: () async {
         if (!state.isAvailable) {
-          // GOING ONLINE — toggle local state immediately so the button responds
-          // even if the API is slow or the token is expired.
+          // GOING ONLINE
           await controller.toggleAvailability(true);
-          // Notify backend in the background (fire-and-forget).
-          ApiService.toggleActiveStatus();
+          if (ref.read(dashboardProvider).isAvailable) {
+            ApiService.toggleActiveStatus();
+          }
         } else {
           // GOING OFFLINE — show confirmation dialog first
           final shouldTurnOff = await showDialog<bool>(
@@ -316,7 +402,6 @@ class HomeTab extends ConsumerWidget {
           );
 
           if (shouldTurnOff == true) {
-            // Toggle local state immediately, then notify backend.
             await controller.toggleAvailability(false);
             ApiService.toggleActiveStatus();
           }

@@ -20,7 +20,7 @@ class DashboardShell extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppTheme.surfaceColor,
-      drawer: const AppDrawer(),
+      // drawer: const AppDrawer(),
       body: IndexedStack(
         index: state.currentTabIndex,
         children: [

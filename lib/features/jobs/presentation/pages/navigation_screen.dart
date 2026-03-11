@@ -47,6 +47,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
 
   bool isLoading = true;
   bool isStarted = false;
+  String currentStatus = 'PENDING';
 
   String eta = "Calculating...";
   String distanceText = "--";
@@ -73,7 +74,6 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
     setState(() => isLoading = true);
 
     try {
-      // 1. Request essential permissions for navigation
       final status = await [
         Permission.location,
         Permission.notification,
@@ -96,53 +96,31 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
       );
       riderPosition = LatLng(position.latitude, position.longitude);
 
-      final List<SlotAvailability> slots = await ApiService.getAgentSlotAvailability();
-
-      OrderDetails? targetOrder;
-
-// PRIORITY 1: use order passed from previous screen
-      targetOrder = widget.order;
-
+      final targetOrder = widget.order;
       currentOrderId = targetOrder.id;
       destinationName = targetOrder.address ?? "Job Location";
-
-// fallback if needed
-      if (targetOrder.latitude == null || targetOrder.longitude == null) {
-        debugPrint("DEBUG: Order has no lat/lng, checking slots API");
-
-        final List<SlotAvailability> slots =
-        await ApiService.getAgentSlotAvailability();
-
-        if (slots.isNotEmpty) {
-          final activeSlot = slots.firstWhere(
-                (s) => ['PENDING', 'ACCEPTED', 'NAVIGATING', 'ARRIVED']
-                .contains(s.status?.toUpperCase()),
-            orElse: () => slots.first,
-          );
-
-          targetOrder = activeSlot.orderDetails;
-          currentOrderId = activeSlot.orderId;
-          destinationName = activeSlot.slotName ?? "Job Location";
-        }
+      currentStatus = targetOrder.orderStatus?.toUpperCase() ?? 'PENDING';
+      
+      // If we are already in transit or progress, start tracking immediately
+      if (currentStatus == 'IN_TRANSIT' || currentStatus == 'IN_PROGRESS') {
+        isStarted = true;
+        _listenToPosition();
       }
 
-      if (targetOrder != null) {
-        if (targetOrder.latitude != null && targetOrder.longitude != null) {
-          destination = LatLng(targetOrder.latitude!, targetOrder.longitude!);
-          
-          // Ensure background service is configured/running if it isn't already
-          final isRunning = await _bgService.isRunning();
-          if (!isRunning) {
-            await _bgService.startService();
-          }
-
-          _bgService.invoke('updateDestination', {
-            'latitude': targetOrder.latitude,
-            'longitude': targetOrder.longitude,
-          });
+      if (targetOrder.latitude != null && targetOrder.longitude != null) {
+        destination = LatLng(targetOrder.latitude!, targetOrder.longitude!);
+        
+        final isRunning = await _bgService.isRunning();
+        if (!isRunning) {
+          await _bgService.startService();
         }
-        customerPhone = targetOrder.customerNumber;
+
+        _bgService.invoke('updateDestination', {
+          'latitude': targetOrder.latitude,
+          'longitude': targetOrder.longitude,
+        });
       }
+      customerPhone = targetOrder.customerNumber;
 
       if (destination != null) {
         if (riderPosition != null) {
@@ -289,21 +267,29 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
     }
   }
 
-  void _startTracking() async {
-    if (isStarted) return;
-
-    if (currentOrderId != null) {
-      final success = await ApiService.updateJobStatus(currentOrderId!, 'NAVIGATING');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(success ? "Status updated: NAVIGATING" : "Failed to update status"),
-            backgroundColor: success ? Colors.green : Colors.red,
-            duration: const Duration(seconds: 1),
-          ),
-        );
+  Future<void> _updateStatus(String status) async {
+    if (currentOrderId == null) return;
+    
+    final success = await ApiService.updateJobStatus(currentOrderId!, status);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? "Status updated: $status" : "Failed to update status"),
+          backgroundColor: success ? Colors.green : Colors.red,
+          duration: const Duration(seconds: 1),
+        ),
+      );
+      if (success) {
+        setState(() {
+          currentStatus = status;
+        });
       }
     }
+  }
+
+  void _startTracking() async {
+    if (isStarted) return;
+    await _updateStatus('IN_TRANSIT');
 
     final isRunning = await _bgService.isRunning();
     if (!isRunning) {
@@ -311,7 +297,11 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
     }
 
     setState(() => isStarted = true);
+    _listenToPosition();
+  }
 
+  void _listenToPosition() {
+    _positionStream?.cancel();
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.bestForNavigation,
@@ -566,53 +556,71 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
                     ],
                   ),
                   const SizedBox(height: 25),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 55,
-                    child: ElevatedButton(
-                      onPressed: !isStarted
-                          ? _startTracking
-                          : (isNearDestination
-                          ? () async {
-                        if (currentOrderId != null) {
-                          final success = await ApiService.updateJobStatus(currentOrderId!, 'ARRIVED');
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(success ? "Status updated: ARRIVED" : "Failed to update status"),
-                                backgroundColor: success ? Colors.green : Colors.red,
-                                duration: const Duration(seconds: 1),
-                              ),
-                            );
-                            if (success) {
-                              jobController.arriveAtLocation();
-                              context.pop();
-                            }
-                          }
-                        }
-                      }
-                          : null),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: !isStarted
-                            ? AppTheme.primaryColor
-                            : (isNearDestination ? Colors.green : Colors.grey[400]),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
+                  
+                  // DYNAMIC BUTTON LOGIC BASED ON STATUS
+                  if (currentStatus != 'IN_TRANSIT' && currentStatus != 'IN_PROGRESS')
+                    SizedBox(
+                      width: double.infinity,
+                      height: 55,
+                      child: ElevatedButton(
+                        onPressed: _startTracking,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                         ),
-                        elevation: 0,
+                        child: Text(
+                          "START NAVIGATION",
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
                       ),
-                      child: Text(
-                        !isStarted
-                            ? "START NAVIGATION"
-                            : (isNearDestination ? "ARRIVED AT LOCATION" : "NAVIGATING..."),
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                    )
+                  else if (currentStatus == 'IN_TRANSIT')
+                    SizedBox(
+                      width: double.infinity,
+                      height: 55,
+                      child: ElevatedButton(
+                        onPressed: isNearDestination ? () => _updateStatus('IN_PROGRESS') : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isNearDestination ? Colors.blue : Colors.grey[400],
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        ),
+                        child: Text(
+                          isNearDestination ? "ARRIVED / START JOB" : "MOVING TO LOCATION...",
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    )
+                  else if (currentStatus == 'IN_PROGRESS')
+                    SizedBox(
+                      width: double.infinity,
+                      height: 55,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          jobController.arriveAtLocation(); // Updates internal provider state if needed
+                          context.push('/checklist', extra: widget.order);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        ),
+                        child: Text(
+                          "COMPLETE CHECKLIST",
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),

@@ -85,7 +85,7 @@ final router = GoRouter(
       builder: (context, state) {
         final extra = state.extra;
         debugPrint('DEBUG: Router /agent-tracking extra type: ${extra.runtimeType}');
-
+        
         if (extra is OrderDetails) {
           return NavigationScreen(order: extra);
         } else if (extra is SlotAvailability && extra.orderDetails != null) {
@@ -98,7 +98,10 @@ final router = GoRouter(
     ),
     GoRoute(
       path: '/checklist',
-      builder: (context, state) => const ServiceChecklistScreen(),
+      builder: (context, state) {
+        final order = state.extra as OrderDetails;
+        return ServiceChecklistScreen(order: order);
+      },
     ),
     GoRoute(
       path: '/modify-order',

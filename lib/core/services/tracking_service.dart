@@ -183,16 +183,33 @@ class TrackingService {
         return;
       }
 
+      // Helper to ensure values fit in backend DecimalField(max_digits=5, decimal_places=2)
+      // and satisfies "no more than 3 digits before the decimal point" (max_whole_digits=3)
+      String formatForBackend(double value) {
+        double absValue = value.abs();
+        if (absValue >= 1000) {
+          // Cap at 999.99 to satisfy max_whole_digits=3 and max_digits=5
+          return "999.99";
+        } else if (absValue >= 100) {
+          // e.g. 123.45 -> satisfies max_whole_digits=3 and max_digits=5
+          return value.toStringAsFixed(2);
+        } else {
+          // e.g. 12.34
+          return value.toStringAsFixed(2);
+        }
+      }
+
       final Map<String, dynamic> data = {
         "latitude": position.latitude.toString(),
         "longitude": position.longitude.toString(),
-        "accuracy": position.accuracy.toStringAsFixed(2),
-        "speed": position.speed.toStringAsFixed(2),
-        "heading": position.heading.toStringAsFixed(2),
+        "accuracy": formatForBackend(position.accuracy),
+        "speed": formatForBackend(position.speed),
+        "heading": formatForBackend(position.heading),
         "battery_level": 100,
         "is_mock_location": position.isMocked,
       };
-      print ("latitude: ${position.latitude.toString()}longitude: ${position.longitude.toString()},accuracy: ${position.accuracy.toStringAsFixed(2)},speed: ${position.speed.toStringAsFixed(2)},heading: ${position.heading.toStringAsFixed(2)},battery_level: 100,is_mock_location: ${position.isMocked},");
+      
+      debugPrint ("latitude: ${position.latitude} longitude: ${position.longitude}, accuracy: ${data['accuracy']}, speed: ${data['speed']}, heading: ${data['heading']}");
 
       if (_destLat != null && _destLng != null) {
         data["destination_latitude"] = _destLat.toString();

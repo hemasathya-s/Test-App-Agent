@@ -13,9 +13,12 @@ Future<void> initializeBackgroundService() async {
       autoStart: false,
       isForegroundMode: true,           // Survives app swipe-up on Android
       notificationChannelId: "tracking_channel",
-      initialNotificationTitle: "Agent Online",
-      initialNotificationContent: "Sending location every 60 seconds",
+      initialNotificationTitle: "IT-fixer199 Partner",
+      initialNotificationContent: "Actively sharing location for new jobs.",
       foregroundServiceNotificationId: 100,
+      // Required for Android 14+ to specify the type of foreground service.
+      // Note: Use 'foregroundServiceTypes' (plural) as per the library definition.
+      foregroundServiceTypes: [AndroidForegroundType.location],
     ),
     iosConfiguration: IosConfiguration(
       autoStart: false,
