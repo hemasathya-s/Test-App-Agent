@@ -91,6 +91,8 @@ class DashboardController extends Notifier<DashboardState> {
     List<String> missing = [];
     if (!await Permission.location.isGranted) missing.add("Location");
     if (!await Permission.notification.isGranted) missing.add("Notification");
+    // Check battery optimization status
+    if (!await Permission.ignoreBatteryOptimizations.isGranted) missing.add("Battery Optimization");
 
     if (missing.isNotEmpty) {
       state = state.copyWith(
@@ -133,22 +135,24 @@ class DashboardController extends Notifier<DashboardState> {
     // 1. Clear current dialog state to prevent rebuild loops
     state = state.copyWith(showPermissionDialog: false);
 
-    // 2. Request basic permissions first (Foreground location + Notifications)
-    final statuses = await [
+    // 2. Request basic permissions first
+    await [
       Permission.location,
       Permission.notification,
     ].request();
 
-    // 3. For background tracking, we also need locationAlways
-    // Note: locationAlways usually needs to be requested separately after location is granted
-    if (statuses[Permission.location]?.isGranted ?? false) {
+    // 3. Request background location
+    if (await Permission.location.isGranted) {
       await Permission.locationAlways.request();
     }
 
-    // 4. Re-check status and decide whether to show dialog again
+    // 4. Request battery optimization exemption
+    await Permission.ignoreBatteryOptimizations.request();
+
+    // 5. Re-check status
     await _checkPermissions();
     
-    // If everything is granted, try to go online automatically if they were in the middle of it
+    // If essential tracking permissions are granted, try to go online
     final hasLocation = await Permission.location.isGranted;
     final hasNotification = await Permission.notification.isGranted;
     if (hasLocation && hasNotification) {

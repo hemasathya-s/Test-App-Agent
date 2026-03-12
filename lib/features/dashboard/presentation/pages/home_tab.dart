@@ -247,7 +247,7 @@ class HomeTab extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'To receive new jobs and track your location, please enable:',
+              'To receive new jobs and track your location properly, please enable:',
               style: GoogleFonts.outfit(color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 16),
@@ -262,17 +262,33 @@ class HomeTab extends ConsumerWidget {
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          p == 'Location' ? Icons.location_on : Icons.notifications_active,
+                          p == 'Location' 
+                            ? Icons.location_on 
+                            : p == 'Notification' 
+                              ? Icons.notifications_active 
+                              : Icons.battery_saver,
                           size: 18,
                           color: AppTheme.primaryColor,
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Text(
-                        p,
-                        style: GoogleFonts.outfit(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              p,
+                              style: GoogleFonts.outfit(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                              ),
+                            ),
+                            if (p == 'Battery Optimization')
+                              Text(
+                                'Allows the app to run smoothly when the screen is off.',
+                                style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey),
+                              ),
+                          ],
                         ),
                       ),
                     ],
