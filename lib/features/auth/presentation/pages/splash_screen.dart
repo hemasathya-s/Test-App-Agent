@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -49,47 +51,117 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.surfaceColor,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+      backgroundColor: Colors.white,
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.white,
+              AppTheme.surfaceColor,
+            ],
+          ),
+        ),
+        child: Stack(
           children: [
-            // Logo Placeholder
-            Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                color: AppTheme.primaryColor.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.work_outline_rounded,
-                size: 60,
-                color: AppTheme.primaryColor,
+            Center(
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0.0, end: 1.0),
+                duration: const Duration(milliseconds: 1000),
+                builder: (context, value, child) {
+                  return Opacity(
+                    opacity: value,
+                    child: Transform.translate(
+                      offset: Offset(0, 20 * (1 - value)),
+                      child: child,
+                    ),
+                  );
+                },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Logo with subtle shadow
+                    Container(
+                      width: 140,
+                      height: 140,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.primaryColor.withOpacity(0.1),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.all(20),
+                      child: Image.asset(
+                        'assets/logo2.png',
+                        fit: ContentType.parse('image/png').toString() == 'image/png' ? BoxFit.contain : BoxFit.contain,
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    Text(
+                      'IT Fixer Agent',
+                      style: GoogleFonts.outfit(
+                        fontSize: 36,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Professional Home Services',
+                      style: GoogleFonts.outfit(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.textSecondary,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 24),
-            Text(
-              'UC Agent',
-              style: GoogleFonts.outfit(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textPrimary,
+            // Bottom Loading Indicator
+            Positioned(
+              bottom: 60,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.primaryColor,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Text(
+                    //   'Ready to Serve',
+                    //   style: GoogleFonts.outfit(
+                    //     fontSize: 12,
+                    //     color: AppTheme.textSecondary.withOpacity(0.6),
+                    //     fontWeight: FontWeight.w500,
+                    //   ),
+                    // ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Empowering Professionals',
-              style: GoogleFonts.outfit(
-                fontSize: 16,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 48),
-            const CircularProgressIndicator(color: AppTheme.primaryColor),
           ],
         ),
       ),
     );
   }
 }
+
