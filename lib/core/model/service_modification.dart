@@ -1,4 +1,4 @@
-// Model for service_modifications entries in the order API response
+﻿// Model for service_modifications entries in the order API response
 class ServiceModification {
   final String? id;
   final String? orderId;

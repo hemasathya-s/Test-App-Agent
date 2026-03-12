@@ -1,4 +1,4 @@
-class LoginRequestModel {
+﻿class LoginRequestModel {
   final String loginType; // 'PASSWORD' | 'OTP'
   final String role;
   final String? username;

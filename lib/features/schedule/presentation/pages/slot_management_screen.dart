@@ -351,7 +351,7 @@ class _SlotManagementScreenState extends State<SlotManagementScreen> {
                                           borderRadius: BorderRadius.circular(10),
                                         ),
                                         child: Text(
-                                          slot.status ?? 'N/A',
+                                          slot.orderDetails?.orderStatus ?? 'N/A',  //order status
                                           style: GoogleFonts.outfit(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,

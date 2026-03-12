@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:urban_agent_app/main.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -85,6 +87,24 @@ class _ApprovalWaitingScreenState extends ConsumerState<ApprovalWaitingScreen> {
   void _onStatusReceived(bool approved) async {
     debugPrint('Status received — approved: $approved');
     _wsSub?.cancel();
+
+    // Trigger local notification
+    await flutterLocalNotificationsPlugin.show(
+      DateTime.now().millisecond,
+      approved ? 'Order Modification Approved!' : 'Order Modification Declined',
+      approved
+          ? 'The customer has agreed to your changes. You can now proceed.'
+          : 'The customer has declined your changes.',
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'modification_alert_channel',
+          'Modification Alerts',
+          importance: Importance.max,
+          priority: Priority.high,
+          playSound: true,
+        ),
+      ),
+    );
 
     final orderId = widget.orderId;
 

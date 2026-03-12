@@ -5,7 +5,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/apiservices.dart';
-import '../../../../core/services/tracking_service.dart';
 import '../../../orders/presentation/pages/orders_history_screen.dart';
 import '../providers/dashboard_provider.dart';
 import '../widgets/sos_bottom_sheet.dart';
@@ -13,11 +12,23 @@ import 'agent_verification_screen.dart';
 import '../../../../core/model/slot_availability.dart';
 import '../../../../core/model/order_details.dart';
 
-class HomeTab extends ConsumerWidget {
+class HomeTab extends ConsumerStatefulWidget {
   const HomeTab({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeTab> createState() => _HomeTabState();
+}
+
+class _HomeTabState extends ConsumerState<HomeTab> {
+  @override
+  void initState() {
+    super.initState();
+    // Initial data load
+    Future.microtask(() => ref.read(dashboardProvider.notifier).fetchUpcomingJobs());
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(dashboardProvider);
     final controller = ref.read(dashboardProvider.notifier);
 
@@ -225,7 +236,7 @@ class HomeTab extends ConsumerWidget {
               ),
             )
           else
-            ...state.upcomingOrders.map((order) => _buildJobCard(order, context, ref)),
+              ...state.upcomingOrders.map((order) => _buildJobCard(order, context, ref, state.isAvailable)),
         ],
       ),
     ),
@@ -279,14 +290,13 @@ class HomeTab extends ConsumerWidget {
     return GestureDetector(
       onTap: () async {
         if (!state.isAvailable) {
-          // GOING ONLINE logic
-          final isNowActive = await ApiService.toggleActiveStatus();
-          if (isNowActive != null) {
-            controller.toggleAvailability(isNowActive);
-            TrackingService().setOnlineStatus(isNowActive);
-          }
+          // GOING ONLINE — toggle local state immediately so the button responds
+          // even if the API is slow or the token is expired.
+          await controller.toggleAvailability(true);
+          // Notify backend in the background (fire-and-forget).
+          ApiService.toggleActiveStatus();
         } else {
-          // GOING OFFLINE logic - show dialog first
+          // GOING OFFLINE — show confirmation dialog first
           final shouldTurnOff = await showDialog<bool>(
             context: context,
             builder: (ctx) => AlertDialog(
@@ -323,11 +333,9 @@ class HomeTab extends ConsumerWidget {
           );
 
           if (shouldTurnOff == true) {
-            final isNowActive = await ApiService.toggleActiveStatus();
-            if (isNowActive != null) {
-              controller.toggleAvailability(isNowActive);
-              TrackingService().setOnlineStatus(isNowActive);
-            }
+            // Toggle local state immediately, then notify backend.
+            await controller.toggleAvailability(false);
+            ApiService.toggleActiveStatus();
           }
         }
       },
@@ -386,11 +394,13 @@ class HomeTab extends ConsumerWidget {
     );
   }
 
-  Widget _buildJobCard(
+  Widget   _buildJobCard(
     OrderDetails order,
     BuildContext context,
     WidgetRef ref,
+    bool isAgentOnline,
   ) {
+    print("Home Page Order Details $order");
     final title = (order.items != null && order.items!.isNotEmpty)
         ? (order.items!.first.itemDetails?.name ?? 'Unnamed Order')
         : 'Unnamed Order';
@@ -512,28 +522,32 @@ class HomeTab extends ConsumerWidget {
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () =>
-                        _showAcceptBottomSheet(context, ref, order),
+                    onPressed: isAgentOnline ? () =>
+                        _showAcceptBottomSheet(context, order):null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryColor,
+                      disabledBackgroundColor: Colors.grey.shade300,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     child: Text(
                       'Accept',
-                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.bold,
+                        color: isAgentOnline ? Colors.white : Colors.grey.shade500,
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () {
+                    onPressed: isAgentOnline ? () {
                       if (order.id != null) {
-                        _showRejectBottomSheet(context, ref, order.id!);
+                        _showRejectBottomSheet(context, order.id!);
                       }
-                    },
+                    } : null,
                     style: OutlinedButton.styleFrom(
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
@@ -594,6 +608,18 @@ class HomeTab extends ConsumerWidget {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () {
+                      // context.push(
+                      //   '/agent-tracking',
+                      //   extra: {
+                      //     'destination': LatLng(
+                      //       order.latitude??0,
+                      //       order.longitude??0,
+                      //     ),
+                      //     'customerName': order.customerName ?? 'Customer',
+                      //     'customerPhone': order.customerNumber ?? '',
+                      //     'orderId': order.id ?? '',
+                      //   },
+                      // );
                       context.push(
                         '/agent-tracking',
                         extra: {
@@ -638,7 +664,7 @@ class HomeTab extends ConsumerWidget {
   }
 
   void _showAcceptBottomSheet(
-      BuildContext context, WidgetRef ref, OrderDetails order) {
+      BuildContext context, OrderDetails order) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -729,7 +755,7 @@ class HomeTab extends ConsumerWidget {
                       onPressed: () {
                         Navigator.pop(context);
                         if (order.id != null) {
-                          _showRejectBottomSheet(context, ref, order.id!);
+                          _showRejectBottomSheet(context, order.id!);
                         }
                       },
                       style: OutlinedButton.styleFrom(
@@ -821,7 +847,7 @@ class HomeTab extends ConsumerWidget {
   }
 
   void _showRejectBottomSheet(
-      BuildContext context, WidgetRef ref, String orderId) {
+      BuildContext context, String orderId) {
     final controller = TextEditingController();
     final formKey = GlobalKey<FormState>();
     final isReasonValid = ValueNotifier<bool>(false);

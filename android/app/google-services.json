@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "241815715034",
+    "project_id": "it-fixer-flutter-mobile",
+    "storage_bucket": "it-fixer-flutter-mobile.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:241815715034:android:18e8d02cbeb024531a39e3",
+        "android_client_info": {
+          "package_name": "Agent.itfixer199.in"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyByc-PCHUlkbYXJAXT1bojfvsrWTaSiSD0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:241815715034:android:fcfe4860c00bce911a39e3",
+        "android_client_info": {
+          "package_name": "in.itfixer199.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyByc-PCHUlkbYXJAXT1bojfvsrWTaSiSD0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

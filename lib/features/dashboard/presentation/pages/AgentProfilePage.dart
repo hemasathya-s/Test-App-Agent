@@ -32,7 +32,6 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
       _agentData = null; // Clear old data while loading
     });
 
-    final api = ApiService();
     final token = await ApiService.getAccessToken();
     if (token == null) {
       print("❌ AgentProfilePage: No token found. Redirecting to login...");
@@ -42,7 +41,7 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
       return;
     }
 
-    final result = await api.getAgentProfile();
+    final result = await ApiService.getAgentProfile();
 
     if (mounted) {
       if (result.isSuccess && result.data != null) {

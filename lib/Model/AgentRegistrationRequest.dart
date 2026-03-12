@@ -1,7 +1,7 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// ── Request Model ─────────────────────────────────────────────────────────────
+// ────────────────── Request Model ────────────────────────────────────────────────
 class AgentRegistrationRequest {
   final String name;
   final String email;
@@ -85,7 +85,7 @@ class AgentRegistrationRequest {
   }
 }
 
-// ── Response Models ───────────────────────────────────────────────────────────
+// ────────────────── Response Models ───────────────────────────────────────────────
 
 class AgentRegistrationResponse {
   final AgentUser user;
@@ -207,7 +207,7 @@ class AgentTokens {
   }
 }
 
-// ── Generic API Result wrapper ────────────────────────────────────────────────
+// ────────────────── Generic API Result wrapper ────────────────────────────────────
 class AgentApiResult<T> {
   final bool isSuccess;
   final T? data;

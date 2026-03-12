@@ -36,39 +36,57 @@ class SlotAvailability {
   });
 
   factory SlotAvailability.fromJson(Map<String, dynamic> json) {
-    String? getStringId(dynamic value) {
-      if (value is String) return value;
+    // Helper to extract ID from potentially nested objects
+    String? extractId(dynamic value) {
+      if (value == null) return null;
       if (value is Map) return value['id']?.toString();
-      return value?.toString();
+      return value.toString();
     }
 
-    String? getName(dynamic value) {
-      if (value is Map) return value['name']?.toString() ?? value['zone_name']?.toString();
-      return null;
-    }
+    // Agent info
+    final agentData = json['agent'];
+    final agentName = (agentData is Map)
+        ? agentData['user_name']?.toString()
+        : json['agent_user_name']?.toString();
+
+    // Slot info
+    final slotData = json['slot'];
+    final slotName = (slotData is Map)
+        ? slotData['name']?.toString()
+        : json['slot_name']?.toString();
+
+    // Zone info
+    final zoneData = json['zone'];
+    final zoneName = (zoneData is Map)
+        ? zoneData['name']?.toString()
+        : ((slotData is Map)
+            ? slotData['zone_name']?.toString()
+            : json['zone_name']?.toString());
 
     return SlotAvailability(
-      id: json['id']?.toString(),
-      agent: getStringId(json['agent']),
-      agentUserName: json['agent_user_name']?.toString(),
-      slot: getStringId(json['slot']) ?? json['id']?.toString(),
-      slotName: json['slot_name']?.toString() ?? getName(json['slot']) ?? json['slot']?.toString(),
-      zone: getStringId(json['zone']),
-      zoneName: json['zone_name']?.toString() ?? getName(json['zone']) ?? json['zone']?.toString(),
-      orderId: json['order_id']?.toString(),
+      id: extractId(json['id']),
+      agent: extractId(agentData),
+      agentUserName: agentName,
+      slot: extractId(slotData),
+      slotName: slotName,
+      zone: extractId(zoneData),
+      zoneName: zoneName,
+      orderId: extractId(json['order_id']),
       date: json['date']?.toString(),
       orderDetails: json['order_details'] != null
           ? OrderDetails.fromJson(json['order_details'])
-          : null,
-      etaStartTime: json['eta_start_time']?.toString() ?? 
-                    json['start_time']?.toString() ??
-                    (json['slot'] is Map ? json['slot']['start_time']?.toString() : null),
-      etaEndTime: json['eta_end_time']?.toString() ?? 
-                  json['end_time']?.toString() ??
-                  (json['slot'] is Map ? json['slot']['end_time']?.toString() : null),
+          : (json['order_id'] is Map
+              ? OrderDetails.fromJson(json['order_id'] as Map<String, dynamic>)
+              : null),
+      etaStartTime: json['eta_start_time']?.toString(),
+      etaEndTime: json['eta_end_time']?.toString(),
       status: json['status']?.toString(),
-      createdAt: json['created_at'] != null ? DateTime.tryParse(json['created_at'].toString()) : null,
-      updatedAt: json['updated_at'] != null ? DateTime.tryParse(json['updated_at'].toString()) : null,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'].toString())
+          : null,
+      updatedAt: json['updated_at'] != null
+          ? DateTime.tryParse(json['updated_at'].toString())
+          : null,
     );
   }
 

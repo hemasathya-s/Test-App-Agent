@@ -1,126 +1,171 @@
+import 'dart:convert';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:urban_agent_app/features/dashboard/presentation/pages/AgentProfilePage.dart';
-import 'config/router.dart' as app_router;
+import 'package:urban_agent_app/config/router.dart' as app_router;
+import 'package:urban_agent_app/core/services/apiservices.dart';
 import 'core/theme/app_theme.dart';
-import 'features/auth/presentation/pages/kyc_status_screen.dart';
-import 'features/auth/presentation/pages/login_screen.dart';
-import 'features/auth/presentation/pages/permissions_screen.dart';
-import 'features/auth/presentation/pages/splash_screen.dart';
-import 'features/dashboard/presentation/pages/dashboard_shell.dart';
-import 'features/jobs/presentation/pages/job_details_screen.dart';
-import 'features/jobs/presentation/pages/navigation_screen.dart';
-import 'features/jobs/presentation/pages/new_job_request_screen.dart';
-import 'features/jobs/presentation/pages/service_checklist_screen.dart';
-import 'features/map/presentation/pages/service_area_screen.dart';
-import 'features/order/presentation/pages/approval_waiting_screen.dart';
-import 'features/order/presentation/pages/modification_summary_screen.dart';
-import 'features/order/presentation/pages/modify_order_screen.dart';
-import 'features/order/presentation/pages/request_tracking_screen.dart';
-import 'features/orders/presentation/pages/orders_history_screen.dart';
-import 'features/auth/presentation/pages/CreateAgent.dart';
+import 'firebase_options.dart';
 
-/*void main() {
-  runApp(
-    const ProviderScope(
-      child: MyApp(),
-    ),
+
+FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+Future<void> initializeNotifications() async {
+  print("🔔 [main] Initializing Local Notifications...");
+
+  const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    'modification_alert_channel',
+    'Modification Alerts',
+    description: 'Used for service modification notifications',
+    importance: Importance.max,
+    playSound: true,
+    sound: RawResourceAndroidNotificationSound('new_order'),
+  );
+
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
+
+  const AndroidInitializationSettings initializationSettingsAndroid =
+  AndroidInitializationSettings('@mipmap/ic_launcher');
+
+  const InitializationSettings initializationSettings =
+  InitializationSettings(android: initializationSettingsAndroid);
+
+  await flutterLocalNotificationsPlugin.initialize(
+    initializationSettings,
+    onDidReceiveNotificationResponse: (details) {
+      print("🔔 [main] Notification tapped. Payload: ${details.payload}");
+      if (details.payload != null) {
+        try {
+          final Map<String, dynamic> data = jsonDecode(details.payload!);
+          // Navigate to Home with full data from payload
+          navigatorKey.currentState?.pushNamedAndRemoveUntil(
+            '/Home',
+                (route) => false,
+            arguments: data,
+          );
+        } catch (e) {
+          print("❌ [main] Error decoding notification payload: $e");
+        }
+      }
+    },
   );
 }
 
-final _router = GoRouter(
-  initialLocation: '/',
-  routes: [
-    GoRoute(path: '/', builder: (context, state) => const SplashScreen()),
-    GoRoute(
-      path: '/login',
-      builder: (context, state) {
-        final mobileNumber = state.extra as String?;
-        return LoginPage(initialMobileNumber: mobileNumber);
-      },
-    ),
-    GoRoute(
-      path: '/permissions',
-      builder: (context, state) => const PermissionsScreen(),
-    ),
-    GoRoute(
-      path: '/register',
-      builder: (context, state) {
-        final mobileNumber = state.extra as String?;
-        return AgentRegistrationPage(mobileNumber: mobileNumber);
-      },
-    ),
-    GoRoute(path: '/kyc', builder: (context, state) => const KycStatusScreen()),
-    GoRoute(path: '/home', builder: (context, state) => const DashboardShell()),
-    GoRoute(
-      path: '/service-area',
-      builder: (context, state) => const ServiceAreaScreen(),
-    ),
-    GoRoute(
-      path: '/job-request',
-      builder: (context, state) => const NewJobRequestScreen(),
-    ),
-    GoRoute(
-      path: '/job-details',
-      builder: (context, state) => const JobDetailsScreen(),
-    ),
-    GoRoute(
-      path: '/navigation',
-      builder: (context, state) => const NavigationScreen(),
-    ),
-    GoRoute(
-      path: '/agent-tracking',
-      builder: (context, state) => const NavigationScreen(),
-    ),
-    GoRoute(
-      path: '/checklist',
-      builder: (context, state) => const ServiceChecklistScreen(),
-    ),
-    GoRoute(
-      path: '/modify-order',
-      builder: (context, state) => const ModifyOrderScreen(),
-    ),
-    GoRoute(
-      path: '/modification-summary',
-      builder: (context, state) => const ModificationSummaryScreen(),
-    ),
-    GoRoute(
-      path: '/request-tracking',
-      builder: (context, state) => const RequestTrackingScreen(),
-    ),
-    GoRoute(
-      path: '/approval-waiting',
-      builder: (context, state) => const ApprovalWaitingScreen(),
-    ),
-    GoRoute(
-      path: '/orders',
-      builder: (context, state) => const OrdersHistoryScreen(),
-    ),
-    GoRoute(
-      path: '/profile',
-      builder: (context, state) => const AgentProfilePage(),
-    ),
-  ],
-);
+bool _isAlarmNotification(RemoteMessage message) {
+  final data = message.data;
+  // This logic MUST match MyFirebaseMessagingService.kt shouldTriggerAlarm criteria
+  return data['playSound']?.toString().toLowerCase() == 'true' ||
+      data['type']?.toString().toLowerCase() == 'modification' ||
+      data.containsKey('modification_id');
+}
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  print("🔔 [main] Received BACKGROUND message: ${message.messageId}");
+  print("🔔 [main] Full Message Data: ${message.data}");
+  if (message.notification != null) {
+    print("🔔 [main] Notification Title: ${message.notification?.title}");
+    print("🔔 [main] Notification Body: ${message.notification?.body}");
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'UC Agent',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      routerConfig: _router,
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await initializeNotifications();
+
+  // 🔔 Reliability Fix: Skip Flutter local notification if Native AlarmService is triggered
+  if (_isAlarmNotification(message)) {
+    print("🔔 [main] Native AlarmService will handle this. Skipping Flutter local notification.");
+    return;
+  }
+
+  String? title = message.notification?.title ?? message.data['title'];
+  String? body  = message.notification?.body  ?? message.data['body'];
+
+  if (title != null) {
+    await flutterLocalNotificationsPlugin.show(
+      0,
+      title,
+      body ?? '',
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          'modification_alert_channel',
+          'Modification Alerts',
+          importance: Importance.max,
+          priority: Priority.high,
+          playSound: true,
+          sound: const RawResourceAndroidNotificationSound('new_order'),
+        ),
+      ),
+      payload: jsonEncode({
+        'title': title,
+        'body': body ?? '',
+        'modification_id': message.data['modification_id'] ?? '',
+      }),
     );
   }
-}*/
+}
 
+void main()async{
+  WidgetsFlutterBinding.ensureInitialized();
 
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
-void main() {
+  await initializeNotifications();
+
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    print('🔔 [main] Received FOREGROUND message');
+    print('🔔 [main] Full Message Data: ${message.data}');
+    if (message.notification != null) {
+      print('🔔 [main] Notification Title: ${message.notification?.title}');
+      print('🔔 [main] Notification Body: ${message.notification?.body}');
+    }
+
+    // 🔔 Reliability Fix: Skip Flutter local notification if Native AlarmService is triggered
+    if (_isAlarmNotification(message)) {
+      print("🔔 [main] Native AlarmService will handle this. Skipping Flutter local notification.");
+      return;
+    }
+
+    String? title = message.notification?.title ?? message.data['title'];
+    String? body  = message.notification?.body  ?? message.data['body'];
+
+    if (title != null) {
+      flutterLocalNotificationsPlugin.show(
+        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        title,
+        body,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            'modification_alert_channel',
+            'Modification Alerts',
+            importance: Importance.max,
+            priority: Priority.high,
+            playSound: true,
+            sound: const RawResourceAndroidNotificationSound('new_order'),
+          ),
+        ),
+        payload: jsonEncode({
+          'title': title,
+          'body': body ?? '',
+          'modification_id': message.data['modification_id'] ?? '',
+          'order_id': message.data['order_id'] ?? '',
+          'type': message.data['type'] ?? '',
+        }),
+      );
+    } else {
+      print('⚠️ [main] Foreground message received but has no title. Notification not shown.');
+    }
+  });
+
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   runApp(
     const ProviderScope(
       child: MyApp(),
@@ -128,13 +173,73 @@ void main() {
   );
 }
 
-class MyApp extends StatelessWidget {
+
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  bool _versionChecked = false;
+  bool _updateRequired = false;
+  int? _currentBuildNumber;
+  int? _requiredBuildNumber;
+  String _storeUrl = '';
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkVersion();
+  }
+
+  Future<void> _checkVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final current = int.tryParse(packageInfo.buildNumber) ?? 0;
+
+      final versionInfo = await ApiService.fetchVersionInfo();
+      final serverMin = versionInfo['minBuild'] as int;
+      final storeUrl = versionInfo['storeUrl'] as String? ?? '';
+
+      if (!mounted) return;
+
+      setState(() {
+        _currentBuildNumber = current;
+        _requiredBuildNumber = serverMin;
+        _storeUrl = storeUrl;
+        _updateRequired = current < serverMin;
+        _versionChecked = true;
+      });
+
+      if (_updateRequired) {
+        // We use a small delay to ensure the router is ready
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            app_router.router.go('/force-update', extra: {
+              'currentBuild': _currentBuildNumber,
+              'requiredBuild': _requiredBuildNumber,
+              'storeUrl': _storeUrl,
+            });
+          }
+        });
+      }
+    } catch (e) {
+      print("❌ [main] Version check failed: $e");
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = 'Unable to check app version.\nPlease check your internet.';
+        _versionChecked = true;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'UC Agent',
+      title: 'IT Fixer Partner',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       routerConfig: app_router.router,

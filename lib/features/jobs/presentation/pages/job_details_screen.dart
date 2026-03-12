@@ -6,38 +6,84 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:urban_agent_app/core/model/slot_availability.dart';
 import 'package:urban_agent_app/core/model/order_details.dart';
 import 'package:urban_agent_app/core/model/service_modification.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../../core/services/apiservices.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../providers/job_provider.dart';
 import '../../../order/presentation/providers/order_modification_provider.dart';
 
-class JobDetailsScreen extends ConsumerWidget {
+class JobDetailsScreen extends ConsumerStatefulWidget {
   final SlotAvailability? slot;
   final OrderDetails? order;
 
   const JobDetailsScreen({super.key, this.slot, this.order});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final controller = ref.read(jobProvider.notifier);
-    final effectiveOrder = order ?? slot?.orderDetails;
+  ConsumerState<JobDetailsScreen> createState() => _JobDetailsScreenState();
+}
 
+class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
+  OrderDetails? _fetchedOrder;
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFullDetails();
+  }
+
+  Future<void> _loadFullDetails() async {
+    final orderId = widget.order?.id ?? widget.slot?.orderId;
+    if (orderId == null) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final fullOrder = await ApiService.getOrderbyId(orderId);
+      if (mounted) {
+        setState(() {
+          _fetchedOrder = fullOrder;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = "Failed to load order details: $e";
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = ref.read(jobProvider.notifier);
+    final effectiveOrder = _fetchedOrder ?? widget.order ?? widget.slot?.orderDetails;
     final customerName = effectiveOrder?.customerName ?? 'Unknown Customer';
     final customerEmail = effectiveOrder?.userDetails?.email ?? '';
     final customerMobile = effectiveOrder?.customerNumber ?? '';
-    final orderId = effectiveOrder?.id ?? slot?.orderId ?? 'N/A';
+    final orderId = effectiveOrder?.id ?? widget.slot?.orderId ?? 'N/A';
     final address = effectiveOrder?.address ?? 'No address provided';
     final items = effectiveOrder?.items ?? [];
     final totalPrice = effectiveOrder?.totalPrice ?? '0.00';
 
     // Use fields from OrderDetails/FullDetails if possible, else fallback to slot
-    final date = slot?.date ?? (effectiveOrder?.createdAt?.split('T')[0]) ?? 'N/A';
-    final timeSlot = slot != null
-        ? '${slot?.etaStartTime ?? ""} - ${slot?.etaEndTime ?? ""}'
-        : 'Scheduled';
+    final date = widget.slot?.date ?? (effectiveOrder?.createdAt?.split('T')[0]) ?? 'N/A';
+    final timeSlot = widget.slot != null
+        ? '${widget.slot?.etaStartTime ?? ""} - ${widget.slot?.etaEndTime ?? ""}'
+        : (effectiveOrder?.slotTime is String ? effectiveOrder?.slotTime as String : 'Scheduled');
+
+    final isInstant = effectiveOrder?.isInstantSlot ?? false;
+
     // Real service modifications from API
     final serviceModifications = effectiveOrder?.serviceModifications ?? [];
 
@@ -45,13 +91,282 @@ class JobDetailsScreen extends ConsumerWidget {
     final latestMod = serviceModifications.isNotEmpty ? serviceModifications.last : null;
 
     // Legacy mock — kept so provider-based pending button still works
-    final modificationState = ref.watch(orderModificationProvider);
-    final latestModification = modificationState.requestHistory.isNotEmpty
-        ? modificationState.requestHistory.firstWhere(
-            (req) => req.orderId == 'ORD-123',
-            orElse: () => RequestRecord(id: '', orderId: '', type: '', status: '', time: '', items: '', note: ''),
-          )
-        : null;
+    // final modificationState = ref.watch(orderModificationProvider);
+    // final latestModification = modificationState.requestHistory.isNotEmpty
+    //     ? modificationState.requestHistory.firstWhere(
+    //         (req) => req.orderId == 'ORD-123',
+    //         orElse: () => RequestRecord(id: '', orderId: '', type: '', status: '', time: '', items: '', note: ''),
+    //       )
+    //     : null;
+
+    // Define the body separately to avoid nested ternary type issues
+    Widget body;
+    if (_isLoading) {
+      body = const Center(child: CircularProgressIndicator());
+    } else if (_errorMessage != null) {
+      body = Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _loadFullDetails,
+              child: const Text("Retry"),
+            ),
+          ],
+        ),
+      );
+    } else {
+      body = Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  // Customer Card
+                  Container(
+                    color: Colors.white,
+                    padding: const EdgeInsets.all(24),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 60,
+                          height: 60,
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor.withOpacity(0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.person_rounded,
+                            size: 36,
+                            color: AppTheme.primaryColor,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                customerName,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                customerEmail,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 14,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(
+                                Icons.phone,
+                                color: AppTheme.successColor,
+                              ),
+                              onPressed: () => _makePhoneCall(customerMobile),
+                            ),
+                            // IconButton(
+                            //   icon: const Icon(
+                            //     Icons.message,
+                            //     color: AppTheme.primaryColor,
+                            //   ),
+                            //   onPressed: () => _sendSMS(customerMobile),
+                            // ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Job Info List
+                  ListView(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      // ?? Real Modification Request Section (from API data)
+                      if (latestMod != null) ...[
+                        _buildSectionHeader('Modification Request'),
+                        _buildServiceModificationCard(context, latestMod),
+                        const SizedBox(height: 24),
+                      ]
+                      // else if (latestModification != null && latestModification.id.isNotEmpty) ...[
+                      //   _buildSectionHeader('Modification Request'),
+                      //   _buildModificationStatusCard(context, latestModification),
+                      //   const SizedBox(height: 24),
+                      // ],
+                      ,
+                      _buildSectionHeader('Job Details'),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          children: [
+                            // List each item in the order
+                            ...items.map((item) {
+                              return Column(
+                                children: [
+                                  _buildDetailRow(
+                                    Icons.build_circle_outlined,
+                                    'Service/Product',
+                                    '${item.itemDetails?.name ?? "Unknown"} (x${item.quantity ?? 1})',
+                                  ),
+                                  const Divider(height: 24),
+                                ],
+                              );
+                            }).toList(),
+
+                            _buildDetailRow(
+                              Icons.calendar_today,
+                              'Date & Time',
+                              '$date, $timeSlot',
+                            ),
+                            const Divider(height: 24),
+                            _buildDetailRow(
+                              Icons.location_on,
+                              'Address',
+                              address,
+                            ),
+                            const Divider(height: 24),
+                            _buildDetailRow(
+                              Icons.payments_outlined,
+                              'Total Payout',
+                              '₹ $totalPrice',
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      _buildSectionHeader('Status Info'),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildStatusItem('Order Status', effectiveOrder?.orderStatus ?? 'N/A'),
+                            _buildStatusItem('Payment Status', effectiveOrder?.paymentStatus ?? 'N/A'),
+                            _buildStatusItem('Approval', effectiveOrder?.agentApproval ?? 'N/A'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Action Bar
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
+            ),
+            child: SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      debugPrint('DEBUG: Get Directions button pressed');
+                      debugPrint('DEBUG: order is null? ${effectiveOrder == null}');
+                      debugPrint('DEBUG: slot is null? ${effectiveOrder == null}');
+
+                      controller.startNavigation();
+
+                      if (effectiveOrder != null) {
+                        debugPrint('DEBUG: Pushing /navigation with OrderDetails. ID: ${effectiveOrder?.id}');
+                        context.push('/navigation', extra: effectiveOrder);
+                      } else if (widget.slot != null) {
+                        debugPrint('DEBUG: Pushing /navigation with SlotAvailability. OrderID: ${widget.slot?.orderId ?? ''}');
+                        context.push('/navigation', extra: widget.slot);
+                      } else {
+                        debugPrint('DEBUG: ERROR - Both order and slot are NULL');
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryColor,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      minimumSize: const Size(double.infinity, 56),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    icon: const Icon(Icons.navigation, color: Colors.white),
+                    label: Text(
+                      'Get Directions',
+                      style: GoogleFonts.outfit(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Modify Order button — driven by real API serviceModifications
+                  if (latestMod == null)
+                  // No modification exists ? show Modify Order button
+                    TextButton.icon(
+                      onPressed: () => context.push('/modify-order', extra: effectiveOrder),
+                      icon: const Icon(Icons.edit_note, color: AppTheme.primaryColor),
+                      label: Text(
+                        'Modify Order',
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primaryColor,
+                        ),
+                      ),
+                    )
+                  else if ((latestMod.status ?? '').toUpperCase() == 'PENDING')
+                  // Modification pending → show waiting label, no tap
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.hourglass_empty,
+                              size: 16, color: Colors.orange),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Waiting for Request Approval',
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  // APPROVED / APPLIED / REJECTED ? show nothing
+                  else
+                    const SizedBox.shrink(),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -66,23 +381,9 @@ class JobDetailsScreen extends ConsumerWidget {
       child: Scaffold(
       backgroundColor: AppTheme.surfaceColor,
       appBar: AppBar(
-        scrolledUnderElevation: 0,
         title: Text(
           'Job #$orderId',
           style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/home');
-            }
-          },
         ),
         actions: [
           PopupMenuButton<String>(
@@ -102,11 +403,11 @@ class JobDetailsScreen extends ConsumerWidget {
 
                 if (hasHubRequest) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('The request is already pending'),
-                      behavior: SnackBarBehavior.floating,
-                      duration: Duration(seconds: 2),
-                    )
+                      const SnackBar(
+                        content: Text('The request is already pending'),
+                        behavior: SnackBarBehavior.floating,
+                        duration: Duration(seconds: 2),
+                      )
                   );
                 } else {
                   _showHubServiceRequestSheet(context, effectiveOrder);
@@ -134,234 +435,23 @@ class JobDetailsScreen extends ConsumerWidget {
           ),
           const SizedBox(width: 8),
         ],
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/home');
+            }
+          },
+        ),
       ),
-      body: Column(
-        children: [
-          // Customer Card
-          Container(
-            color: Colors.white,
-            padding: const EdgeInsets.all(24),
-            child: Row(
-              children: [
-                Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.person_rounded,
-                    size: 36,
-                    color: AppTheme.primaryColor,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        customerName,
-                        style: GoogleFonts.outfit(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        customerEmail,
-                        style: GoogleFonts.outfit(
-                          fontSize: 14,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(
-                        Icons.phone,
-                        color: AppTheme.successColor,
-                      ),
-                      onPressed: () => _makePhoneCall(customerMobile),
-                    ),
-                    // IconButton(
-                    //   icon: const Icon(
-                    //     Icons.message,
-                    //     color: AppTheme.primaryColor,
-                    //   ),
-                    //   onPressed: () => _sendSMS(customerMobile),
-                    // ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // Job Info List
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                // 🔹 Real Modification Request Section (from API data)
-                if (latestMod != null) ...[
-                  _buildSectionHeader('Modification Request'),
-                  _buildServiceModificationCard(context, latestMod),
-                  const SizedBox(height: 24),
-                ] else if (latestModification != null && latestModification.id.isNotEmpty) ...[
-                  _buildSectionHeader('Modification Request'),
-                  _buildModificationStatusCard(context, latestModification),
-                  const SizedBox(height: 24),
-                ],
-
-                _buildSectionHeader('Job Details'),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    children: [
-                      // List each item in the order
-                      ...items.map((item) {
-                        return Column(
-                          children: [
-                            _buildDetailRow(
-                              Icons.build_circle_outlined,
-                              'Service/Product',
-                              '${item.itemDetails?.name ?? "Unknown"} (x${item.quantity ?? 1})',
-                            ),
-                            const Divider(height: 24),
-                          ],
-                        );
-                      }).toList(),
-
-                      _buildDetailRow(
-                        Icons.calendar_today,
-                        'Date & Time',
-                        '$date, $timeSlot',
-                      ),
-                      const Divider(height: 24),
-                      _buildDetailRow(
-                        Icons.location_on,
-                        'Address',
-                        address,
-                      ),
-                      const Divider(height: 24),
-                      _buildDetailRow(
-                        Icons.payments_outlined,
-                        'Total Payout',
-                        '₹ $totalPrice',
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                _buildSectionHeader('Status Info'),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildStatusItem('Order Status', order?.orderStatus ?? 'N/A'),
-                      _buildStatusItem('Payment Status', order?.paymentStatus ?? 'N/A'),
-                      _buildStatusItem('Approval', order?.agentApproval ?? 'N/A'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Action Bar
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
-            ),
-            child: SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      controller.startNavigation();
-                      context.push('/navigation');
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryColor,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      minimumSize: const Size(double.infinity, 56),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    icon: const Icon(Icons.navigation, color: Colors.white),
-                    label: Text(
-                      'Get Directions',
-                      style: GoogleFonts.outfit(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Modify Order button — driven by real API serviceModifications
-                  if (latestMod == null)
-                    // No modification exists → show Modify Order button
-                    TextButton.icon(
-                      onPressed: () => context.push('/modify-order', extra: effectiveOrder),
-                      icon: const Icon(Icons.edit_note, color: AppTheme.primaryColor),
-                      label: Text(
-                        'Modify Order',
-                        style: GoogleFonts.outfit(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.primaryColor,
-                        ),
-                      ),
-                    )
-                  else if ((latestMod.status ?? '').toUpperCase() == 'PENDING')
-                    // Modification pending → show waiting label, no tap
-                    Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.hourglass_empty,
-                              size: 16, color: Colors.orange),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Waiting for Request Approval',
-                            style: GoogleFonts.outfit(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.orange,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  // APPROVED / APPLIED / REJECTED → show nothing
-                  else
-                    const SizedBox.shrink(),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    )  // Scaffold
-    );  // PopScope
+      body: body,
+    ),
+    );
   }
 
   Widget _buildSectionHeader(String title) {
@@ -745,7 +835,7 @@ class JobDetailsScreen extends ConsumerWidget {
       ),
     );
   }
-  
+
   Widget _buildLabel(String text) {
     return Text(
       text,
@@ -883,7 +973,7 @@ class JobDetailsScreen extends ConsumerWidget {
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       ),
-                      child: isLoading 
+                      child: isLoading
                         ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                         : Text('Submit Request', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
                     ),
@@ -988,7 +1078,7 @@ class JobDetailsScreen extends ConsumerWidget {
                 setState(() {
                   availableSlots = slots;
                   isLoadingSlots = false;
-                  
+
                   if (slots.isNotEmpty && selectedStartTime == null) {
                     try {
                       if (slots.first.etaStartTime != null) {
@@ -1038,7 +1128,7 @@ class JobDetailsScreen extends ConsumerWidget {
           if (availableSlots.isEmpty && !isLoadingSlots && slotCheckError == null) {
             fetchSlotsBackground();
           }
-          
+
           // Only auto-update slot if user hasn't manually picked a zone from the location-based list
           if (selectedZone == null) {
             updateSelectedSlot();
@@ -1093,7 +1183,7 @@ class JobDetailsScreen extends ConsumerWidget {
                        decoration: AppTheme.inputDecoration('Choose a slot', Icons.timer_outlined),
                        items: availableZones.map((z) => DropdownMenuItem(
                          value: z,
-                         child: Text('${z.zoneName ?? "Slot"} (${z.etaStartTime ?? ""} - ${z.etaEndTime ?? ""})', 
+                         child: Text('${z.zoneName ?? "Slot"} (${z.etaStartTime ?? ""} - ${z.etaEndTime ?? ""})',
                            style: GoogleFonts.outfit(fontSize: 14)),
                        )).toList(),
                        onChanged: (val) {
@@ -1157,7 +1247,7 @@ class JobDetailsScreen extends ConsumerWidget {
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(color: Colors.grey[200]!),
                                 ),
-                                child: Text(formatTimeOfDay(selectedStartTime), 
+                                child: Text(formatTimeOfDay(selectedStartTime),
                                   style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w500, color: selectedStartTime != null ? Colors.black : Colors.grey)),
                               ),
                             ),
@@ -1189,7 +1279,7 @@ class JobDetailsScreen extends ConsumerWidget {
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(color: Colors.grey[200]!),
                                 ),
-                                child: Text(formatTimeOfDay(selectedEndTime), 
+                                child: Text(formatTimeOfDay(selectedEndTime),
                                   style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w500, color: selectedEndTime != null ? Colors.black : Colors.grey)),
                               ),
                             ),
@@ -1278,7 +1368,7 @@ class JobDetailsScreen extends ConsumerWidget {
                               final currentId = order.slotId;
                               final originalDateStr = order.createdAt?.split('T')[0];
                               final isSameDate = originalDateStr != null && DateFormat('yyyy-MM-dd').format(selectedDate) == originalDateStr;
-                              
+
                               if (isSameDate && selectedSlotId == currentId) {
                                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                                   content: Text('Please select a different slot or date to request a change.'),
@@ -1290,7 +1380,7 @@ class JobDetailsScreen extends ConsumerWidget {
                               setState(() => isSubmitting = true);
                               final startStr = formatTimeOfDay(selectedStartTime);
                               final endStr = formatTimeOfDay(selectedEndTime);
-                              
+
                               final res = await ApiService.createSlotChangeRequest(
                                 orderId: order.id ?? '',
                                 orderItemId: order.items?.isNotEmpty == true ? order.items!.first.id : null,

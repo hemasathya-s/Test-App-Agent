@@ -60,7 +60,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
 
   Future<void> _fetchProfile() async {
     print("📡 Fetching fresh profile data...");
-    final result = await ApiService().getAgentProfile();
+    final result = await ApiService.getAgentProfile();
     if (result.isSuccess && result.data != null) {
       if (mounted) {
         setState(() {

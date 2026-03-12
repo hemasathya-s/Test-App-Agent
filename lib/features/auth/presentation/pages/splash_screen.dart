@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../../../core/theme/app_theme.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -21,6 +22,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   Future<void> _checkAuth() async {
     // Wait for splash animation/delay
+    // Mock delay for boot, version check, auth check
     await Future.delayed(const Duration(seconds: 2));
 
     if (!mounted) return;
@@ -29,17 +31,17 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       final prefs = await SharedPreferences.getInstance();
       final accessToken = prefs.getString('access_token');
 
-      print('🔎 Splash check - Access Token: $accessToken');
+      print('ðŸ”Ž Splash check - Access Token: $accessToken');
 
       if (accessToken != null && accessToken.isNotEmpty) {
-        print('✅ Token found, navigating to Home');
+        print('âœ… Token found, navigating to Home');
         context.go('/home');
       } else {
-        print('❌ No token found, navigating to Login');
+        print('âŒ No token found, navigating to Login');
         context.go('/login');
       }
     } catch (e) {
-      print('⚠️ Error checking auth: $e');
+      print('âš ï¸ Error checking auth: $e');
       context.go('/login');
     }
   }

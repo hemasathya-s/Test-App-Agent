@@ -1,4 +1,4 @@
-// ── SEND OTP REQUEST MODEL ────────────────────────────────────────────────
+﻿// ────────────────── SEND OTP REQUEST MODEL ──────────────────────────────────
 class SendOtpRequest {
   final int mobileNumber;
   final String role;

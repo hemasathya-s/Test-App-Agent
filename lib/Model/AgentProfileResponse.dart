@@ -1,4 +1,4 @@
-class AgentProfileResponse {
+﻿class AgentProfileResponse {
   final bool success;
   final AgentProfileData agent;
 
