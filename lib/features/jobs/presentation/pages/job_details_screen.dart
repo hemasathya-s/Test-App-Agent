@@ -13,8 +13,9 @@ import 'package:urban_agent_app/core/model/service_modification.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/services/apiservices.dart';
 import '../../../../core/theme/app_theme.dart';
+import 'package:dropdown_button2/dropdown_button2.dart';
 import '../providers/job_provider.dart';
-import '../../../order/presentation/providers/order_modification_provider.dart';
+import '../../../order/presentation/providers/order_modification_provider.dart' hide OrderItem;
 
 class JobDetailsScreen extends ConsumerStatefulWidget {
   final SlotAvailability? slot;
@@ -392,14 +393,23 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
             offset: const Offset(0, 56),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             onSelected: (value) {
+              print('🎯 Menu Selected: $value');
+              final modifications = effectiveOrder?.serviceModifications ?? [];
+              print('📦 Total Modifications: ${modifications.length}');
+              for (var m in modifications) {
+                print('🔹 Mod: Type="${m.modificationType}", Status="${m.status}"');
+              }
+
               if (value == 'hub_service') {
-                final hasHubRequest = effectiveOrder?.serviceModifications?.any((m) {
+                final hasHubRequest = modifications.any((m) {
                   final type = (m.modificationType ?? '').toUpperCase();
                   final status = (m.status ?? '').toUpperCase();
+                  print('🔍 Checking Hub: Type=$type, Status=$status');
+                  // Hub types might be HUB_SERVICE or just SERVICE or empty for legacy
                   final isHubType = type.contains('HUB') || type.contains('SERVICE') || type.isEmpty;
-                  final isActive = status == 'PENDING' || status == 'APPROVED' || status == 'APPLIED';
+                  final isActive = status == 'PENDING' || status == 'APPROVED' || status == 'APPLIED' || status == 'REQUESTED';
                   return isHubType && isActive;
-                }) ?? false;
+                });
 
                 if (hasHubRequest) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -413,9 +423,48 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                   _showHubServiceRequestSheet(context, effectiveOrder);
                 }
               } else if (value == 'slot_change') {
-                _showSlotChangeRequestSheet(context, effectiveOrder);
+                final hasSlotRequest = modifications.any((m) {
+                  final type = (m.modificationType ?? '').toUpperCase();
+                  final status = (m.status ?? '').toUpperCase();
+                  print('🔍 Checking Slot: Type=$type, Status=$status');
+                  // Common slot types: SLOT_CHANGE, TIME_CHANGE, SERVICE_MODIFICATION
+                  final isSlotType = type.contains('SLOT') || type.contains('TIME');
+                  final isActive = status == 'PENDING' || status == 'APPROVED' || status == 'APPLIED' || status == 'REQUESTED';
+                  return isSlotType && isActive;
+                });
+
+                if (hasSlotRequest) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('A slot change request is already pending'),
+                        behavior: SnackBarBehavior.floating,
+                        duration: Duration(seconds: 2),
+                      )
+                  );
+                } else {
+                  _showSlotChangeRequestSheet(context, effectiveOrder);
+                }
               } else if (value == 'cancellation') {
-                _showCancellationSheet(context, effectiveOrder);
+                final hasCancelRequest = modifications.any((m) {
+                  final type = (m.modificationType ?? '').toUpperCase();
+                  final status = (m.status ?? '').toUpperCase();
+                  print('🔍 Checking Cancel: Type=$type, Status=$status');
+                  final isCancelType = type.contains('CANCEL') || type.contains('DELETE');
+                  final isActive = status == 'PENDING' || status == 'APPROVED' || status == 'APPLIED' || status == 'REQUESTED';
+                  return isCancelType && isActive;
+                });
+
+                if (hasCancelRequest) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('A cancellation request is already pending'),
+                        behavior: SnackBarBehavior.floating,
+                        duration: Duration(seconds: 2),
+                      )
+                  );
+                } else {
+                  _showCancellationSheet(context, effectiveOrder);
+                }
               }
             },
             itemBuilder: (context) => [
@@ -869,18 +918,35 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
     final notesController = TextEditingController();
     List<File> selectedImages = [];
     List<File> selectedVideos = [];
+    OrderItem? selectedItem;
 
-    bool isLoading = false;
+    bool isSubmitting = false;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-        bool isSubmitting = false;
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (stateContext, setState) {
+        // Redundant check: if somehow opened while pending, close it
+        final currentModifications = order?.serviceModifications ?? [];
+        final alreadyHasHub = currentModifications.any((m) {
+          final type = (m.modificationType ?? '').toUpperCase();
+          final status = (m.status ?? '').toUpperCase();
+          final isHubType = type.contains('HUB') || type.contains('SERVICE') || type.isEmpty;
+          final isActive = status == 'PENDING' || status == 'APPROVED' || status == 'APPLIED' || status == 'REQUESTED';
+          return isHubType && isActive;
+        });
+
+        if (alreadyHasHub) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (Navigator.canPop(sheetContext)) Navigator.pop(sheetContext);
+          });
+          return const SizedBox.shrink();
+        }
+
         return Padding(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 24),
+            padding: EdgeInsets.only(bottom: MediaQuery.of(stateContext).viewInsets.bottom, left: 24, right: 24, top: 24),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -891,20 +957,46 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                   Text('Hub Service Request', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   Text('Submit a request for device repair or service at the hub.', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
+                  const SizedBox(height: 15),
+                  _buildLabel('Select Item *'),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField2<OrderItem>(
+                    isExpanded: true,
+                    decoration: AppTheme.inputDecoration('Select an item', Icons.inventory_2_outlined, const EdgeInsets.symmetric(horizontal: 0, vertical: 12)),
+                    items: (order.items ?? []).map((item) => DropdownMenuItem<OrderItem>(
+                      value: item,
+                      child: Text(
+                        item.itemDetails?.name ?? 'Unknown Item',
+                        style: GoogleFonts.outfit(fontSize: 14),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    )).toList(),
+                    onChanged: (value) => setState(() => selectedItem = value),
+                    buttonStyleData: const ButtonStyleData(padding: EdgeInsets.symmetric(horizontal: 12)),
+                    iconStyleData: const IconStyleData(
+                      icon: Icon(Icons.keyboard_arrow_down, color: AppTheme.textSecondary),
+                      iconSize: 22,
+                    ),
+                    dropdownStyleData: DropdownStyleData(
+                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(15)),
+                    ),
+                  ),
                   const SizedBox(height: 24),
-                  _buildLabel('Device Serial Number'),
+                  _buildLabel('Device Serial Number *'),
                   const SizedBox(height: 8),
                   TextField(
                     controller: idController,
-                    decoration: AppTheme.inputDecoration('Enter serial number', Icons.confirmation_number_outlined),
+                    onChanged: (_) => setState(() {}),
+                    decoration: AppTheme.inputDecoration('Enter serial number', Icons.confirmation_number_outlined, const EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
                   ),
                   const SizedBox(height: 16),
-                  _buildLabel('Condition Notes'),
+                  _buildLabel('Condition Notes *'),
                   const SizedBox(height: 8),
                   TextField(
                     controller: notesController,
+                    onChanged: (_) => setState(() {}),
                     maxLines: 3,
-                    decoration: AppTheme.inputDecoration('Describe device condition...', Icons.note_alt_outlined),
+                    decoration: AppTheme.inputDecoration('Describe device condition...', Icons.note_alt_outlined, const EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
                   ),
                   const SizedBox(height: 24),
                   _buildLabel('Photos & Videos'),
@@ -912,13 +1004,13 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                   Row(
                     children: [
                       _buildMediaButton(Icons.add_a_photo, 'Add Photo', () {
-                        _showMediaSourceSheet(context, isVideo: false, onPicked: (file) {
+                        _showMediaSourceSheet(stateContext, isVideo: false, onPicked: (file) {
                           if (file != null) setState(() => selectedImages.add(file));
                         });
                       }),
                       const SizedBox(width: 12),
                       _buildMediaButton(Icons.video_call, 'Add Video', () {
-                        _showMediaSourceSheet(context, isVideo: true, onPicked: (file) {
+                        _showMediaSourceSheet(stateContext, isVideo: true, onPicked: (file) {
                           if (file != null) setState(() => selectedVideos.add(file));
                         });
                       }),
@@ -941,31 +1033,50 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: isLoading ? null : () async {
-                        setState(() => isLoading = true);
+                      onPressed: (isSubmitting || selectedItem == null || idController.text.trim().isEmpty || notesController.text.trim().isEmpty) ? null : () async {
+                        setState(() => isSubmitting = true);
                         try {
+                          print('📡 Submitting Hub Service Request for item: ${selectedItem?.id}');
                           final res = await ApiService.createHubServiceRequest(
                             orderId: order.id ?? '',
-                            orderItemId: order.items?.isNotEmpty == true ? order.items!.first.id : null,
+                            orderItemId: selectedItem?.id,
                             deviceSerialNumber: idController.text,
                             deviceConditionNotes: notesController.text,
                             images: selectedImages,
                             videos: selectedVideos,
                           );
-                          if (context.mounted) {
+                          print('📡 Hub Request Result: ${res.isSuccess}, Error: ${res.error}');
+                          
+                          if (stateContext.mounted) {
+                            final messenger = ScaffoldMessenger.of(context);
                             if (res.isSuccess) {
-                              Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Request submitted successfully')));
+                              print('✅ Success - Popping Hub Sheet');
+                              Navigator.pop(sheetContext);
+                              messenger.showSnackBar(const SnackBar(content: Text('Request submitted successfully')));
+                              _loadFullDetails();
                             } else {
-                              // Close sheet if it's a duplicate request error, else keep open to show error
-                              if (res.error?.contains('already pending or approved') == true) {
-                                Navigator.pop(context);
+                              final error = (res.error ?? '').toLowerCase();
+                              // Very broad check for any "already" scenario to ensure pop
+                              final isDuplicate = error.contains('already') || 
+                                                error.contains('pending') && error.contains('request') ||
+                                                error.contains('active') && error.contains('request');
+                              
+                              print('🔍 Error check: "$error", isDuplicate: $isDuplicate');
+                              
+                              if (isDuplicate) {
+                                print('⚠️ Duplicate detected - Popping Hub Sheet');
+                                Navigator.pop(sheetContext);
                               }
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res.error ?? 'Unknown error')));
+                              messenger.showSnackBar(SnackBar(content: Text(res.error ?? 'Unknown error')));
                             }
                           }
+                        } catch (e) {
+                          print('❌ Exception in Hub Request: $e');
+                          if (stateContext.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                          }
                         } finally {
-                          if (context.mounted) setState(() => isLoading = false);
+                          if (stateContext.mounted) setState(() => isSubmitting = false);
                         }
                       },
                       style: ElevatedButton.styleFrom(
@@ -973,7 +1084,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       ),
-                      child: isLoading
+                      child: isSubmitting
                         ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                         : Text('Submit Request', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
                     ),
@@ -1012,8 +1123,25 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (stateContext, setState) {
+          // Redundant check: if somehow opened while pending, close it
+          final currentModifications = order.serviceModifications ?? [];
+          final alreadyHasSlot = currentModifications.any((m) {
+            final type = (m.modificationType ?? '').toUpperCase();
+            final status = (m.status ?? '').toUpperCase();
+            final isSlotType = type.contains('SLOT') || type.contains('TIME');
+            final isActive = status == 'PENDING' || status == 'APPROVED' || status == 'APPLIED' || status == 'REQUESTED';
+            return isSlotType && isActive;
+          });
+
+          if (alreadyHasSlot) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (Navigator.canPop(sheetContext)) Navigator.pop(sheetContext);
+            });
+            return const SizedBox.shrink();
+          }
+
           void fetchZones() async {
             if (order.latitude == null || order.longitude == null) {
               print('⚠️ LAT/LNG missing for Zone fetch');
@@ -1028,15 +1156,12 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
               lat: order.latitude!,
               lng: order.longitude!,
             );
-            if (context.mounted) {
+            if (stateContext.mounted) {
               setState(() {
                 isLoadingZones = false;
                 if (res.isSuccess) {
                   availableZones = res.data ?? [];
                   print('✅ Found ${availableZones.length} slots');
-                  for (var s in availableZones) {
-                    print('🔎 Slot Map: ID=${s.slot}, Start=${s.etaStartTime}, End=${s.etaEndTime}');
-                  }
                 } else {
                   zoneError = res.error;
                   print('❌ Zone fetch error: ${res.error}');
@@ -1168,7 +1293,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                   const SizedBox(height: 8),
                   Text('Request a different time for this job.', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
                   const SizedBox(height: 24),
-                   _buildLabel('Select Slot (Based on Location)'),
+                   _buildLabel('Select Slot (Based on Location) *'),
                    const SizedBox(height: 8),
                    if (isLoadingZones)
                      const Center(child: CircularProgressIndicator())
@@ -1183,8 +1308,20 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                        decoration: AppTheme.inputDecoration('Choose a slot', Icons.timer_outlined),
                        items: availableZones.map((z) => DropdownMenuItem(
                          value: z,
-                         child: Text('${z.zoneName ?? "Slot"} (${z.etaStartTime ?? ""} - ${z.etaEndTime ?? ""})',
-                           style: GoogleFonts.outfit(fontSize: 14)),
+                         child: Row(
+                           children: [
+                             Text('${z.zoneName ?? "Slot"} (${z.etaStartTime ?? ""} - ${z.etaEndTime ?? ""})',
+                               style: GoogleFonts.outfit(
+                                 fontSize: 14,
+                                 color: z.isAvailable == true ? Colors.green : null,
+                                 fontWeight: z.isAvailable == true ? FontWeight.bold : null,
+                               )),
+                             if (z.isAvailable == true) ...[
+                               const SizedBox(width: 8),
+                               const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                             ],
+                           ],
+                         ),
                        )).toList(),
                        onChanged: (val) {
                          print('🎯 Selected Slot: ${val?.zoneName}');
@@ -1198,29 +1335,16 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                        },
                      ),
                    const SizedBox(height: 16),
-                   _buildLabel('Requested Date'),
+                   _buildLabel('Requested Date *'),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(DateFormat('yyyy-MM-dd').format(selectedDate), style: GoogleFonts.outfit(fontSize: 16)),
-                    trailing: const Icon(Icons.calendar_month, color: AppTheme.primaryColor),
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: selectedDate,
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime.now().add(const Duration(days: 30)),
-                      );
-                      if (picked != null) {
-                        setState(() {
-                          selectedDate = picked;
-                          selectedSlotId = null; // Re-fetch for new date
-                        });
-                        fetchSlotsBackground();
-                      }
-                    },
+                    title: Text(DateFormat('yyyy-MM-dd').format(selectedDate), style: GoogleFonts.outfit(fontSize: 16, color: AppTheme.textSecondary)),
+                    trailing: const Icon(Icons.calendar_month, color: AppTheme.textSecondary),
+                    onTap: null, // Temporarily disabled
                   ),
-                  const Divider(),
-                  const SizedBox(height: 16),
+                  /*const Divider(),*/
+                  const SizedBox(height: 6),
+                  /*
                   Row(
                     children: [
                       Expanded(
@@ -1288,8 +1412,9 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  if (matchedSlot != null)
+                  */
+                  const SizedBox(height: 6),
+                  /*if (matchedSlot != null)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(8)),
@@ -1321,26 +1446,31 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                         ],
                       ),
                     ),
-                  const SizedBox(height: 24),
-                   _buildLabel('Reason Type (Manual Code)'),
+                  const SizedBox(height: 24),*/
+                   _buildLabel('Reason Type *'),
                    const SizedBox(height: 8),
-                   TextField(
-                     controller: reasonTypeController,
-                     decoration: AppTheme.inputDecoration('Enter reason code...', Icons.label_important_outline),
-                   ),
-                   const SizedBox(height: 8),
-                   SingleChildScrollView(
-                     scrollDirection: Axis.horizontal,
-                     child: Row(
-                       children: ['AGENT_UNAVAILABLE', 'CUSTOMER_UNAVAILABLE', 'LOCATION_ISSUE', 'OTHER'].map((code) => Padding(
-                         padding: const EdgeInsets.only(right: 8),
-                         child: ActionChip(
-                           label: Text(code, style: const TextStyle(fontSize: 10)),
-                           onPressed: () => setState(() => reasonTypeController.text = code),
-                         ),
-                       )).toList(),
-                     ),
-                   ),
+                    DropdownButtonFormField2<String>(
+                      isExpanded: true,
+                      decoration: AppTheme.inputDecoration('Select reason type', Icons.label_important_outline, const EdgeInsets.symmetric(horizontal: 0, vertical: 12)),
+                      items: const [
+                        DropdownMenuItem(value: 'AGENT_UNAVAILABLE', child: Text('Agent Unavailable')),
+                        DropdownMenuItem(value: 'EMERGENCY', child: Text('Emergency')),
+                        DropdownMenuItem(value: 'OVERBOOKED', child: Text('Overbooked')),
+                        DropdownMenuItem(value: 'ROUTE_CONFLICT', child: Text('Route Conflict')),
+                        DropdownMenuItem(value: 'PARTS_DELAY', child: Text('Parts Delay')),
+                        DropdownMenuItem(value: 'PERSONAL_REASON', child: Text('Personal Reason')),
+                        DropdownMenuItem(value: 'OTHER', child: Text('Other')),
+                      ],
+                      onChanged: (val) => setState(() => reasonTypeController.text = val ?? ''),
+                      buttonStyleData: const ButtonStyleData(padding: EdgeInsets.symmetric(horizontal: 12)),
+                      iconStyleData: const IconStyleData(
+                        icon: Icon(Icons.keyboard_arrow_down, color: AppTheme.textSecondary),
+                        iconSize: 22,
+                      ),
+                      dropdownStyleData: DropdownStyleData(
+                        decoration: BoxDecoration(borderRadius: BorderRadius.circular(15)),
+                      ),
+                    ),
                   const SizedBox(height: 16),
                   _buildLabel('Reason Description'),
                   const SizedBox(height: 8),
@@ -1362,7 +1492,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: (isSubmitting || selectedStartTime == null || selectedEndTime == null || selectedSlotId == null)
+                      onPressed: (isSubmitting || selectedStartTime == null || selectedEndTime == null || selectedSlotId == null || reasonTypeController.text.isEmpty)
                           ? null
                           : () async {
                               final currentId = order.slotId;
@@ -1392,11 +1522,16 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                                 reasonType: reasonTypeController.text,
                                 reasonDescription: reasonController.text,
                               );
-                              if (context.mounted) {
+                              if (stateContext.mounted) {
+                                final messenger = ScaffoldMessenger.of(context);
                                 setState(() => isSubmitting = false);
-                                Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                print('✅ Slot Request Success/Fail - Popping');
+                                Navigator.pop(sheetContext);
+                                messenger.showSnackBar(SnackBar(
                                     content: Text(res.isSuccess ? 'Slot change requested' : 'Error: ${res.error ?? "Unknown error"}')));
+                                if (res.isSuccess) {
+                                  _loadFullDetails();
+                                }
                               }
                             },
                       style: ElevatedButton.styleFrom(
@@ -1422,7 +1557,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
   void _showCancellationSheet(BuildContext context, OrderDetails? order) {
     if (order == null) return;
     final reasonController = TextEditingController();
-    String cancellationReasonType = 'CUSTOMER_CHANGE_OF_MIND';
+    String? cancellationReasonType;
     bool isSubmitting = false;
 
     showModalBottomSheet(
@@ -1430,33 +1565,60 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (stateContext, setState) {
+        // Redundant check: if somehow opened while pending, close it
+        final currentModifications = order.serviceModifications ?? [];
+        final alreadyHasCancel = currentModifications.any((m) {
+          final type = (m.modificationType ?? '').toUpperCase();
+          final status = (m.status ?? '').toUpperCase();
+          final isCancelType = type.contains('CANCEL') || type.contains('DELETE');
+          final isActive = status == 'PENDING' || status == 'APPROVED' || status == 'APPLIED' || status == 'REQUESTED';
+          return isCancelType && isActive;
+        });
+
+        if (alreadyHasCancel) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (Navigator.canPop(sheetContext)) Navigator.pop(sheetContext);
+          });
+          return const SizedBox.shrink();
+        }
+
         return Padding(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 24),
+            padding: EdgeInsets.only(bottom: MediaQuery.of(stateContext).viewInsets.bottom, left: 24, right: 24, top: 24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
                 const SizedBox(height: 24),
-                Text('Cancel Job', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.red)),
+                Text('Cancel Job', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
                 const SizedBox(height: 8),
                 Text('Please provide a reason for canceling this job.', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
                 const SizedBox(height: 24),
-                _buildLabel('Cancellation Reason Type'),
+                _buildLabel('Cancellation Reason Type *'),
                 const SizedBox(height: 8),
-                DropdownButton<String>(
+                DropdownButtonFormField2<String>(
                   isExpanded: true,
-                  value: cancellationReasonType,
+                  decoration: AppTheme.inputDecoration('Select reason type', Icons.cancel_outlined, const EdgeInsets.symmetric(horizontal: 0, vertical: 12)),
                   items: const [
                     DropdownMenuItem(value: 'CUSTOMER_CHANGE_OF_MIND', child: Text('Customer Change of Mind')),
+                    DropdownMenuItem(value: 'WRONG_BOOKING', child: Text('Wrong Booking')),
+                    DropdownMenuItem(value: 'SERVICE_DELAY', child: Text('Service Delay')),
                     DropdownMenuItem(value: 'AGENT_UNAVAILABLE', child: Text('Agent Unavailable')),
-                    DropdownMenuItem(value: 'LOCATION_ISSUE', child: Text('Location Issue')),
-                    DropdownMenuItem(value: 'NOT_REQUIRED_NOW', child: Text('Not Required Now')),
-                    DropdownMenuItem(value: 'OTHER', child: Text('Others')),
+                    DropdownMenuItem(value: 'OUT_OF_STOCK', child: Text('Out of Stock')),
+                    DropdownMenuItem(value: 'PRICE_DISPUTE', child: Text('Price Dispute')),
+                    DropdownMenuItem(value: 'OTHER', child: Text('Other')),
                   ],
-                  onChanged: (val) => setState(() => cancellationReasonType = val!),
+                  onChanged: (val) => setState(() => cancellationReasonType = val),
+                  buttonStyleData: const ButtonStyleData(padding: EdgeInsets.symmetric(horizontal: 12)),
+                  iconStyleData: const IconStyleData(
+                    icon: Icon(Icons.keyboard_arrow_down, color: AppTheme.textSecondary),
+                    iconSize: 22,
+                  ),
+                  dropdownStyleData: DropdownStyleData(
+                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(15)),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 _buildLabel('Cancellation Reason Description'),
@@ -1470,25 +1632,30 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: isSubmitting
+                    onPressed: (isSubmitting || cancellationReasonType == null)
                         ? null
                         : () async {
                             setState(() => isSubmitting = true);
                             final res = await ApiService.createCancellationRequest(
                               orderId: order.id ?? '',
                               orderItemId: order.items?.isNotEmpty == true ? order.items!.first.id : null,
-                              cancellationReasonType: cancellationReasonType,
+                              cancellationReasonType: cancellationReasonType!,
                               reasonDescription: reasonController.text,
                             );
-                            if (context.mounted) {
+                            if (stateContext.mounted) {
+                              final messenger = ScaffoldMessenger.of(context);
                               setState(() => isSubmitting = false);
-                              Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              print('✅ Cancellation Success/Fail - Popping');
+                              Navigator.pop(sheetContext);
+                              messenger.showSnackBar(SnackBar(
                                   content: Text(res.isSuccess ? 'Job cancelled' : 'Error: ${res.error ?? "Unknown error"}')));
+                              if (res.isSuccess) {
+                                _loadFullDetails();
+                              }
                             }
                           },
                     style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
+                        backgroundColor: AppTheme.primaryColor,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
                     child: isSubmitting

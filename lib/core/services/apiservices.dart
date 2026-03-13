@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -972,7 +972,7 @@ class ApiService {
   // Helper: Get refresh accessToken
   static Future<String?> _getRefreshToken() async {
     final prefs = await SharedPreferences.getInstance();
-    final accessToken = prefs.getString('refresh_accessToken');
+    final accessToken = prefs.getString('refresh_token');
     print('?? Getting Refresh Token: $accessToken');
     return accessToken;
   }
@@ -1009,11 +1009,11 @@ class ApiService {
         final jsonData = jsonDecode(response.body);
         final prefs = await SharedPreferences.getInstance();
 
-        await prefs.setString('access_accessToken', jsonData['access']);
+        await prefs.setString('access_token', jsonData['access']);
         print('? New Access Token Saved: ${jsonData['access']}');
 
         if (jsonData['refresh'] != null) {
-          await prefs.setString('refresh_accessToken', jsonData['refresh']);
+          await prefs.setString('refresh_token', jsonData['refresh']);
           print('? New Refresh Token Saved: ${jsonData['refresh']}');
         }
 
@@ -1108,7 +1108,7 @@ class ApiService {
 
   // ── WebSocket ───────────────────────────────────────────────────────────────
   // ── Product WebSocket ───────────────────────────────────────────────────────
-  static const String _wsUrl = 'wss://api.itfixer199.com/ws/movements/';
+  static const String _productwsUrl = 'wss://api.itfixer199.com/ws/movements/';
   WebSocketChannel? _wsChannel;
   StreamSubscription? _wsSubscription;
   bool _wsIsConnecting = false;
@@ -1117,6 +1117,10 @@ class ApiService {
   StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<Map<String, dynamic>> get movementStream => _wsController.stream;
+
+  // Last used filters for reconnection
+  String? _lastProdWsStartDate, _lastProdWsEndDate;
+  int? _lastProdWsPage, _lastProdWsSize;
 
   // ── Tool WebSocket ──────────────────────────────────────────────────────────
   static const String _toolWsUrl = 'wss://api.itfixer199.com/ws/tool-movements/';
@@ -1129,6 +1133,10 @@ class ApiService {
 
   Stream<Map<String, dynamic>> get toolMovementStream =>
       _toolWsController.stream;
+
+  // Last used filters for tool reconnection
+  String? _lastToolWsStartDate, _lastToolWsEndDate;
+  int? _lastToolWsPage, _lastToolWsSize;
 
   // ── Request WebSocket ───────────────────────────────────────────────────────
   WebSocketChannel? _requestWsChannel;
@@ -1143,9 +1151,21 @@ class ApiService {
 
   bool _isDisposed = false;
 
-  Future<void> connectMovementWebSocket() async {
+  Future<void> connectMovementWebSocket({
+    String? startDate,
+    String? endDate,
+    int? page,
+    int? size,
+  }) async {
     if (_wsIsConnecting) return;
     _wsIsConnecting = true;
+
+    // Persist filters for reconnection
+    _lastProdWsStartDate = startDate ?? _lastProdWsStartDate;
+    _lastProdWsEndDate = endDate ?? _lastProdWsEndDate;
+    _lastProdWsPage = page ?? _lastProdWsPage;
+    _lastProdWsSize = size ?? _lastProdWsSize;
+
     try {
       final accessToken = await getAccessToken();
       if (accessToken == null) {
@@ -1153,7 +1173,16 @@ class ApiService {
         _wsIsConnecting = false;
         return;
       }
-      final uri = Uri.parse('$_wsUrl?accessToken=$accessToken');
+
+      final queryParams = <String, String>{
+        'token': accessToken,
+        if (_lastProdWsStartDate != null) 'start_date': _lastProdWsStartDate!,
+        if (_lastProdWsEndDate != null) 'end_date': _lastProdWsEndDate!,
+        if (_lastProdWsPage != null) 'page': '$_lastProdWsPage',
+        if (_lastProdWsSize != null) 'size': '$_lastProdWsSize',
+      };
+
+      final uri = Uri.parse(_productwsUrl).replace(queryParameters: queryParams);
       print('📡 WS Connecting: $uri');
       _wsChannel = WebSocketChannel.connect(uri);
       _wsSubscription = _wsChannel!.stream.listen(
@@ -1195,14 +1224,33 @@ class ApiService {
     print('🔄 WS reconnect in ${delay
         .inSeconds}s (attempt $_wsReconnectAttempts)...');
     Future.delayed(delay, () {
-      if (!_wsIsConnecting && !_isDisposed) connectMovementWebSocket();
+      if (!_wsIsConnecting && !_isDisposed) {
+        connectMovementWebSocket(
+          startDate: _lastProdWsStartDate,
+          endDate: _lastProdWsEndDate,
+          page: _lastProdWsPage,
+          size: _lastProdWsSize,
+        );
+      }
     });
   }
 
   // ── Tool WebSocket Methods ──────────────────────────────────────────────────
-  Future<void> connectToolMovementWebSocket() async {
+  Future<void> connectToolMovementWebSocket({
+    String? startDate,
+    String? endDate,
+    int? page,
+    int? size,
+  }) async {
     if (_toolWsIsConnecting) return;
     _toolWsIsConnecting = true;
+
+    // Persist filters for reconnection
+    _lastToolWsStartDate = startDate ?? _lastToolWsStartDate;
+    _lastToolWsEndDate = endDate ?? _lastToolWsEndDate;
+    _lastToolWsPage = page ?? _lastToolWsPage;
+    _lastToolWsSize = size ?? _lastToolWsSize;
+
     try {
       final accessToken = await _getAccessToken();
       if (accessToken == null) {
@@ -1211,7 +1259,15 @@ class ApiService {
         return;
       }
 
-      final uri = Uri.parse('$_toolWsUrl?accessToken=$accessToken');
+      final queryParams = <String, String>{
+        'token': accessToken,
+        if (_lastToolWsStartDate != null) 'start_date': _lastToolWsStartDate!,
+        if (_lastToolWsEndDate != null) 'end_date': _lastToolWsEndDate!,
+        if (_lastToolWsPage != null) 'page': '$_lastToolWsPage',
+        if (_lastToolWsSize != null) 'size': '$_lastToolWsSize',
+      };
+
+      final uri = Uri.parse(_toolWsUrl).replace(queryParameters: queryParams);
       print('📡 Tool WS Connecting to: $uri');
 
       _toolWsChannel = WebSocketChannel.connect(uri);
@@ -1255,7 +1311,14 @@ class ApiService {
     print('🔄 Tool WS reconnect in ${delay
         .inSeconds}s (attempt $_toolWsReconnectAttempts)...');
     Future.delayed(delay, () {
-      if (!_toolWsIsConnecting && !_isDisposed) connectToolMovementWebSocket();
+      if (!_toolWsIsConnecting && !_isDisposed) {
+        connectToolMovementWebSocket(
+          startDate: _lastToolWsStartDate,
+          endDate: _lastToolWsEndDate,
+          page: _lastToolWsPage,
+          size: _lastToolWsSize,
+        );
+      }
     });
   }
 
@@ -1433,7 +1496,7 @@ class ApiService {
       ).timeout(const Duration(seconds: 15));
 
       print('📲 [VerifyOtp] Status Code  : ${response.statusCode}');
-      print('📲 [VerifyOtp] Raw Response : ${response.body}');
+      print('FULL RESPONSE: ${response.body}');
 
       final json = jsonDecode(response.body) as Map<String, dynamic>;
 
@@ -1442,30 +1505,30 @@ class ApiService {
         print('📲 [VerifyOtp] Top-level keys:');
         json.forEach((k, v) => print('   "$k" → ${v.runtimeType} = $v'));
 
-        // ── Try to locate user/accessToken data at any nesting level ───────────
-        // Pattern A: { "user": {...}, "accessTokens": {...} }  ← direct
-        // Pattern B: { "data": { "user": {...}, "accessTokens": {...} } }
+        // ── Try to locate user/token data at any nesting level ───────────
+        // Pattern A: { "user": {...}, "tokens": {...} }  ← direct
+        // Pattern B: { "data": { "user": {...}, "tokens": {...} } }
         // Pattern C: { "access": "...", "refresh": "..." , "user": {...} }
 
         Map<String, dynamic>? userMap;
-        Map<String, dynamic>? accessTokensMap;
+        Map<String, dynamic>? tokensMap;
 
-        if (json.containsKey('accessTokens') && json['accessTokens'] is Map) {
+        if (json.containsKey('tokens') && json['tokens'] is Map) {
           // Pattern A
-          accessTokensMap = Map<String, dynamic>.from(json['accessTokens'] as Map);
+          tokensMap = Map<String, dynamic>.from(json['tokens'] as Map);
         } else if (json.containsKey('access') && json.containsKey('refresh')) {
-          // Pattern C — accessTokens are flat at root
-          accessTokensMap = {
+          // Pattern C — tokens are flat at root
+          tokensMap = {
             'access': json['access'],
             'refresh': json['refresh'],
           };
         } else if (json.containsKey('data') && json['data'] is Map) {
           // Pattern B — nested under 'data'
           final data = Map<String, dynamic>.from(json['data'] as Map);
-          if (data.containsKey('accessTokens') && data['accessTokens'] is Map) {
-            accessTokensMap = Map<String, dynamic>.from(data['accessTokens'] as Map);
+          if (data.containsKey('tokens') && data['tokens'] is Map) {
+            tokensMap = Map<String, dynamic>.from(data['tokens'] as Map);
           } else if (data.containsKey('access')) {
-            accessTokensMap = {'access': data['access'], 'refresh': data['refresh']};
+            tokensMap = {'access': data['access'], 'refresh': data['refresh']};
           }
           if (data.containsKey('user') && data['user'] is Map) {
             userMap = Map<String, dynamic>.from(data['user'] as Map);
@@ -1477,24 +1540,24 @@ class ApiService {
           userMap = Map<String, dynamic>.from(json['user'] as Map);
         }
 
-        print('📲 [VerifyOtp] Resolved accessTokensMap : $accessTokensMap');
+        print('📲 [VerifyOtp] Resolved tokensMap : $tokensMap');
         print('📲 [VerifyOtp] Resolved userMap   : $userMap');
 
-        if (accessTokensMap != null) {
-          final accessTokens = OtpTokens.fromJson(accessTokensMap);
+        if (tokensMap != null) {
+          final tokens = OtpTokens.fromJson(tokensMap);
           final user = userMap != null ? OtpUser.fromJson(userMap) : null;
 
           final verifyResponse = VerifyOtpResponse(
             success: true,
             message: json['message']?.toString() ?? 'Login successful',
             user: user,
-            tokens: accessTokens,
+            tokens: tokens,
           );
 
           // Save to SharedPreferences
           final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('access_accessToken', accessTokens.access);
-          await prefs.setString('refresh_accessToken', accessTokens.refresh);
+          await prefs.setString('access_token', tokens.access);
+          await prefs.setString('refresh_token', tokens.refresh);
 
           if (user != null) {
             await prefs.setString('user_id', user.id);
@@ -1509,12 +1572,12 @@ class ApiService {
 
           print('✅ [VerifyOtp] Success — user: ${user?.name}, role: ${user
               ?.role}');
-          print('✅ [VerifyOtp] access_accessToken saved: ${accessTokens.access}');
+          print('✅ [VerifyOtp] access_token saved: ${tokens.access}');
           return ApiResponse(isSuccess: true, data: verifyResponse);
         }
 
         // Still null after all patterns — full dump for diagnosis
-        print('⚠️ [VerifyOtp] Could not resolve accessTokens from 200 response.');
+        print('⚠️ [VerifyOtp] Could not resolve tokens from 200 response.');
         print('⚠️ [VerifyOtp] Full JSON dump: $json');
         return ApiResponse(isSuccess: false, error: 'Failed to parse response');
       }
@@ -1891,13 +1954,16 @@ class ApiService {
   // Helper: Get access accessToken
   static Future<String?> getAccessToken() async {
     final prefs = await SharedPreferences.getInstance();
-    final accessToken = prefs.getString('access_accessToken');
+    final accessToken = prefs.getString('access_token');
     print('🔎 Getting Access Token: $accessToken');
     return accessToken;
   }
 
 
-  Future<ApiResponse<List<Product>>> getProducts() async {
+  Future<ApiResponse<List<Product>>> getProducts({
+    int? page,
+    int? size,
+  }) async {
     try {
       final queryParams = {
         'include_attribute': 'true',
@@ -1906,6 +1972,8 @@ class ApiService {
         'include_children': 'true',
         'include_media': 'true',
         'include_pricing': 'true',
+        if (page != null) 'page': '$page',
+        if (size != null) 'size': '$size',
       };
 
       final uri = Uri.parse('$baseUrl/api/product').replace(
@@ -2014,10 +2082,18 @@ class ApiService {
   }
 
   // ── Get All Tools ────────────────────────────────────────────────────────
-  Future<ApiResponse<List<Tool>>> getTools() async {
+  Future<ApiResponse<List<Tool>>> getTools({
+    int? page,
+    int? size,
+  }) async {
     try {
-      final url = Uri.parse('$baseUrl/api/tools/');
-      print('📡 GET Tools Catalog: $url');
+      final queryParams = <String, String>{
+        'page': '${page ?? 1}',
+        'size': '${size ?? 10}',
+      };
+
+      final url = Uri.parse('$baseUrl/api/tools/').replace(queryParameters: queryParams);
+      print('📡 [INVENTORY DIAGNOSTICS] GET Tools Catalog: $url');
 
       final response = await _authorizedRequest((accessToken) =>
           http.get(
@@ -2028,10 +2104,11 @@ class ApiService {
             },
           )).timeout(const Duration(seconds: 15));
 
-      print('📡 Tools Catalog Status: ${response.statusCode}');
+      print('📡 [INVENTORY DIAGNOSTICS] Tools Catalog Status: ${response.statusCode}');
 
 
       if (response.statusCode == 200) {
+        print('📡 [INVENTORY DIAGNOSTICS] Tools Response: ${response.body}');
         final decoded = jsonDecode(response.body);
         List<dynamic> raw = [];
 
@@ -2061,6 +2138,7 @@ class ApiService {
         print('✅ Fetched ${items.length} tools');
         return ApiResponse(isSuccess: true, data: items);
       }
+      print('📡 Tools Catalog Failed: ${response.statusCode} - ${response.body}');
       return ApiResponse(isSuccess: false,
           error: 'Failed to fetch tools (${response.statusCode})');
     } catch (e) {
@@ -2117,21 +2195,29 @@ class ApiService {
   }
 
   // ── My Tool Stocks ─────────────────────────────────────────────────────────
-  Future<ApiResponse<List<ToolStock>>> getMyToolStocks() async {
+  Future<ApiResponse<List<ToolStock>>> getMyToolStocks({
+    int? page,
+    int? size,
+  }) async {
     try {
       final accessToken = await getAccessToken();
       if (accessToken == null) throw Exception('No access accessToken');
 
-      final url = Uri.parse('$baseUrl/api/tools/my-stocks/');
-      print('📡 GET Tool Stocks: $url');
+      final queryParams = <String, String>{
+        'page': '${page ?? 1}',
+        'size': '${size ?? 10}',
+      };
+
+      final url = Uri.parse('$baseUrl/api/tools/my-stocks/').replace(queryParameters: queryParams);
+      print('📡 [INVENTORY DIAGNOSTICS] GET Tool Stocks: $url');
 
       final response = await http.get(url, headers: {
         'Authorization': 'Bearer $accessToken',
         'Accept': 'application/json',
       }).timeout(const Duration(seconds: 15));
 
-      print('📡 Tool Stocks Status: ${response.statusCode}');
-      print('📦 Tool Stocks Body: ${response.body}');
+      print('📡 [INVENTORY DIAGNOSTICS] Tool Stocks Status: ${response.statusCode}');
+      print('📦 [INVENTORY DIAGNOSTICS] Tool Stocks Body: ${response.body}');
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
@@ -2139,23 +2225,35 @@ class ApiService {
         if (decoded is List) {
           raw = decoded;
         } else if (decoded is Map) {
-          final data = decoded['data'] ?? decoded['results'];
+          // If the top level is a Map, look for 'data' or 'results' etc.
+          var data = decoded['data'] ?? decoded['results'] ?? decoded['items'] ??
+                       decoded['tool_stocks'] ?? decoded['stocks'];
+
           if (data is List) {
             raw = data;
           } else if (data is Map) {
-            raw = [data];
+            // If the unwrapped data is a Map, it might contain the actual list (e.g. data['stocks'] in your log)
+            final innerList = data['results'] ?? data['stocks'] ?? data['items'] ?? data['tool_stocks'] ?? data['data'];
+            if (innerList is List) {
+              raw = innerList;
+            } else {
+              // Fallback: treat the map as a single item if it looks like one, or use decoded root
+              raw = [data];
+            }
           } else {
+            // If none of the keys found a list/map, maybe the root itself is the map (older APIs)
             raw = [decoded];
           }
         }
 
         final items = raw.map((e) => ToolStock.fromJson(e)).toList();
+        print('✅ [INVENTORY DIAGNOSTICS] Parsed ${items.length} tool stocks');
         return ApiResponse(isSuccess: true, data: items);
       }
       return ApiResponse(isSuccess: false,
           error: 'Tool stocks failed (${response.statusCode})');
     } catch (e) {
-      print('❌ getMyToolStocks error: $e');
+      print('❌ [INVENTORY DIAGNOSTICS] getMyToolStocks error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
     }
   }
@@ -2178,22 +2276,31 @@ class ApiService {
       print('📦 Product Stocks Body: ${response.body}');
 
       if (response.statusCode == 200) {
+        print('📦 [INVENTORY DIAGNOSTICS] Product Stocks Body: ${response.body}');
         final decoded = jsonDecode(response.body);
         List<dynamic> raw = [];
         if (decoded is List) {
           raw = decoded;
         } else if (decoded is Map) {
-          final data = decoded['data'] ?? decoded['results'];
+          var data = decoded['data'] ?? decoded['results'] ?? decoded['items'] ??
+                       decoded['product_stocks'] ?? decoded['stocks'];
+
           if (data is List) {
             raw = data;
           } else if (data is Map) {
-            raw = [data];
+            final innerList = data['results'] ?? data['product_stocks'] ?? data['stocks'] ?? data['items'] ?? data['data'];
+            if (innerList is List) {
+              raw = innerList;
+            } else {
+              raw = [data];
+            }
           } else {
             raw = [decoded];
           }
         }
 
         final items = raw.map((e) => ProductStock.fromJson(e)).toList();
+        print('✅ [INVENTORY DIAGNOSTICS] Parsed ${items.length} product stocks');
         return ApiResponse(isSuccess: true, data: items);
       }
       return ApiResponse(isSuccess: false,
@@ -2343,6 +2450,98 @@ class ApiService {
               .statusCode})');
     } catch (e) {
       print('❌ createSlotChangeRequest error: $e');
+      return ApiResponse(isSuccess: false, error: e.toString());
+    }
+  }
+
+  static Future<ApiResponse<Map<String, dynamic>>> verifyRequestOtp(String requestId, String otp) async {
+    try {
+      final accessToken = await getAccessToken();
+      if (accessToken == null) {
+        return ApiResponse(isSuccess: false, error: 'Not authenticated');
+      }
+
+      final url = Uri.parse('$baseUrl/api/request/delivery/verify-otp/$requestId/');
+      print('📡 [OTP DIAGNOSTICS] Calling Endpoint: $url');
+      print('📡 [OTP DIAGNOSTICS] Request ID: $requestId');
+
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: jsonEncode({"otp": otp}),
+      );
+
+      print('📡 [OTP DIAGNOSTICS] Status Code: ${response.statusCode}');
+      print('📡 [OTP DIAGNOSTICS] Raw Response: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return ApiResponse(isSuccess: true, data: jsonDecode(response.body));
+      }
+
+      final json = jsonDecode(response.body);
+      String errorMsg = 'Failed to verify OTP';
+      if (json is Map && json['message'] != null) {
+        errorMsg = json['message'].toString();
+      } else if (json is Map && json['errors'] != null) {
+        errorMsg = json['errors'].toString();
+      }
+
+      return ApiResponse(isSuccess: false, error: errorMsg);
+    } catch (e) {
+      print('❌ verifyRequestOtp error: $e');
+      return ApiResponse(isSuccess: false, error: e.toString());
+    }
+  }
+
+  static Future<ApiResponse<Map<String, dynamic>>> updateHubServiceStatus(
+    String requestId,
+    String status, {
+    String? notes,
+    bool visibleToCustomer = true,
+  }) async {
+    try {
+      final accessToken = await _getAccessToken();
+      if (accessToken == null) {
+        return ApiResponse(isSuccess: false, error:  'Not authenticated');
+      }
+
+      final url = Uri.parse('$baseUrl/api/request/tracking/$requestId/');
+      print('📡 Updating Hub Tracking Status: $url');
+
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: jsonEncode({
+          "hub_status": status,
+          if (notes != null) "notes": notes,
+          "visible_to_customer": visibleToCustomer,
+        }),
+      );
+
+      print('📡 Hub Tracking Status Response: ${response.statusCode}');
+      print('📡 Hub Tracking Status Body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return ApiResponse(isSuccess: true, data: jsonDecode(response.body));
+      }
+
+      final json = jsonDecode(response.body);
+      String errorMsg = 'Failed to update status';
+      if (json is Map && json['message'] != null) {
+        errorMsg = json['message'].toString();
+      } else if (json is Map && json['errors'] != null) {
+        errorMsg = json['errors'].toString();
+      }
+
+      return ApiResponse(isSuccess: false, error: errorMsg);
+    } catch (e) {
+      print('❌ updateHubServiceStatus error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
     }
   }
@@ -2582,5 +2781,4 @@ class ApiService {
     _requestWsChannel?.sink.close();
     _requestWsChannel = null;
   }
-
 }

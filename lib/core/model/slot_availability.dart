@@ -14,6 +14,7 @@ class SlotAvailability {
   final String? etaStartTime;
   final String? etaEndTime;
   final String? status;
+  final bool? isAvailable;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -30,6 +31,7 @@ class SlotAvailability {
     this.etaStartTime,
     this.etaEndTime,
     this.status,
+    this.isAvailable,
     this.createdAt,
     this.updatedAt,
     this.orderDetails,
@@ -81,6 +83,7 @@ class SlotAvailability {
       etaStartTime: json['eta_start_time']?.toString(),
       etaEndTime: json['eta_end_time']?.toString(),
       status: json['status']?.toString(),
+      isAvailable: json['is_available'] ?? (json['status']?.toString().toUpperCase() == 'AVAILABLE'),
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString())
           : null,
@@ -104,7 +107,8 @@ class SlotAvailability {
       'eta_start_time': etaStartTime,
       'eta_end_time': etaEndTime,
       'status': status,
-      'order_details':orderDetails,
+      'is_available': isAvailable,
+      'order_details': orderDetails,
       'created_at': createdAt?.toIso8601String(),
       'updated_at': updatedAt?.toIso8601String(),
     };

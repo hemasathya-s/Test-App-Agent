@@ -538,10 +538,15 @@ class LoginPageState extends State<LoginPage> {
                         children: [
                           Expanded(
                             child: GestureDetector(
-                              onTap: () => setState(() => _isOtpLogin = true),
+                              onTap: () {
+                                FocusScope.of(context).unfocus();
+                                setState(() => _isOtpLogin = true);
+                              },
                               child: Container(
                                 decoration: BoxDecoration(
-                                  color: _isOtpLogin ? Colors.orange[400] : Colors.transparent,
+                                  color: _isOtpLogin
+                                      ? Colors.orange[400]
+                                      : Colors.transparent,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 alignment: Alignment.center,
@@ -557,10 +562,15 @@ class LoginPageState extends State<LoginPage> {
                           ),
                           Expanded(
                             child: GestureDetector(
-                              onTap: () => setState(() => _isOtpLogin = false),
+                              onTap: () {
+                                FocusScope.of(context).unfocus();
+                                setState(() => _isOtpLogin = false);
+                              },
                               child: Container(
                                 decoration: BoxDecoration(
-                                  color: !_isOtpLogin ? Colors.orange[400] : Colors.transparent,
+                                  color: !_isOtpLogin
+                                      ? Colors.orange[400]
+                                      : Colors.transparent,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 alignment: Alignment.center,
@@ -590,6 +600,7 @@ class LoginPageState extends State<LoginPage> {
                       ),
                       const SizedBox(height: 8),
                       _buildTextFormField(
+                        key: const ValueKey('mobile_field'),
                         controller: _mobileNumberController,
                         focusNode: _mobileNumberFocusNode,
                         maxLength: 10,
@@ -613,6 +624,7 @@ class LoginPageState extends State<LoginPage> {
                       ),
                       const SizedBox(height: 8),
                       _buildTextFormField(
+                        key: const ValueKey('email_field'),
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
                         validator: (value) {
@@ -632,8 +644,10 @@ class LoginPageState extends State<LoginPage> {
                       ),
                       const SizedBox(height: 8),
                       _buildTextFormField(
+                        key: const ValueKey('password_field'),
                         controller: _passwordController,
                         obscureText: true,
+                        keyboardType: TextInputType.text,
                         validator: (value) {
                           if (value == null || value.isEmpty) return 'Please enter your password';
                           return null;
@@ -715,6 +729,7 @@ class LoginPageState extends State<LoginPage> {
   }
 
   Widget _buildTextFormField({
+    Key? key,
     required TextEditingController controller,
     FocusNode? focusNode,
     bool obscureText = false,
@@ -723,6 +738,7 @@ class LoginPageState extends State<LoginPage> {
     String? Function(String?)? validator,
   }) {
     return TextFormField(
+      key: key,
       controller: controller,
       focusNode: focusNode,
       obscureText: obscureText,
