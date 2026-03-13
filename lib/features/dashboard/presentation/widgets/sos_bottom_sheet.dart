@@ -1,8 +1,45 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/services/apiservices.dart';
 
-class SosBottomSheet extends StatelessWidget {
+class SosBottomSheet extends StatefulWidget {
   const SosBottomSheet({super.key});
+
+  @override
+  State<SosBottomSheet> createState() => _SosBottomSheetState();
+}
+
+class _SosBottomSheetState extends State<SosBottomSheet> {
+  Map<String, dynamic>? _settings;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final settings = await ApiService.getAppSettings();
+    
+    // 🔹 PRINT THE RESPONSE FROM THE API
+    debugPrint('DEBUG: APP SETTINGS RESPONSE:');
+    if (settings != null) {
+      debugPrint(jsonEncode(settings));
+    } else {
+      debugPrint('DEBUG: APP SETTINGS RESPONSE IS NULL');
+    }
+
+    if (mounted) {
+      setState(() {
+        _settings = settings;
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,48 +88,30 @@ class SosBottomSheet extends StatelessWidget {
               children: [
                 _buildSosOption(
                   context,
-                  icon: Icons.people_outline,
-                  label: 'Nearby Agents',
-                  onTap: () =>
-                      _handleAction(context, 'Alerting nearby agents...'),
-                  color: Colors.blue,
-                ),
-                _buildSosOption(
-                  context,
                   icon: Icons.support_agent,
-                  label: 'Support Team',
-                  onTap: () =>
-                      _handleAction(context, 'Calling Support Team...'),
+                  label: 'Support Call',
+                  onTap: () => _makeCall(_settings?['support_phone']),
                   color: Colors.blue,
                 ),
                 _buildSosOption(
                   context,
-                  icon: Icons.medical_services_outlined,
+                  icon: Icons.contact_emergency,
                   label: 'Ambulance',
-                  onTap: () => _handleAction(context, 'Calling Ambulance...'),
+                  onTap: () => _makeCall(_settings?['contact_ambulance'] ?? '108'),
                   color: Colors.red,
                 ),
                 _buildSosOption(
                   context,
                   icon: Icons.local_police_outlined,
                   label: 'Police',
-                  onTap: () => _handleAction(context, 'Calling Police...'),
+                  onTap: () => _makeCall(_settings?['contact_police'] ?? '100'),
                   color: Colors.red,
-                ),
-                _buildSosOption(
-                  context,
-                  icon: Icons.car_crash_outlined,
-                  label: 'Report Accident',
-                  onTap: () =>
-                      _handleAction(context, 'Opening Accident Report...'),
-                  color: Colors.orange,
                 ),
                 _buildSosOption(
                   context,
                   icon: Icons.warning_amber_rounded,
                   label: 'Report Theft',
-                  onTap: () =>
-                      _handleAction(context, 'Opening Theft Report...'),
+                  onTap: () => _makeCall(_settings?['contact_police'] ?? '100'),
                   color: Colors.orange,
                 ),
                 _buildSosOption(
@@ -100,8 +119,15 @@ class SosBottomSheet extends StatelessWidget {
                   icon: Icons.build_outlined,
                   label: 'Bike Repair',
                   onTap: () =>
-                      _handleAction(context, 'Requesting Bike Repair...'),
+                      _makeCall(_settings?['support_phone']),
                   color: Colors.orange,
+                ),
+                _buildSosOption(
+                  context,
+                  icon: Icons.mail,
+                  label: 'Support Mail',
+                  onTap: () => _sendEmail(_settings?['support_email']),
+                  color: Colors.grey,
                 ),
               ],
             ),
@@ -147,14 +173,19 @@ class SosBottomSheet extends StatelessWidget {
     );
   }
 
-  void _handleAction(BuildContext context, String message) {
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.black87,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  Future<void> _makeCall(String? phoneNumber) async {
+    if (phoneNumber == null || phoneNumber.isEmpty) return;
+    final Uri url = Uri.parse('tel:$phoneNumber');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    }
+  }
+
+  Future<void> _sendEmail(String? email) async {
+    if (email == null || email.isEmpty) return;
+    final Uri url = Uri.parse('mailto:$email');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    }
   }
 }

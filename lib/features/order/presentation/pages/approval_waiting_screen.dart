@@ -44,20 +44,21 @@ class _ApprovalWaitingScreenState extends ConsumerState<ApprovalWaitingScreen> {
   /// • Emits once when status becomes APPROVED/APPLIED or REJECTED/DECLINED
   /// • If the server closes the socket before a final status arrives,
   ///   reconnects automatically after 5 s (so the buffer never disappears)
-  void _connectWs(String orderId) {
+  Future<void> _connectWs(String orderId) async {
     if (_done) return;
+
     _wsSub?.cancel();
     debugPrint('WS: connecting for order $orderId');
 
-    _wsSub = ApiService.orderUpdatedStream(orderId).listen(
-      // ── Final status received ────────────────────────────────────
-      (bool approved) {
+    final stream = await ApiService.orderUpdatedStream(orderId);
+
+    _wsSub = stream.listen(
+          (bool approved) {
         _done = true;
         _wsSub?.cancel();
         if (mounted) _onStatusReceived(approved);
       },
 
-      // ── Stream closed without a result (server drop / error) ─────
       onDone: () {
         debugPrint('WS: closed without result — reconnecting in 5 s');
         Future.delayed(const Duration(seconds: 5), () {

@@ -12,6 +12,7 @@ import '../features/dashboard/presentation/pages/AgentEditProfilePage.dart';
 import '../Model/AgentProfileResponse.dart';
 import '../features/dashboard/presentation/pages/ForceUpdateScreen.dart';
 import '../features/dashboard/presentation/pages/dashboard_shell.dart';
+import '../features/inventory/presentation/pages/RequestInventoryPage.dart';
 import '../features/map/presentation/pages/service_area_screen.dart';
 import '../features/jobs/presentation/pages/new_job_request_screen.dart';
 import '../features/jobs/presentation/pages/job_details_screen.dart';
@@ -61,17 +62,12 @@ final router = GoRouter(
       path: '/job-details',
       builder: (context, state) {
         final extra = state.extra;
-        print("Router extra: $extra");
-        print("Router extra type: ${extra.runtimeType}");
         debugPrint('DEBUG: Navigating to /job-details with extra type: ${extra.runtimeType}');
         if (extra is SlotAvailability) {
-          print("Router: extra matches SlotAvailability");
           return JobDetailsScreen(slot: extra);
         } else if (extra is OrderDetails) {
-          print("Router: extra matches OrderDetails");
           return JobDetailsScreen(order: extra);
         }
-        print("Router: extra NO MATCH");
         return const JobDetailsScreen();
       },
     ),
@@ -121,7 +117,10 @@ final router = GoRouter(
     ),
     GoRoute(
       path: '/checklist',
-      builder: (context, state) => const ServiceChecklistScreen(),
+      builder: (context, state) {
+        final order = state.extra as OrderDetails;
+        return ServiceChecklistScreen(order: order);
+      },
     ),
     GoRoute(
       path: '/modify-order',

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -14,6 +15,8 @@ class DashboardState {
   final List<OrderDetails> upcomingOrders;
   final bool isLoading;
   final String? error;
+  final bool showPermissionDialog;
+  final List<String> missingPermissions;
 
   const DashboardState({
     this.currentTabIndex = 0,
@@ -23,6 +26,8 @@ class DashboardState {
     this.upcomingOrders = const [],
     this.isLoading = false,
     this.error,
+    this.showPermissionDialog = false,
+    this.missingPermissions = const [],
   });
 
   DashboardState copyWith({
@@ -33,6 +38,8 @@ class DashboardState {
     List<OrderDetails>? upcomingOrders,
     bool? isLoading,
     String? error,
+    bool? showPermissionDialog,
+    List<String>? missingPermissions,
   }) {
     return DashboardState(
       currentTabIndex: currentTabIndex ?? this.currentTabIndex,
@@ -42,6 +49,8 @@ class DashboardState {
       upcomingOrders: upcomingOrders ?? this.upcomingOrders,
       isLoading: isLoading ?? this.isLoading,
       error: error,
+      showPermissionDialog: showPermissionDialog ?? this.showPermissionDialog,
+      missingPermissions: missingPermissions ?? this.missingPermissions,
     );
   }
 }
@@ -58,23 +67,45 @@ class DashboardController extends Notifier<DashboardState> {
   Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
     final bool persistedStatus = prefs.getBool(_availabilityKey) ?? false;
-
+    
     state = state.copyWith(isAvailable: persistedStatus);
-
+    
     if (persistedStatus) {
-      // Check if we still have permissions on restart
       final hasLocation = await Permission.location.isGranted;
       final hasNotification = await Permission.notification.isGranted;
-
+      
       if (hasLocation && hasNotification) {
         _startBackgroundService();
       } else {
         await prefs.setBool(_availabilityKey, false);
         state = state.copyWith(isAvailable: false);
+        // Initial check on app startup
+        _checkPermissions();
       }
     }
-
+    
     Future.microtask(() => fetchUpcomingJobs());
+  }
+
+  Future<void> _checkPermissions() async {
+    List<String> missing = [];
+    if (!await Permission.location.isGranted) missing.add("Location");
+    if (!await Permission.notification.isGranted) missing.add("Notification");
+    // Check battery optimization status
+    if (!await Permission.ignoreBatteryOptimizations.isGranted) missing.add("Battery Optimization");
+
+    if (missing.isNotEmpty) {
+      state = state.copyWith(
+        showPermissionDialog: true,
+        missingPermissions: missing,
+      );
+    } else {
+      state = state.copyWith(showPermissionDialog: false, missingPermissions: []);
+    }
+  }
+
+  void dismissPermissionDialog() {
+    state = state.copyWith(showPermissionDialog: false);
   }
 
   Future<void> fetchUpcomingJobs() async {
@@ -109,40 +140,66 @@ class DashboardController extends Notifier<DashboardState> {
     state = state.copyWith(currentTabIndex: index);
   }
 
+  Future<void> requestPermissions() async {
+    // 1. Clear current dialog state to prevent rebuild loops
+    state = state.copyWith(showPermissionDialog: false);
+
+    // 2. Request basic permissions first
+    await [
+      Permission.location,
+      Permission.notification,
+    ].request();
+
+    // 3. Request background location
+    if (await Permission.location.isGranted) {
+      await Permission.locationAlways.request();
+    }
+
+    // 4. Request battery optimization exemption
+    await Permission.ignoreBatteryOptimizations.request();
+
+    // 5. Re-check status
+    await _checkPermissions();
+
+    // If essential tracking permissions are granted, try to go online
+    final hasLocation = await Permission.location.isGranted;
+    final hasNotification = await Permission.notification.isGranted;
+    if (hasLocation && hasNotification) {
+       // Only start if they aren't already online
+       if (!state.isAvailable) {
+         await toggleAvailability(true);
+       }
+    }
+  }
+
   Future<void> toggleAvailability(bool value) async {
     if (value) {
-      // 1. Request Permissions first
-      final status = await [
-        Permission.location,
-        Permission.notification,
-        Permission.locationAlways, // Recommended for background tracking
-      ].request();
+      final hasLocation = await Permission.location.isGranted;
+      final hasNotification = await Permission.notification.isGranted;
 
-      // 2. Check if essential permissions are granted
-      final isLocationGranted = status[Permission.location]?.isGranted ?? false;
-      final isNotificationGranted = status[Permission.notification]?.isGranted ?? false;
-
-      if (isLocationGranted && isNotificationGranted) {
+      if (hasLocation && hasNotification) {
         _startBackgroundService();
+        state = state.copyWith(isAvailable: true, showPermissionDialog: false);
       } else {
-        // Permissions denied, revert switch
-        state = state.copyWith(
-          isAvailable: false,
-          error: "Location and Notification permissions are required to go online.",
-        );
+        state = state.copyWith(isAvailable: false);
+        _checkPermissions();
         return;
       }
     } else {
       _stopBackgroundService();
+      state = state.copyWith(isAvailable: false);
     }
 
-    state = state.copyWith(isAvailable: value);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_availabilityKey, value);
+    await prefs.setBool(_availabilityKey, state.isAvailable);
   }
 
   void _startBackgroundService() {
-    FlutterBackgroundService().startService();
+    try {
+      FlutterBackgroundService().startService();
+    } catch (e) {
+      debugPrint("Error starting background service: $e");
+    }
   }
 
   void _stopBackgroundService() {

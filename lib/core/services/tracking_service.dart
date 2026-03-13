@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter/foundation.dart';
@@ -44,16 +44,17 @@ class TrackingService {
   /// BUILD WEBSOCKET URI
   /// Using Uri.parse() on a plain string avoids the Dart Uri() constructor
   /// injecting port :0 for an unknown scheme (wss has no default in Dart).
-  Uri _buildWsUri() {
+  Future<Uri> _buildWsUri() async {
     final base = ApiService.wsBaseUrl.replaceAll(RegExp(r'/$'), '');
-    final token = ApiService.getAccessToken();
+    final token = await ApiService.getAccessToken(); // await the Future
     return Uri.parse('$base/ws/api/tracking/log/?token=$token');
   }
 
   /// CONNECT WEBSOCKET
-  void _connectWebSocket() {
+  Future<void> _connectWebSocket() async {
+    final token = await ApiService.getAccessToken();
     if (_channel != null ||
-        ApiService.getAccessToken() == null ||
+        token == null ||
         !_isOnline ||
         _isConnecting) return;
 
@@ -63,7 +64,7 @@ class TrackingService {
     debugPrint("[TRACKING] Connecting to WS: $uri");
 
     try {
-      _channel = WebSocketChannel.connect(uri);
+      _channel = WebSocketChannel.connect(await uri);
 
       _channel!.stream.listen(
         (message) {
@@ -183,16 +184,33 @@ class TrackingService {
         return;
       }
 
+      // Helper to ensure values fit in backend DecimalField(max_digits=5, decimal_places=2)
+      // and satisfies "no more than 3 digits before the decimal point" (max_whole_digits=3)
+      String formatForBackend(double value) {
+        double absValue = value.abs();
+        if (absValue >= 1000) {
+          // Cap at 999.99 to satisfy max_whole_digits=3 and max_digits=5
+          return "999.99";
+        } else if (absValue >= 100) {
+          // e.g. 123.45 -> satisfies max_whole_digits=3 and max_digits=5
+          return value.toStringAsFixed(2);
+        } else {
+          // e.g. 12.34
+          return value.toStringAsFixed(2);
+        }
+      }
+
       final Map<String, dynamic> data = {
         "latitude": position.latitude.toString(),
         "longitude": position.longitude.toString(),
-        "accuracy": position.accuracy.toStringAsFixed(2),
-        "speed": position.speed.toStringAsFixed(2),
-        "heading": position.heading.toStringAsFixed(2),
+        "accuracy": formatForBackend(position.accuracy),
+        "speed": formatForBackend(position.speed),
+        "heading": formatForBackend(position.heading),
         "battery_level": 100,
         "is_mock_location": position.isMocked,
       };
-      print ("latitude: ${position.latitude.toString()}longitude: ${position.longitude.toString()},accuracy: ${position.accuracy.toStringAsFixed(2)},speed: ${position.speed.toStringAsFixed(2)},heading: ${position.heading.toStringAsFixed(2)},battery_level: 100,is_mock_location: ${position.isMocked},");
+
+      debugPrint ("latitude: ${position.latitude} longitude: ${position.longitude}, accuracy: ${data['accuracy']}, speed: ${data['speed']}, heading: ${data['heading']}");
 
       if (_destLat != null && _destLng != null) {
         data["destination_latitude"] = _destLat.toString();

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/apiservices.dart';
 import '../providers/dashboard_provider.dart';
@@ -29,6 +28,13 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     final state = ref.watch(dashboardProvider);
     final controller = ref.read(dashboardProvider.notifier);
 
+    // Show permission dialog when missing
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (state.showPermissionDialog) {
+        _showPermissionDialog(context, ref);
+      }
+    });
+
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: () => ref.read(dashboardProvider.notifier).fetchUpcomingJobs(),
@@ -41,7 +47,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               // Left: Toggle
-              _buildAvailabilityToggle(state, controller, context),
+              _buildAvailabilityToggle(state, controller, context, ref),
               // Right: SOS, Notification, Profile
               Row(
                 children: [
@@ -240,6 +246,104 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     );
   }
 
+  void _showPermissionDialog(BuildContext context, WidgetRef ref) {
+    final state = ref.read(dashboardProvider);
+    final controller = ref.read(dashboardProvider.notifier);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Permissions Needed',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'To receive new jobs and track your location properly, please enable:',
+              style: GoogleFonts.outfit(color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 16),
+            ...state.missingPermissions.map((p) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryColor.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          p == 'Location'
+                            ? Icons.location_on
+                            : p == 'Notification'
+                              ? Icons.notifications_active
+                              : Icons.battery_saver,
+                          size: 18,
+                          color: AppTheme.primaryColor,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              p,
+                              style: GoogleFonts.outfit(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                              ),
+                            ),
+                            if (p == 'Battery Optimization')
+                              Text(
+                                'Allows the app to run smoothly when the screen is off.',
+                                style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              controller.dismissPermissionDialog();
+              Navigator.pop(ctx);
+            },
+            child: Text(
+              'Later',
+              style: GoogleFonts.outfit(color: AppTheme.textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              controller.requestPermissions();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
+            child: Text(
+              'Allow Now',
+              style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHeaderIcon(IconData icon) {
     return Container(
       width: 42,
@@ -283,15 +387,16 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     DashboardState state,
     DashboardController controller,
     BuildContext context,
+    WidgetRef ref,
   ) {
     return GestureDetector(
       onTap: () async {
         if (!state.isAvailable) {
-          // GOING ONLINE — toggle local state immediately so the button responds
-          // even if the API is slow or the token is expired.
+          // GOING ONLINE
           await controller.toggleAvailability(true);
-          // Notify backend in the background (fire-and-forget).
-          ApiService.toggleActiveStatus();
+          if (ref.read(dashboardProvider).isAvailable) {
+            ApiService.toggleActiveStatus();
+          }
         } else {
           // GOING OFFLINE — show confirmation dialog first
           final shouldTurnOff = await showDialog<bool>(
@@ -330,7 +435,6 @@ class _HomeTabState extends ConsumerState<HomeTab> {
           );
 
           if (shouldTurnOff == true) {
-            // Toggle local state immediately, then notify backend.
             await controller.toggleAvailability(false);
             ApiService.toggleActiveStatus();
           }
@@ -391,13 +495,12 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     );
   }
 
-  Widget   _buildJobCard(
+  Widget _buildJobCard(
     OrderDetails order,
     BuildContext context,
     WidgetRef ref,
     bool isAgentOnline,
   ) {
-    print("Home Page Order Details $order");
     final title = (order.items != null && order.items!.isNotEmpty)
         ? (order.items!.first.itemDetails?.name ?? 'Unnamed Order')
         : 'Unnamed Order';
@@ -520,7 +623,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: isAgentOnline ? () =>
-                        _showAcceptBottomSheet(context, order):null,
+                        _showAcceptBottomSheet(context, ref, order) : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryColor,
                       disabledBackgroundColor: Colors.grey.shade300,
@@ -542,19 +645,19 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                   child: OutlinedButton(
                     onPressed: isAgentOnline ? () {
                       if (order.id != null) {
-                        _showRejectBottomSheet(context, order.id!);
+                        _showRejectBottomSheet(context, ref, order.id!);
                       }
                     } : null,
                     style: OutlinedButton.styleFrom(
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: BorderSide(color: Colors.grey.shade300),
+                      side: BorderSide(color: isAgentOnline ? Colors.grey.shade300 : Colors.grey.shade200),
                     ),
                     child: Text(
                       'Reject',
                       style: GoogleFonts.outfit(
-                          color: AppTheme.textSecondary,
+                          color: isAgentOnline ? AppTheme.textSecondary : Colors.grey.shade400,
                           fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -619,15 +722,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                       // );
                       context.push(
                         '/agent-tracking',
-                        extra: {
-                          'destination': LatLng(
-                            order.latitude ?? 13.0418,
-                            order.longitude ?? 80.2337,
-                          ),
-                          'customerName': order.customerName ?? 'Customer',
-                          'customerPhone': order.customerNumber ?? '',
-                          'orderId': order.id ?? '',
-                        },
+                        extra: order,
                       );
                     },
                     style: ElevatedButton.styleFrom(
@@ -661,7 +756,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   }
 
   void _showAcceptBottomSheet(
-      BuildContext context, OrderDetails order) {
+      BuildContext context, WidgetRef ref, OrderDetails order) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -752,7 +847,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                       onPressed: () {
                         Navigator.pop(context);
                         if (order.id != null) {
-                          _showRejectBottomSheet(context, order.id!);
+                          _showRejectBottomSheet(context, ref, order.id!);
                         }
                       },
                       style: OutlinedButton.styleFrom(
@@ -844,7 +939,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
   }
 
   void _showRejectBottomSheet(
-      BuildContext context, String orderId) {
+      BuildContext context, WidgetRef ref, String orderId) {
     final controller = TextEditingController();
     final formKey = GlobalKey<FormState>();
     final isReasonValid = ValueNotifier<bool>(false);

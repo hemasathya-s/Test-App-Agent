@@ -2,9 +2,14 @@ import 'dart:convert';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'dart:convert';
+
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/services/background_tracking.dart';
 import 'package:go_router/go_router.dart';
 import 'package:urban_agent_app/config/router.dart' as app_router;
 import 'package:urban_agent_app/core/services/apiservices.dart';
@@ -117,6 +122,25 @@ void main()async{
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  // Create the notification channel required for the background service (Android 8.0+)
+  const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    'tracking_channel', // id - MUST MATCH background_tracking.dart
+    'Agent Tracking Service', // title
+    description: 'This channel is used for agent location tracking.', // description
+    importance: Importance.low, // low importance so it doesn't pop up constantly
+  );
+
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
+
+  // Initialize the background service configuration.
+  await initializeBackgroundService();
 
   await initializeNotifications();
 
@@ -245,7 +269,7 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'IT Fixer Partner',
+      title: 'IT Fixer Agent',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       routerConfig: app_router.router,

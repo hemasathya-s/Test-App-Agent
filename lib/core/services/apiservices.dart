@@ -14,6 +14,7 @@ import 'package:urban_agent_app/core/model/ServiceModal.dart';
 import 'package:urban_agent_app/core/model/order_details.dart';
 import 'package:urban_agent_app/core/model/agent_order_response.dart';
 import '../../Model/AgentRegistrationRequest.dart';
+import '../../Model/AppSettings.dart';
 import '../../Model/AuthResponse.dart';
 import '../../Model/AgentProfileResponse.dart';
 import '../../Model/LoginRequestModel.dart';
@@ -24,13 +25,6 @@ import '../../Model/ProductStock.dart';
 import '../../Model/ToolStock.dart';
 import '../../Model/Tool.dart';
 import '../model/slot_availability.dart';
-import 'package:urban_agent_app/core/model/slot_availability.dart';
-import 'package:urban_agent_app/Model/AuthResponse.dart';
-import 'package:urban_agent_app/Model/AgentRegistrationRequest.dart';
-import 'package:urban_agent_app/Model/AgentProfileResponse.dart';
-import 'package:urban_agent_app/Model/LoginRequestModel.dart';
-import 'package:urban_agent_app/Model/OtpUser.dart';
-import 'package:urban_agent_app/Model/AppSettings.dart';
 
 class ApiService {
   static const String baseUrl = 'https://api.itfixer199.com';
@@ -39,11 +33,37 @@ class ApiService {
   // static String accessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzczMTc5MTQ3LCJpYXQiOjE3NzMxMjUxNDcsImp0aSI6IjhmZWQ0YWRkZDk0OTRiODk4MzBhNzY1ZmQzOTczZGIzIiwidXNlcl9pZCI6ImUzYWM4OTQ3LTdhYzktNDYwOS05NGVlLTczZjNjYmU4ZWM1NiJ9.djd9pcmI_FapifZ7cn4OM3h_hJDCrFBFIdggVBYHRZU";
   // static String refresh = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc3MzM3NzQ3NSwiaWF0IjoxNzcyNzcyNjc1LCJqdGkiOiI0NTU0NDdlZTJmZWI0Y2M4OWZiYTU4YWEzZjYxNzQ5NiIsInVzZXJfaWQiOiJlM2FjODk0Ny03YWM5LTQ2MDktOTRlZS03M2YzY2JlOGVjNTYifQ.hsKt1SQSqlyBHaEGi0VKu57aHwtbfFunOZxs1qwMa34";
 
+  /// Fetch global app settings like app version, play store urls, company details.
+  static Future<Map<String, dynamic>?> getAppSettings() async {
+    try {
+      final userId =  getUserId();
+      final accessToken = await _getAccessToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/app-settings'),
+        headers: {
+          'accept': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return data['data'];
+        }
+      }
+      return null;
+    } catch (e) {
+      log("Error fetching app settings: $e");
+      return null;
+    }
+  }
+
   /// Connects once to the order WebSocket and stays connected.
   /// - Emits [true]  when service_modifications[].status == APPROVED or APPLIED
   /// - Emits [false] when service_modifications[].status == REJECTED or DECLINED
   /// - Emits nothing while status == PENDING (stream stays open)
-  static Stream<bool> orderUpdatedStream(String orderId){
+  static Future<Stream<bool>> orderUpdatedStream(String orderId)async{
     final controller = StreamController<bool>();
     WebSocketChannel? channel;
     StreamSubscription? sub;
@@ -60,9 +80,9 @@ class ApiService {
 
     try {
       final userId =  getUserId();
-      final accessToken =  _getAccessToken();
+      final accessToken =  await _getAccessToken();
 
-      final wsUrl = "$wsBaseUrl/ws/order/$orderId/?accessToken=$accessToken";
+      final wsUrl = "$wsBaseUrl/ws/order/$orderId/?token=$accessToken";
       print("WS CONNECTING → $wsUrl");
       channel = WebSocketChannel.connect(Uri.parse(wsUrl));
 
@@ -124,7 +144,7 @@ class ApiService {
       final userId =  getUserId();
       final accessToken =  _getAccessToken();
 
-      final wsUrl = "$wsBaseUrl/ws/api/tracking/log/?accessToken=$accessToken";
+      final wsUrl = "$wsBaseUrl/ws/api/tracking/log/?token=$accessToken";
       print("[TRACKING] CONNECTING → $wsUrl");
       channel = WebSocketChannel.connect(Uri.parse(wsUrl));
 
@@ -251,6 +271,7 @@ class ApiService {
       }
 
       String url = "$baseUrl/api/order/agent-orders/?is_active=true";
+      print("DEBUG: [API] Fetching Agent Orders URL: $url");
 
       final response = await http.get(
         Uri.parse(url),
@@ -262,14 +283,15 @@ class ApiService {
 
       print("Response body agent order ${response.body}");
       print("Response status code agent order ${response.statusCode}");
+      print("DEBUG: [API] Agent Orders Response Code: ${response.statusCode} and response body: ${response.body}");
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        return AgentOrderResponse
-            .fromJson(data)
-            .orders;
+        print("DEBUG: [API] Agent Orders Response Body: ${jsonEncode(data)}");
+        return AgentOrderResponse.fromJson(data).orders;
       }
       return null;
     } catch (e) {
+      print("DEBUG: [API] Agent Order Exception: $e");
       return null;
     }
   }
@@ -449,111 +471,6 @@ class ApiService {
     }
   }
 
-  /// Connects once to the order WebSocket and stays connected.
-  /// - Emits [true]  when service_modifications[].status == APPROVED or APPLIED
-  /// - Emits [false] when service_modifications[].status == REJECTED or DECLINED
-  /// - Emits nothing while status == PENDING (stream stays open)
-  /// - On unexpected server close: caller (ApprovalWaitingScreen) reconnects
- /* static Future<Stream<bool>> orderUpdatedStream(String orderId)async{
-    final ctrl = StreamController<bool>();
-    WebSocketChannel? channel;
-    StreamSubscription? sub;
-
-    void close(bool? result) {
-      if (ctrl.isClosed) return;
-      sub?.cancel();
-      channel?.sink.close();
-      if (result != null) ctrl.add(result);
-      ctrl.close();
-    }
-
-    try {
-      final accessToken = await _getAccessToken();
-
-      final wsBase = baseUrl
-          .replaceFirst('https://', 'wss://')
-          .replaceFirst('http://', 'ws://');
-      final wsUrl = '$wsBase/ws/order/$orderId/?accessToken=$accessToken';
-      print('WS connecting: $wsUrl');
-      channel = WebSocketChannel.connect(Uri.parse(wsUrl));
-
-      sub = channel.stream.listen(
-        (dynamic raw) {
-          try {
-            final data = jsonDecode(raw as String) as Map<String, dynamic>;
-            print('WS message: $data');
-
-            // WS sends: { "modification": { "status": "PENDING"/"APPROVED"/"REJECTED", ... } }
-            final mod = data['modification'] as Map<String, dynamic>?;
-            if (mod != null) {
-              final st = (mod['status'] as String? ?? '').toUpperCase();
-              print('WS: modification.status = $st');
-
-              if (st == 'APPROVED' || st == 'APPLIED') {
-                close(true);  // status changed ? show Approved sheet
-                return;
-              }
-              if (st == 'REJECTED' || st == 'DECLINED') {
-                close(false); // status changed ? show Rejected sheet
-                return;
-              }
-              // PENDING ? WS stays open, buffer keeps showing
-              print('WS: status=$st — staying connected');
-              return;
-            }
-
-          } catch (e) {
-            print('WS parse error: $e');
-          }
-        },
-        onError: (e) {
-          print('WS error: $e');
-          close(null); // close without result; caller will reconnect
-        },
-        onDone: () {
-          print('WS closed by server');
-          close(null); // close without result; caller will reconnect
-        },
-      );
-
-      ctrl.onCancel = () { sub?.cancel(); channel?.sink.close(); };
-    } catch (e) {
-      print('WS connect error: $e');
-      if (!ctrl.isClosed) { ctrl.addError(e); ctrl.close(); }
-    }
-
-    return ctrl.stream;
-  }*/
-
-  static Future<bool> deliveryVerifyOtp(String orderId,String otp)async{
-    try{
-      final accessToken = await _getAccessToken();
-
-      String url = "$baseUrl/api/order/orders/$orderId/verify-otp";
-
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $accessToken',
-        },
-        body: jsonEncode({
-          "otp":otp
-        })
-      );
-      if(response.statusCode == 200 || response.statusCode == 201){
-        return true;
-      }
-      return false;
-    }
-    catch(e){
-      print("Error on delivery verify otp $e");
-      return false;
-    }
-  }
-
-  /// Fetches a single [OrderDetails] by [orderId] and returns it.
-  /// Returns null if the request fails.
   static Future<OrderDetails?> getOrderbyId(String orderId) async {
     try {
       final userId = await getUserId();
@@ -585,7 +502,33 @@ class ApiService {
     return null;
   }
 
-  static Future<bool> updateJobStatus(String orderId, String status) async {
+  static Future<bool> verifyOrderOtp(String orderId, String otp) async {
+    try {
+      String url = '$baseUrl/api/order/orders/$orderId/verify-otp/';
+      print("DEBUG: [API] Verify OTP URL: $url");
+      print("DEBUG: [API] OTP: $otp");
+      final userId =  getUserId();
+      final accessToken = await _getAccessToken();
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: jsonEncode({"otp": otp}),
+      );
+      print("DEBUG: [API] Verify OTP Status Code: ${response.statusCode}");
+      if (response.statusCode == 200 || response.statusCode == 201 || response.statusCode == 204) {
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print("DEBUG: OTP Verify Error: $e");
+      return false;
+    }
+  }
+
+  static Future<bool> updateJobStatus(String orderId, String status, {String? otp}) async {
     try {
       final userId = await getUserId();
       final accessToken = await _getAccessToken();
@@ -598,6 +541,11 @@ class ApiService {
 
       if (accessToken == null) throw Exception('No access accessToken');
       String url = '$baseUrl/api/order/orders/$orderId/update-status/';
+      print("DEBUG: [API] Request Status Update -> URL: $url");
+      print("DEBUG: [API] Body: ${jsonEncode({
+        "order_status": status,
+        if (otp != null) "otp": otp,
+      })}");
 
       final response = await http.post(
         Uri.parse(url),
@@ -605,19 +553,36 @@ class ApiService {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $accessToken',
         },
-        body: jsonEncode({"order_status": status}),
+        body: jsonEncode({
+          "order_status": status,
+          if (otp != null) "otp": otp,
+        }),
       );
 
+      print("DEBUG: [API] Status Code: ${response.statusCode}");
+      print("DEBUG: [API] Response Body: ${response.body}");
+
       if (response.statusCode == 200 || response.statusCode == 201) {
-        print("Job $orderId status successfully updated to $status");
-        return true;
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        final updateStatus = data['update_status'];
+
+        // 🔹 MODIFIED: Return true if success is true, regardless of otp_required.
+        // This allows the UI to proceed to the OTP dialog if otp_required is true.
+        if (data['success'] == true) {
+          print("DEBUG: [API] Request Successful. OTP sent/verified logic proceeding.");
+          return true;
+        }
+        return false;
+      } else {
+        print("DEBUG: [API] Request Failed with status: ${response.statusCode}");
+        return false;
       }
-      return false;
     } catch (e) {
-      print("Error on update job status: $e");
+      print("DEBUG: [API] Error on update job status: $e");
       return false;
     }
   }
+
   static Future<bool?> toggleActiveStatus() async {
     try {
       final userId = await getUserId();
@@ -756,6 +721,9 @@ class ApiService {
       final accessToken = await _getAccessToken();
 
       final url = Uri.parse("$baseUrl/api/agent-zones/agent/");
+      print("ZONE API CALLING...");
+      print("URL: $url");
+
       final response = await http.get(
         url,
         headers: {
@@ -764,9 +732,14 @@ class ApiService {
         },
       );
 
+      print("ZONE STATUS: ${response.statusCode}");
+      print("ZONE BODY: ${response.body}");
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         List zones = data["data"]["zone_details"] ?? [];
+
+        print("TOTAL ZONES FOUND: ${zones.length}");
 
         return zones.map((zone) {
           List coords = zone["coordinates"] ?? [];
