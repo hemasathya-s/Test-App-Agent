@@ -7,6 +7,7 @@ import '../features/auth/presentation/pages/splash_screen.dart';
 import '../features/auth/presentation/pages/login_screen.dart';
 import '../features/auth/presentation/pages/permissions_screen.dart';
 import '../features/auth/presentation/pages/kyc_status_screen.dart';
+import '../features/auth/presentation/pages/CreateAgent.dart';
 import '../features/dashboard/presentation/pages/AgentProfilePage.dart';
 import '../features/dashboard/presentation/pages/AgentEditProfilePage.dart';
 import '../Model/AgentProfileResponse.dart';

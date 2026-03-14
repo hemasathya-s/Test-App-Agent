@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -398,7 +398,6 @@ class ApiService {
         final Map<String, dynamic> data = jsonDecode(response.body);
         List<dynamic> list = [];
         bool hasMore = false;
-
         if (data['success'] == true && data['services'] != null) {
           list = data['services'];
           // Check pagination metadata
@@ -1143,7 +1142,7 @@ class ApiService {
 
   // ── WebSocket ───────────────────────────────────────────────────────────────
   // ── Product WebSocket ───────────────────────────────────────────────────────
-  static const String _wsUrl = 'wss://api.itfixer199.com/ws/movements/';
+  static const String _productwsUrl = 'wss://api.itfixer199.com/ws/movements/';
   WebSocketChannel? _wsChannel;
   StreamSubscription? _wsSubscription;
   bool _wsIsConnecting = false;
@@ -1152,6 +1151,10 @@ class ApiService {
   StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<Map<String, dynamic>> get movementStream => _wsController.stream;
+
+  // Last used filters for reconnection
+  String? _lastProdWsStartDate, _lastProdWsEndDate;
+  int? _lastProdWsPage, _lastProdWsSize;
 
   // ── Tool WebSocket ──────────────────────────────────────────────────────────
   static const String _toolWsUrl = 'wss://api.itfixer199.com/ws/tool-movements/';
@@ -1165,11 +1168,38 @@ class ApiService {
   Stream<Map<String, dynamic>> get toolMovementStream =>
       _toolWsController.stream;
 
+  // Last used filters for tool reconnection
+  String? _lastToolWsStartDate, _lastToolWsEndDate;
+  int? _lastToolWsPage, _lastToolWsSize;
+
+  // ── Request WebSocket ───────────────────────────────────────────────────────
+  WebSocketChannel? _requestWsChannel;
+  StreamSubscription? _requestWsSubscription;
+  bool _requestWsIsConnecting = false;
+  bool _requestWsManualDisconnect = false;
+  int _requestWsReconnectAttempts = 0;
+  final StreamController<Map<String, dynamic>> _requestWsController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  Stream<Map<String, dynamic>> get requestStream => _requestWsController.stream;
+
   bool _isDisposed = false;
 
-  Future<void> connectMovementWebSocket() async {
+  Future<void> connectMovementWebSocket({
+    String? startDate,
+    String? endDate,
+    int? page,
+    int? size,
+  }) async {
     if (_wsIsConnecting) return;
     _wsIsConnecting = true;
+
+    // Persist filters for reconnection
+    _lastProdWsStartDate = startDate ?? _lastProdWsStartDate;
+    _lastProdWsEndDate = endDate ?? _lastProdWsEndDate;
+    _lastProdWsPage = page ?? _lastProdWsPage;
+    _lastProdWsSize = size ?? _lastProdWsSize;
+
     try {
       final accessToken = await getAccessToken();
       if (accessToken == null) {
@@ -1177,7 +1207,16 @@ class ApiService {
         _wsIsConnecting = false;
         return;
       }
-      final uri = Uri.parse('$_wsUrl?token=$accessToken');
+
+      final queryParams = <String, String>{
+        'token': accessToken,
+        if (_lastProdWsStartDate != null) 'start_date': _lastProdWsStartDate!,
+        if (_lastProdWsEndDate != null) 'end_date': _lastProdWsEndDate!,
+        if (_lastProdWsPage != null) 'page': '$_lastProdWsPage',
+        if (_lastProdWsSize != null) 'size': '$_lastProdWsSize',
+      };
+
+      final uri = Uri.parse(_productwsUrl).replace(queryParameters: queryParams);
       print('📡 WS Connecting: $uri');
       _wsChannel = WebSocketChannel.connect(uri);
       _wsSubscription = _wsChannel!.stream.listen(
@@ -1219,14 +1258,33 @@ class ApiService {
     print('🔄 WS reconnect in ${delay
         .inSeconds}s (attempt $_wsReconnectAttempts)...');
     Future.delayed(delay, () {
-      if (!_wsIsConnecting && !_isDisposed) connectMovementWebSocket();
+      if (!_wsIsConnecting && !_isDisposed) {
+        connectMovementWebSocket(
+          startDate: _lastProdWsStartDate,
+          endDate: _lastProdWsEndDate,
+          page: _lastProdWsPage,
+          size: _lastProdWsSize,
+        );
+      }
     });
   }
 
   // ── Tool WebSocket Methods ──────────────────────────────────────────────────
-  Future<void> connectToolMovementWebSocket() async {
+  Future<void> connectToolMovementWebSocket({
+    String? startDate,
+    String? endDate,
+    int? page,
+    int? size,
+  }) async {
     if (_toolWsIsConnecting) return;
     _toolWsIsConnecting = true;
+
+    // Persist filters for reconnection
+    _lastToolWsStartDate = startDate ?? _lastToolWsStartDate;
+    _lastToolWsEndDate = endDate ?? _lastToolWsEndDate;
+    _lastToolWsPage = page ?? _lastToolWsPage;
+    _lastToolWsSize = size ?? _lastToolWsSize;
+
     try {
       final accessToken = await _getAccessToken();
       if (accessToken == null) {
@@ -1235,7 +1293,15 @@ class ApiService {
         return;
       }
 
-      final uri = Uri.parse('$_toolWsUrl?token=$accessToken');
+      final queryParams = <String, String>{
+        'token': accessToken,
+        if (_lastToolWsStartDate != null) 'start_date': _lastToolWsStartDate!,
+        if (_lastToolWsEndDate != null) 'end_date': _lastToolWsEndDate!,
+        if (_lastToolWsPage != null) 'page': '$_lastToolWsPage',
+        if (_lastToolWsSize != null) 'size': '$_lastToolWsSize',
+      };
+
+      final uri = Uri.parse(_toolWsUrl).replace(queryParameters: queryParams);
       print('📡 Tool WS Connecting to: $uri');
 
       _toolWsChannel = WebSocketChannel.connect(uri);
@@ -1279,7 +1345,14 @@ class ApiService {
     print('🔄 Tool WS reconnect in ${delay
         .inSeconds}s (attempt $_toolWsReconnectAttempts)...');
     Future.delayed(delay, () {
-      if (!_toolWsIsConnecting && !_isDisposed) connectToolMovementWebSocket();
+      if (!_toolWsIsConnecting && !_isDisposed) {
+        connectToolMovementWebSocket(
+          startDate: _lastToolWsStartDate,
+          endDate: _lastToolWsEndDate,
+          page: _lastToolWsPage,
+          size: _lastToolWsSize,
+        );
+      }
     });
   }
 
@@ -1457,7 +1530,7 @@ class ApiService {
       ).timeout(const Duration(seconds: 15));
 
       print('📲 [VerifyOtp] Status Code  : ${response.statusCode}');
-      print('📲 [VerifyOtp] Raw Response : ${response.body}');
+      print('FULL RESPONSE: ${response.body}');
 
       final json = jsonDecode(response.body) as Map<String, dynamic>;
 
@@ -1920,11 +1993,11 @@ class ApiService {
     return accessToken;
   }
 
-  // Helper: Get refresh accessToken
 
-
-
-  Future<ApiResponse<List<Product>>> getProducts() async {
+  Future<ApiResponse<List<Product>>> getProducts({
+    int? page,
+    int? size,
+  }) async {
     try {
       final queryParams = {
         'include_attribute': 'true',
@@ -1933,6 +2006,8 @@ class ApiService {
         'include_children': 'true',
         'include_media': 'true',
         'include_pricing': 'true',
+        if (page != null) 'page': '$page',
+        if (size != null) 'size': '$size',
       };
 
       final uri = Uri.parse('$baseUrl/api/product').replace(
@@ -2041,10 +2116,18 @@ class ApiService {
   }
 
   // ── Get All Tools ────────────────────────────────────────────────────────
-  Future<ApiResponse<List<Tool>>> getTools() async {
+  Future<ApiResponse<List<Tool>>> getTools({
+    int? page,
+    int? size,
+  }) async {
     try {
-      final url = Uri.parse('$baseUrl/api/tools/');
-      print('📡 GET Tools Catalog: $url');
+      final queryParams = <String, String>{
+        'page': '${page ?? 1}',
+        'size': '${size ?? 10}',
+      };
+
+      final url = Uri.parse('$baseUrl/api/tools/').replace(queryParameters: queryParams);
+      print('📡 [INVENTORY DIAGNOSTICS] GET Tools Catalog: $url');
 
       final response = await _authorizedRequest((accessToken) =>
           http.get(
@@ -2055,10 +2138,11 @@ class ApiService {
             },
           )).timeout(const Duration(seconds: 15));
 
-      print('📡 Tools Catalog Status: ${response.statusCode}');
+      print('📡 [INVENTORY DIAGNOSTICS] Tools Catalog Status: ${response.statusCode}');
 
 
       if (response.statusCode == 200) {
+        print('📡 [INVENTORY DIAGNOSTICS] Tools Response: ${response.body}');
         final decoded = jsonDecode(response.body);
         List<dynamic> raw = [];
 
@@ -2088,6 +2172,7 @@ class ApiService {
         print('✅ Fetched ${items.length} tools');
         return ApiResponse(isSuccess: true, data: items);
       }
+      print('📡 Tools Catalog Failed: ${response.statusCode} - ${response.body}');
       return ApiResponse(isSuccess: false,
           error: 'Failed to fetch tools (${response.statusCode})');
     } catch (e) {
@@ -2144,21 +2229,29 @@ class ApiService {
   }
 
   // ── My Tool Stocks ─────────────────────────────────────────────────────────
-  Future<ApiResponse<List<ToolStock>>> getMyToolStocks() async {
+  Future<ApiResponse<List<ToolStock>>> getMyToolStocks({
+    int? page,
+    int? size,
+  }) async {
     try {
       final accessToken = await getAccessToken();
       if (accessToken == null) throw Exception('No access accessToken');
 
-      final url = Uri.parse('$baseUrl/api/tools/my-stocks/');
-      print('📡 GET Tool Stocks: $url');
+      final queryParams = <String, String>{
+        'page': '${page ?? 1}',
+        'size': '${size ?? 10}',
+      };
+
+      final url = Uri.parse('$baseUrl/api/tools/my-stocks/').replace(queryParameters: queryParams);
+      print('📡 [INVENTORY DIAGNOSTICS] GET Tool Stocks: $url');
 
       final response = await http.get(url, headers: {
         'Authorization': 'Bearer $accessToken',
         'Accept': 'application/json',
       }).timeout(const Duration(seconds: 15));
 
-      print('📡 Tool Stocks Status: ${response.statusCode}');
-      print('📦 Tool Stocks Body: ${response.body}');
+      print('📡 [INVENTORY DIAGNOSTICS] Tool Stocks Status: ${response.statusCode}');
+      print('📦 [INVENTORY DIAGNOSTICS] Tool Stocks Body: ${response.body}');
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
@@ -2166,23 +2259,35 @@ class ApiService {
         if (decoded is List) {
           raw = decoded;
         } else if (decoded is Map) {
-          final data = decoded['data'] ?? decoded['results'];
+          // If the top level is a Map, look for 'data' or 'results' etc.
+          var data = decoded['data'] ?? decoded['results'] ?? decoded['items'] ??
+                       decoded['tool_stocks'] ?? decoded['stocks'];
+
           if (data is List) {
             raw = data;
           } else if (data is Map) {
-            raw = [data];
+            // If the unwrapped data is a Map, it might contain the actual list (e.g. data['stocks'] in your log)
+            final innerList = data['results'] ?? data['stocks'] ?? data['items'] ?? data['tool_stocks'] ?? data['data'];
+            if (innerList is List) {
+              raw = innerList;
+            } else {
+              // Fallback: treat the map as a single item if it looks like one, or use decoded root
+              raw = [data];
+            }
           } else {
+            // If none of the keys found a list/map, maybe the root itself is the map (older APIs)
             raw = [decoded];
           }
         }
 
         final items = raw.map((e) => ToolStock.fromJson(e)).toList();
+        print('✅ [INVENTORY DIAGNOSTICS] Parsed ${items.length} tool stocks');
         return ApiResponse(isSuccess: true, data: items);
       }
       return ApiResponse(isSuccess: false,
           error: 'Tool stocks failed (${response.statusCode})');
     } catch (e) {
-      print('❌ getMyToolStocks error: $e');
+      print('❌ [INVENTORY DIAGNOSTICS] getMyToolStocks error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
     }
   }
@@ -2205,22 +2310,31 @@ class ApiService {
       print('📦 Product Stocks Body: ${response.body}');
 
       if (response.statusCode == 200) {
+        print('📦 [INVENTORY DIAGNOSTICS] Product Stocks Body: ${response.body}');
         final decoded = jsonDecode(response.body);
         List<dynamic> raw = [];
         if (decoded is List) {
           raw = decoded;
         } else if (decoded is Map) {
-          final data = decoded['data'] ?? decoded['results'];
+          var data = decoded['data'] ?? decoded['results'] ?? decoded['items'] ??
+                       decoded['product_stocks'] ?? decoded['stocks'];
+
           if (data is List) {
             raw = data;
           } else if (data is Map) {
-            raw = [data];
+            final innerList = data['results'] ?? data['product_stocks'] ?? data['stocks'] ?? data['items'] ?? data['data'];
+            if (innerList is List) {
+              raw = innerList;
+            } else {
+              raw = [data];
+            }
           } else {
             raw = [decoded];
           }
         }
 
         final items = raw.map((e) => ProductStock.fromJson(e)).toList();
+        print('✅ [INVENTORY DIAGNOSTICS] Parsed ${items.length} product stocks');
         return ApiResponse(isSuccess: true, data: items);
       }
       return ApiResponse(isSuccess: false,
@@ -2374,6 +2488,98 @@ class ApiService {
     }
   }
 
+  static Future<ApiResponse<Map<String, dynamic>>> verifyRequestOtp(String requestId, String otp) async {
+    try {
+      final accessToken = await getAccessToken();
+      if (accessToken == null) {
+        return ApiResponse(isSuccess: false, error: 'Not authenticated');
+      }
+
+      final url = Uri.parse('$baseUrl/api/request/delivery/verify-otp/$requestId/');
+      print('📡 [OTP DIAGNOSTICS] Calling Endpoint: $url');
+      print('📡 [OTP DIAGNOSTICS] Request ID: $requestId');
+
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: jsonEncode({"otp": otp}),
+      );
+
+      print('📡 [OTP DIAGNOSTICS] Status Code: ${response.statusCode}');
+      print('📡 [OTP DIAGNOSTICS] Raw Response: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return ApiResponse(isSuccess: true, data: jsonDecode(response.body));
+      }
+
+      final json = jsonDecode(response.body);
+      String errorMsg = 'Failed to verify OTP';
+      if (json is Map && json['message'] != null) {
+        errorMsg = json['message'].toString();
+      } else if (json is Map && json['errors'] != null) {
+        errorMsg = json['errors'].toString();
+      }
+
+      return ApiResponse(isSuccess: false, error: errorMsg);
+    } catch (e) {
+      print('❌ verifyRequestOtp error: $e');
+      return ApiResponse(isSuccess: false, error: e.toString());
+    }
+  }
+
+  static Future<ApiResponse<Map<String, dynamic>>> updateHubServiceStatus(
+    String requestId,
+    String status, {
+    String? notes,
+    bool visibleToCustomer = true,
+  }) async {
+    try {
+      final accessToken = await _getAccessToken();
+      if (accessToken == null) {
+        return ApiResponse(isSuccess: false, error:  'Not authenticated');
+      }
+
+      final url = Uri.parse('$baseUrl/api/request/tracking/$requestId/');
+      print('📡 Updating Hub Tracking Status: $url');
+
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: jsonEncode({
+          "hub_status": status,
+          if (notes != null) "notes": notes,
+          "visible_to_customer": visibleToCustomer,
+        }),
+      );
+
+      print('📡 Hub Tracking Status Response: ${response.statusCode}');
+      print('📡 Hub Tracking Status Body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return ApiResponse(isSuccess: true, data: jsonDecode(response.body));
+      }
+
+      final json = jsonDecode(response.body);
+      String errorMsg = 'Failed to update status';
+      if (json is Map && json['message'] != null) {
+        errorMsg = json['message'].toString();
+      } else if (json is Map && json['errors'] != null) {
+        errorMsg = json['errors'].toString();
+      }
+
+      return ApiResponse(isSuccess: false, error: errorMsg);
+    } catch (e) {
+      print('❌ updateHubServiceStatus error: $e');
+      return ApiResponse(isSuccess: false, error: e.toString());
+    }
+  }
+
   static Future<ApiResponse<Map<String, dynamic>>> createCancellationRequest({
     required String orderId,
     String? orderItemId,
@@ -2488,4 +2694,125 @@ class ApiService {
     }
   }
 
+  Future<void> connectRequestWebSocket({
+    String? startDate,
+    String? endDate,
+    int? page,
+    int? size,
+  }) async {
+    if (_requestWsIsConnecting) return;
+    _requestWsIsConnecting = true;
+    _requestWsManualDisconnect = false;
+
+    try {
+      final token = await ApiService.getAccessToken();
+      if (token == null) {
+        print('❌ Request WebSocket: No access token');
+        _requestWsIsConnecting = false;
+        return;
+      }
+
+      final wsBase = baseUrl
+          .replaceFirst('https://', 'wss://')
+          .replaceFirst('http://', 'ws://');
+
+      final queryParams = <String, String>{
+        'token': token,
+        if (startDate != null) 'start_date': startDate,
+        if (endDate != null) 'end_date': endDate,
+        if (page != null) 'page': page.toString(),
+        if (size != null) 'size': size.toString(),
+      };
+
+      final uri = Uri.parse('$wsBase/ws/requests/').replace(queryParameters: queryParams);
+      print('📡 Request WS Connecting: $uri');
+
+      _requestWsChannel = WebSocketChannel.connect(uri);
+      _requestWsSubscription = _requestWsChannel!.stream.listen(
+        (msg) {
+          _requestWsReconnectAttempts = 0;
+          _requestWsIsConnecting = false;
+          if (_isDisposed) return;
+          print('📦 Request WS Message: $msg');
+          print('📢 Request WS Response Body: $msg');
+          try {
+            if (!_requestWsController.isClosed) {
+              _requestWsController.add(jsonDecode(msg));
+            }
+          } catch (e) {
+            print('❌ Request WS parse error: $e');
+          }
+        },
+        onError: (e) {
+          _requestWsIsConnecting = false;
+          print('❌ Request WS error: $e');
+          if (!_requestWsManualDisconnect) {
+            _requestWsReconnect(startDate: startDate, endDate: endDate, page: page, size: size);
+          }
+        },
+        onDone: () {
+          _requestWsIsConnecting = false;
+          print('🔌 Request WS closed');
+          if (!_requestWsManualDisconnect) {
+            _requestWsReconnect(startDate: startDate, endDate: endDate, page: page, size: size);
+          }
+        },
+      );
+    } catch (e) {
+      _requestWsIsConnecting = false;
+      print('❌ Request WS connect error: $e');
+      if (!_requestWsManualDisconnect) {
+        _requestWsReconnect(startDate: startDate, endDate: endDate, page: page, size: size);
+      }
+    }
+  }
+
+  void _requestWsReconnect({
+    String? startDate,
+    String? endDate,
+    int? page,
+    int? size,
+  }) {
+    if (_isDisposed || _requestWsManualDisconnect) return;
+    _requestWsReconnectAttempts++;
+    final delay = Duration(seconds: (2 * _requestWsReconnectAttempts).clamp(5, 30));
+    print('🔄 Request WS reconnect in ${delay.inSeconds}s (attempt $_requestWsReconnectAttempts)...');
+    Future.delayed(delay, () {
+      if (!_requestWsIsConnecting && !_isDisposed && !_requestWsManualDisconnect) {
+        connectRequestWebSocket(
+          startDate: startDate,
+          endDate: endDate,
+          page: page,
+          size: size,
+        );
+      }
+    });
+  }
+
+  void updateRequestFilters({
+    String? startDate,
+    String? endDate,
+    int? page,
+    int? size,
+  }) {
+    if (_requestWsChannel == null) return;
+
+    final filterMessage = {
+      if (startDate != null) 'start_date': startDate,
+      if (endDate != null) 'end_date': endDate,
+      if (page != null) 'page': page,
+      if (size != null) 'size': size,
+    };
+
+    print('📤 Sending Request filter update: $filterMessage');
+    _requestWsChannel!.sink.add(jsonEncode(filterMessage));
+  }
+
+  void disconnectRequestWebSocket() {
+    _requestWsManualDisconnect = true;
+    _requestWsSubscription?.cancel();
+    _requestWsSubscription = null;
+    _requestWsChannel?.sink.close();
+    _requestWsChannel = null;
+  }
 }

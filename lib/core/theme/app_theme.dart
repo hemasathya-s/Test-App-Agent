@@ -106,10 +106,14 @@ class AppTheme {
     );
   }
 
-  static InputDecoration inputDecoration(String hint, [IconData? icon]) {
+  static InputDecoration inputDecoration(String hint, [IconData? icon, EdgeInsets? contentPadding]) {
     return InputDecoration(
       hintText: hint,
-      prefixIcon: icon != null ? Icon(icon, color: primaryColor) : null,
+      prefixIcon: icon != null ? Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Icon(icon, color: primaryColor, size: 22),
+      ) : null,
+      prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
       filled: true,
       fillColor: Colors.white,
       border: OutlineInputBorder(
@@ -124,7 +128,7 @@ class AppTheme {
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: primaryColor, width: 2),
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      contentPadding: contentPadding ?? const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
     );
   }
 }

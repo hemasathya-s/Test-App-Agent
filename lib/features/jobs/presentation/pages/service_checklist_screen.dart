@@ -64,7 +64,7 @@ class _ServiceChecklistScreenState
       } else {
         debugPrint('DEBUG: Failed to trigger OTP.');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to request OTP. Please try again.'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('Failed to request OTP. Please try again.'), backgroundColor: Colors.grey),
         );
       }
     } else {
@@ -138,7 +138,7 @@ class _ServiceChecklistScreenState
         ref.read(jobProvider.notifier).completeJob();
         context.go('/home');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Job Completed Successfully!'), backgroundColor: Colors.green),
+          const SnackBar(content: Text('Job Completed Successfully!'), backgroundColor: Colors.grey),
         );
       } else {
         if (otp != null) {
@@ -148,7 +148,7 @@ class _ServiceChecklistScreenState
           debugPrint('DEBUG: STATUS UPDATE FAILED');
         }
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to complete job. Check OTP or connection.'), backgroundColor: Colors.red),
+          const SnackBar(content: Text('Failed to complete job. Check OTP or connection.'), backgroundColor: Colors.grey),
         );
       }
     }

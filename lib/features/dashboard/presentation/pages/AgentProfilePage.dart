@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/apiservices.dart';
 import '../../../../Model/AgentProfileResponse.dart';
@@ -17,6 +19,10 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
   bool _isLoading = true;
   String? _error;
   AgentProfileData? _agentData;
+  String? termsUrl;
+  String? privacyUrl;
+  String? supportPhone;
+  String? supportEmail;
 
   @override
   void initState() {
@@ -42,12 +48,17 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
     }
 
     final result = await ApiService.getAgentProfile();
+    final appSettings = await ApiService.getAppSettings();
 
     if (mounted) {
       if (result.isSuccess && result.data != null) {
         print("✅ AgentProfilePage: Profile loaded for ${result.data!.agent.userDetails.name}");
         setState(() {
           _agentData = result.data!.agent;
+           privacyUrl = appSettings?['agent_partner_privacy_policy_url'] ?? '';
+           termsUrl = appSettings?['agent_partner_terms_and_conditions_url'] ?? '';
+           supportPhone = appSettings?['support_phone'] ?? '';
+           supportEmail = appSettings?['support_email'] ?? '';
           _isLoading = false;
         });
       } else {
@@ -72,6 +83,18 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
           SnackBar(content: Text(result.error ?? 'Logout failed')),
         );
       }
+    }
+  }
+
+  Future<void> _launchURL(String urlString) async {
+    if (urlString.isEmpty) return;
+    final Uri url = Uri.parse(urlString);
+    try {
+      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+        debugPrint('Could not launch $urlString');
+      }
+    } catch (e) {
+      debugPrint('Error launching URL: $e');
     }
   }
 
@@ -178,16 +201,14 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
               context,
               icon: Icons.description_outlined,
               title: "Terms and Condition",
-              onTap: () {
-                // Show T&C
-              },
+              onTap: () => _launchURL(termsUrl ?? ''),
             ),
             _buildMenuItem(
               context,
               icon: Icons.headset_mic_outlined,
               title: "Support",
               onTap: () {
-                // Open support
+                _showSupportBottomSheet(context);
               },
             ),
             
@@ -332,6 +353,86 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
               child: Container(width: double.infinity, height: 56, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15))),
             )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSupportBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Support',
+                style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildSupportOption(
+                    context,
+                    icon: Icons.phone_outlined,
+                    label: 'Call',
+                    onTap: () {
+                      Navigator.pop(context);
+                      final phone = supportPhone?.isNotEmpty == true ? supportPhone! : '+1234567890';
+                      _launchURL('tel:$phone');
+                    },
+                  ),
+                  _buildSupportOption(
+                    context,
+                    icon: Icons.email_outlined,
+                    label: 'Email',
+                    onTap: () {
+                      Navigator.pop(context);
+                      final email = supportEmail?.isNotEmpty == true ? supportEmail! : 'support@example.com';
+                      _launchURL('mailto:$email');
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSupportOption(BuildContext context, {required IconData icon, required String label, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        width: 120,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8F9FA),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey[200]!),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 32, color: AppTheme.primaryColor),
+            const SizedBox(height: 12),
+            Text(label, style: GoogleFonts.outfit(fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
           ],
         ),
       ),

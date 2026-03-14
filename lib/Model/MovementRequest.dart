@@ -34,14 +34,20 @@ class MovementRequest {
       agentName = json['agent'];
     }
 
-    // Handle nested product object
+    // Handle nested product/tool object
     String productName = '';
-    String pId = json['product_id'] ?? '';
+    String pId = (json['product_id'] ?? json['tools_id'] ?? '').toString();
+    
     if (json['product'] is Map) {
       productName = json['product']['name'] ?? '';
-      if (pId.isEmpty) pId = json['product']['id'] ?? '';
+      if (pId.isEmpty) pId = (json['product']['id'] ?? '').toString();
+    } else if (json['tool'] is Map) {
+      productName = json['tool']['name'] ?? '';
+      if (pId.isEmpty) pId = (json['tool']['id'] ?? '').toString();
     } else if (json['product'] is String) {
       productName = json['product'];
+    } else if (json['tool'] is String) {
+      productName = json['tool'];
     }
 
     return MovementRequest(

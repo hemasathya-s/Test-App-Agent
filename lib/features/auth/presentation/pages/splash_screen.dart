@@ -116,7 +116,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Professional Home Services',
+                      'Professional Services',
                       style: GoogleFonts.outfit(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,

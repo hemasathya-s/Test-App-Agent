@@ -150,15 +150,22 @@ class _InventoryScreenState extends State<InventoryScreen>
   }
 
   Future<void> _loadToolStocks() async {
-    final res = await _apiService.getMyToolStocks();
+    print('📦 [INVENTORY DIAGNOSTICS] Loading Tool Stocks...');
+    final res = await _apiService.getMyToolStocks(page: 1, size: 50); // Fetch more for safety
     if (!mounted) return;
     if (res.isSuccess && res.data != null) {
+      print('✅ [INVENTORY DIAGNOSTICS] Successfully loaded ${res.data?.length} tool stocks');
       setState(() {
         _toolsItems.clear();
-        _toolsItems.addAll(res.data!.map((t) => t.toItemMap()));
+        _toolsItems.addAll(res.data!.map((t) {
+          final map = t.toItemMap();
+          print('📦 [INVENTORY DIAGNOSTICS] Tool: ${map['name']}, Qty: ${map['qty']}');
+          return map;
+        }));
         _toolsError = null;
       });
     } else {
+      print('❌ [INVENTORY DIAGNOSTICS] Failed to load tool stocks: ${res.error}');
       setState(() => _toolsError = res.error ?? 'Failed to load tool stocks');
     }
   }
@@ -769,7 +776,7 @@ class _InventoryScreenState extends State<InventoryScreen>
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('Movement request submitted successfully'),
-                              backgroundColor: Colors.green,
+                              backgroundColor: Colors.grey,
                             ),
                           );
                         } else {
@@ -777,7 +784,7 @@ class _InventoryScreenState extends State<InventoryScreen>
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('Failed to submit request'),
-                              backgroundColor: Colors.red,
+                              backgroundColor: Colors.grey,
                             ),
                           );
                         }

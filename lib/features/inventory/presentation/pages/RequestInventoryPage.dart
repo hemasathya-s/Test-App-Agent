@@ -23,6 +23,7 @@ class _RequestInventoryPageState extends State<RequestInventoryPage>
   bool _isLoading = true;
   String _activeTab = 'Tools'; // 'Tools' | 'Products'
   final List<Map<String, dynamic>> _requestedItems = [];
+  DateTime _selectedDate = DateTime.now();
 
   late AnimationController _shimmerController;
 
@@ -34,9 +35,33 @@ class _RequestInventoryPageState extends State<RequestInventoryPage>
       duration: const Duration(milliseconds: 1200),
     )..repeat();
 
-    _apiService.connectMovementWebSocket();
-    _apiService.connectToolMovementWebSocket();
+    _connectWithDate(_selectedDate);
     _listenToWebSockets();
+  }
+
+  void _connectWithDate(DateTime date) {
+    final dateStr = "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+    print('📡 RequestPage: Connecting WebSockets for date $dateStr');
+    _apiService.connectMovementWebSocket(startDate: dateStr, endDate: dateStr);
+    _apiService.connectToolMovementWebSocket(startDate: dateStr, endDate: dateStr);
+  }
+
+  void _onDateChanged(DateTime newDate) {
+    if (newDate.year == _selectedDate.year &&
+        newDate.month == _selectedDate.month &&
+        newDate.day == _selectedDate.day) return;
+
+    setState(() {
+      _selectedDate = newDate;
+      _isLoading = true;
+      _requestedItems.clear();
+    });
+
+    // Reset connections with new date
+    _apiService.disconnectMovementWebSocket();
+    _apiService.disconnectToolMovementWebSocket();
+    
+    _connectWithDate(newDate);
   }
 
   void _listenToWebSockets() {
@@ -69,7 +94,7 @@ class _RequestInventoryPageState extends State<RequestInventoryPage>
     final prettyData = encoder.convert(data);
     print('📦 RequestPage: Received Data (${isToolStream ? "Tools" : "Products"}):\n$prettyData');
     if (data['type'] == 'initial_data') {
-      final List movements = data['movements'] ?? [];
+      final List movements = data['movements'] ?? data['results'] ?? data['data'] ?? [];
       print('📦 RequestPage: Processing ${movements.length} initial items');
       setState(() {
         _isLoading = false;
@@ -152,7 +177,7 @@ class _RequestInventoryPageState extends State<RequestInventoryPage>
         final newItem = {
           'movement_id': movementId,
           'name': itemName,
-          'qty': m['stock'] ?? 0,
+          'qty': _toInt(m['stock'] ?? m['quantity'] ?? m['current_stock'] ?? m['available_stock'] ?? 0),
           'type': (m['type'] ?? 'GET').toString().toUpperCase(),
           'status': _formatStatus(status ?? 'PENDING'),
           'agent': agentName,
@@ -174,6 +199,14 @@ class _RequestInventoryPageState extends State<RequestInventoryPage>
         }
       });
     });
+  }
+
+  static int _toInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? (double.tryParse(value)?.toInt() ?? 0);
+    return 0;
   }
 
   String _formatStatus(String status) {
@@ -205,6 +238,29 @@ class _RequestInventoryPageState extends State<RequestInventoryPage>
             fontWeight: FontWeight.w600,
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.calendar_month_outlined, color: AppTheme.primaryColor),
+            onPressed: () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: _selectedDate,
+                firstDate: DateTime(2023),
+                lastDate: DateTime.now(),
+              );
+              if (picked != null) _onDateChanged(picked);
+            },
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Center(
+              child: Text(
+                "${_selectedDate.day}/${_selectedDate.month}",
+                style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textSecondary),
+              ),
+            ),
+          ),
+        ],
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
