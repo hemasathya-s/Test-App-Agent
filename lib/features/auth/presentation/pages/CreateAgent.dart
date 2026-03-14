@@ -635,8 +635,13 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly
                           ],
-                          validator: (v) =>
-                          v!.isEmpty ? 'Enter account number' : null,
+                          validator: (v) {
+                            if (v == null || v.isEmpty) return 'Enter account number';
+                            if (!RegExp(r'^\d{9,18}$').hasMatch(v)) {
+                              return 'Enter a valid 9-18 digit account number';
+                            }
+                            return null;
+                          },
                         ),
                         const SizedBox(height: 16),
                         _labelText('IFSC Code'),
@@ -652,10 +657,9 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                             _UpperCaseTextFormatter(),
                           ],
                           validator: (v) {
-                            if (v!.isEmpty) return 'Enter IFSC code';
-                            if (!RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$')
-                                .hasMatch(v.toUpperCase())) {
-                              return 'Enter a valid IFSC code (e.g. HDFC0001234)';
+                            if (v == null || v.isEmpty) return 'Enter IFSC code';
+                            if (!RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$').hasMatch(v.toUpperCase().trim())) {
+                              return 'Enter a valid 11-character IFSC code (e.g. HDFC0001234)';
                             }
                             return null;
                           },
@@ -670,8 +674,8 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                           keyboardType: TextInputType.emailAddress,
                           validator: (v) {
                             if (v != null && v.isNotEmpty) {
-                              if (!RegExp(r'^[\w.\-]+@[\w]+$').hasMatch(v)) {
-                                return 'Enter a valid UPI ID (e.g. syed@upi)';
+                              if (!RegExp(r'^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$').hasMatch(v.trim())) {
+                                return 'Enter a valid UPI ID (e.g. user.name@okhdfcbank)';
                               }
                             }
                             return null;
