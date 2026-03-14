@@ -21,7 +21,6 @@ class MyFirebaseMessagingService : FlutterFirebaseMessagingService() {
             playSound.equals("true", ignoreCase = true) ||
                     type.equals("modification", ignoreCase = true) ||
                     message.data.containsKey("modification_id")
-                    
         if (shouldTriggerAlarm) {
             Log.d("FCM_DEBUG", "Alarm criteria met. Starting AlarmService...")
 

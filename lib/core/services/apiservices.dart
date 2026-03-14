@@ -30,9 +30,6 @@ class ApiService {
   static const String baseUrl = 'https://api.itfixer199.com';
   static const String wsBaseUrl = "wss://api.itfixer199.com";
 
-  // static String accessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzczMTc5MTQ3LCJpYXQiOjE3NzMxMjUxNDcsImp0aSI6IjhmZWQ0YWRkZDk0OTRiODk4MzBhNzY1ZmQzOTczZGIzIiwidXNlcl9pZCI6ImUzYWM4OTQ3LTdhYzktNDYwOS05NGVlLTczZjNjYmU4ZWM1NiJ9.djd9pcmI_FapifZ7cn4OM3h_hJDCrFBFIdggVBYHRZU";
-  // static String refresh = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc3MzM3NzQ3NSwiaWF0IjoxNzcyNzcyNjc1LCJqdGkiOiI0NTU0NDdlZTJmZWI0Y2M4OWZiYTU4YWEzZjYxNzQ5NiIsInVzZXJfaWQiOiJlM2FjODk0Ny03YWM5LTQ2MDktOTRlZS03M2YzY2JlOGVjNTYifQ.hsKt1SQSqlyBHaEGi0VKu57aHwtbfFunOZxs1qwMa34";
-
   /// Fetch global app settings like app version, play store urls, company details.
   static Future<Map<String, dynamic>?> getAppSettings() async {
     try {

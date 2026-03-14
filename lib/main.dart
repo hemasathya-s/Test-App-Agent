@@ -66,9 +66,10 @@ Future<void> initializeNotifications() async {
 bool _isAlarmNotification(RemoteMessage message) {
   final data = message.data;
   // This logic MUST match MyFirebaseMessagingService.kt shouldTriggerAlarm criteria
-  return data['playSound']?.toString().toLowerCase() == 'true' ||
-      data['type']?.toString().toLowerCase() == 'modification' ||
-      data.containsKey('modification_id');
+  return data['playSound']?.toString().toLowerCase() == 'true' ;
+      // ||
+      // data['type']?.toString().toLowerCase() == 'modification' ||
+      // data.containsKey('modification_id');
 }
 
 @pragma('vm:entry-point')
@@ -110,7 +111,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       payload: jsonEncode({
         'title': title,
         'body': body ?? '',
-        'modification_id': message.data['modification_id'] ?? '',
       }),
     );
   }
