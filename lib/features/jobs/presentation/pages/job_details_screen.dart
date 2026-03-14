@@ -1052,7 +1052,8 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                             if (res.isSuccess) {
                               print('✅ Success - Popping Hub Sheet');
                               Navigator.pop(sheetContext);
-                              messenger.showSnackBar(const SnackBar(content: Text('Request submitted successfully')));
+                              final successMsg = res.data?['message'] ?? 'Request submitted successfully';
+                              messenger.showSnackBar(SnackBar(content: Text(successMsg)));
                               _loadFullDetails();
                             } else {
                               final error = (res.error ?? '').toLowerCase();
@@ -1534,8 +1535,9 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                                 setState(() => isSubmitting = false);
                                 print('✅ Slot Request Success/Fail - Popping');
                                 Navigator.pop(sheetContext);
+                                final successMsg = res.data?['message'] ?? 'Slot change requested';
                                 messenger.showSnackBar(SnackBar(
-                                    content: Text(res.isSuccess ? 'Slot change requested' : 'Error: ${res.error ?? "Unknown error"}')));
+                                    content: Text(res.isSuccess ? successMsg : 'Error: ${res.error ?? "Unknown error"}')));
                                 if (res.isSuccess) {
                                   _loadFullDetails();
                                 }
@@ -1674,8 +1676,10 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                               setState(() => isSubmitting = false);
                               print('✅ Cancellation Success/Fail - Popping');
                               Navigator.pop(sheetContext);
+                              
+                              final successMsg = res.data?['message'] ?? 'Job cancelled';
                               messenger.showSnackBar(SnackBar(
-                                  content: Text(res.isSuccess ? 'Job cancelled' : 'Error: ${res.error ?? "Unknown error"}')));
+                                  content: Text(res.isSuccess ? successMsg : 'Error: ${res.error ?? "Unknown error"}')));
                               if (res.isSuccess) {
                                 _loadFullDetails();
                               }

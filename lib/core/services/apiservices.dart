@@ -2479,9 +2479,16 @@ class ApiService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         return ApiResponse(isSuccess: true, data: jsonDecode(response.body));
       }
-      return ApiResponse(isSuccess: false,
-          error: 'Failed to create slot change request (${response
-              .statusCode})');
+      
+      final json = jsonDecode(response.body);
+      String errorMsg = 'Failed to create slot change request';
+      if (json is Map && json['message'] != null) {
+        errorMsg = json['message'].toString();
+      } else if (json is Map && json['errors'] != null) {
+        errorMsg = json['errors'].toString();
+      }
+      
+      return ApiResponse(isSuccess: false, error: errorMsg);
     } catch (e) {
       print('❌ createSlotChangeRequest error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
@@ -2611,9 +2618,16 @@ class ApiService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         return ApiResponse(isSuccess: true, data: jsonDecode(response.body));
       }
-      return ApiResponse(isSuccess: false,
-          error: 'Failed to create cancellation request (${response
-              .statusCode})');
+      
+      final json = jsonDecode(response.body);
+      String errorMsg = 'Failed to create cancellation request';
+      if (json is Map && json['message'] != null) {
+        errorMsg = json['message'].toString();
+      } else if (json is Map && json['errors'] != null) {
+        errorMsg = json['errors'].toString();
+      }
+      
+      return ApiResponse(isSuccess: false, error: errorMsg);
     } catch (e) {
       print('❌ createCancellationRequest error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
