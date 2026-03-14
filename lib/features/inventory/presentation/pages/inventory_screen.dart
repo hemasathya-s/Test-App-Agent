@@ -375,7 +375,29 @@ class _InventoryScreenState extends State<InventoryScreen>
       );
     }
 
-    if (_items.isEmpty) {
+    final visibleItems = _items.where((item) {
+      final qty = int.tryParse(item['qty']?.toString() ?? '0') ?? 0;
+      if (qty > 0) return true;
+      final hasPending = _allMovements.any((m) {
+        if (m['approved_status'] != 'PENDING') return false;
+        final isToolTab = _activeTab == 'Tools';
+        final isMovementTool = m['tool'] != null || m['tools'] != null || m['tools_id'] != null;
+        if (isToolTab != isMovementTool) return false;
+        String mItemName = '';
+        if (isMovementTool) {
+          final toolData = m['tool'] ?? m['tools'];
+          if (toolData is Map) mItemName = toolData['name'] ?? 'Unknown';
+          else if (m['tool_name'] != null) mItemName = m['tool_name'];
+          else mItemName = toolData?.toString() ?? 'Unknown';
+        } else {
+          mItemName = m['product'] is Map ? m['product']['name'] ?? '' : m['product'].toString();
+        }
+        return mItemName == item['name'];
+      });
+      return hasPending;
+    }).toList();
+
+    if (visibleItems.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -390,15 +412,15 @@ class _InventoryScreenState extends State<InventoryScreen>
       );
     }
 
-    return _buildItemList();
+    return _buildItemList(visibleItems);
   }
 
-  Widget _buildItemList() {
+  Widget _buildItemList(List<Map<String, dynamic>> visibleItems) {
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      itemCount: _items.length,
+      itemCount: visibleItems.length,
       itemBuilder: (context, index) {
-        final item = _items[index];
+        final item = visibleItems[index];
         final isTool = item['category'] == 'Tools';
         final status = item['status'] as String? ?? 'Approved';
         final isApproved = status == 'Approved';

@@ -1053,22 +1053,18 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                               print('✅ Success - Popping Hub Sheet');
                               Navigator.pop(sheetContext);
                               final successMsg = res.data?['message'] ?? 'Request submitted successfully';
-                              messenger.showSnackBar(SnackBar(content: Text(successMsg)));
+                              messenger.showSnackBar(SnackBar(
+                                content: Text(successMsg, style: const TextStyle(color: Colors.black87)),
+                                backgroundColor: Colors.grey.shade300,
+                              ));
                               _loadFullDetails();
                             } else {
-                              final error = (res.error ?? '').toLowerCase();
-                              // Very broad check for any "already" scenario to ensure pop
-                              final isDuplicate = error.contains('already') || 
-                                                error.contains('pending') && error.contains('request') ||
-                                                error.contains('active') && error.contains('request');
-                              
-                              print('🔍 Error check: "$error", isDuplicate: $isDuplicate');
-                              
-                              if (isDuplicate) {
-                                print('⚠️ Duplicate detected - Popping Hub Sheet');
-                                Navigator.pop(sheetContext);
-                              }
-                              messenger.showSnackBar(SnackBar(content: Text(res.error ?? 'Unknown error')));
+                              print('⚠️ Error detected - Popping Hub Sheet');
+                              Navigator.pop(sheetContext);
+                              messenger.showSnackBar(SnackBar(
+                                content: Text(res.error ?? 'Unknown error', style: const TextStyle(color: Colors.black87)),
+                                backgroundColor: Colors.grey.shade300,
+                              ));
                             }
                           }
                         } catch (e) {
@@ -1530,7 +1526,9 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                                 Navigator.pop(sheetContext);
                                 final successMsg = res.data?['message'] ?? 'Slot change requested';
                                 messenger.showSnackBar(SnackBar(
-                                    content: Text(res.isSuccess ? successMsg : 'Error: ${res.error ?? "Unknown error"}')));
+                                  content: Text(res.isSuccess ? successMsg : 'Error: ${res.error ?? "Unknown error"}', style: const TextStyle(color: Colors.black87)),
+                                  backgroundColor: Colors.grey.shade300,
+                                ));
                                 if (res.isSuccess) {
                                   _loadFullDetails();
                                 }
@@ -1652,7 +1650,9 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                               
                               final successMsg = res.data?['message'] ?? 'Job cancelled';
                               messenger.showSnackBar(SnackBar(
-                                  content: Text(res.isSuccess ? successMsg : 'Error: ${res.error ?? "Unknown error"}')));
+                                content: Text(res.isSuccess ? successMsg : 'Error: ${res.error ?? "Unknown error"}', style: const TextStyle(color: Colors.black87)),
+                                backgroundColor: Colors.grey.shade300,
+                              ));
                               if (res.isSuccess) {
                                 _loadFullDetails();
                               }
