@@ -1,4 +1,4 @@
-package Agent.itfixer199.`in`
+package `in`.itfixer199.agent
 
 import android.app.*
 import android.content.Context
@@ -12,7 +12,7 @@ import androidx.core.app.NotificationCompat
 class AlarmService : Service() {
 
     private var mediaPlayer: MediaPlayer? = null
-    private val CHANNEL_ID = "modification_alert_channel" // Fixed: Matches main.dart
+    private val CHANNEL_ID = "modification_alert_channel"
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d("ALARM_SERVICE_DEBUG", "🔥 [onStartCommand] AlarmService triggered!")
@@ -27,10 +27,8 @@ class AlarmService : Service() {
         Log.d("ALARM_SERVICE_DEBUG", "🔔 Received Data - Title: $title, Body: $body, Sound: $soundName, ModID: $modificationId, OrderID: $orderId, Type: $type")
 
         try {
-            // 1. Create the channel first
             createNotificationChannel()
 
-            // 2. Build the notification
             val notificationIntent = Intent(this, MainActivity::class.java).apply {
                 putExtra("title", title)
                 putExtra("body", body)
@@ -59,29 +57,32 @@ class AlarmService : Service() {
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_ALARM)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setFullScreenIntent(pendingIntent, true)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
                 .setAutoCancel(false)
                 .build()
 
-            // 3. Start foreground IMMEDIATELY
             startForeground(1001, notification)
 
-            // 4. Start Media Player with dynamic sound
-            if (mediaPlayer == null) {
-                var resId = resources.getIdentifier(soundName, "raw", packageName)
+            // 🎵 Sound Logic: Release existing player and start fresh for every notification
+            stopAndReleaseMediaPlayer()
 
-                if (resId == 0) {
-                    Log.w("ALARM_SERVICE_DEBUG", "⚠️ Sound '$soundName' not found. Falling back to 'notification'.")
-                    resId = resources.getIdentifier("notification", "raw", packageName)
-                }
+            var resId = resources.getIdentifier(soundName, "raw", packageName)
+            if (resId == 0) {
+                Log.w("ALARM_SERVICE_DEBUG", "⚠️ Sound '$soundName' not found. Falling back to 'notification'.")
+                resId = resources.getIdentifier("notification", "raw", packageName)
+            }
 
-                if (resId != 0) {
-                    Log.d("ALARM_SERVICE_DEBUG", "🎵 Initializing MediaPlayer with ID: $resId")
-                    mediaPlayer = MediaPlayer.create(this, resId)
-                    mediaPlayer?.isLooping = false
-                    mediaPlayer?.start()
+            if (resId != 0) {
+                Log.d("ALARM_SERVICE_DEBUG", "🎵 Initializing MediaPlayer with ID: $resId")
+                mediaPlayer = MediaPlayer.create(this, resId)
+                mediaPlayer?.isLooping = false
+                mediaPlayer?.setOnCompletionListener {
+                    Log.d("ALARM_SERVICE_DEBUG", "🎵 Sound finished. Waiting for next trigger.")
+                    // Note: We don't stop the service here so the notification stays visible
                 }
+                mediaPlayer?.start()
             }
 
         } catch (e: Exception) {
@@ -91,11 +92,24 @@ class AlarmService : Service() {
         return START_STICKY
     }
 
+    private fun stopAndReleaseMediaPlayer() {
+        try {
+            mediaPlayer?.let {
+                if (it.isPlaying) {
+                    it.stop()
+                }
+                it.release()
+                mediaPlayer = null
+                Log.d("ALARM_SERVICE_DEBUG", "🗑️ Previous MediaPlayer released.")
+            }
+        } catch (e: Exception) {
+            Log.e("ALARM_SERVICE_DEBUG", "💥 Error releasing MediaPlayer: ${e.message}")
+        }
+    }
+
     override fun onDestroy() {
         Log.d("ALARM_SERVICE_DEBUG", "🗑️ [onDestroy] Releasing resources...")
-        mediaPlayer?.stop()
-        mediaPlayer?.release()
-        mediaPlayer = null
+        stopAndReleaseMediaPlayer()
         super.onDestroy()
     }
 

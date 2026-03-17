@@ -7,12 +7,15 @@ import '../../../../core/model/slot_availability.dart';
 import '../../../../core/model/order_details.dart';
 import '../../../../core/services/apiservices.dart';
 
+const Object _sentinel = Object();
+
 class DashboardState {
   final int currentTabIndex;
   final bool isAvailable;
   final Set<String> acceptedJobIds;
   final List<SlotAvailability> upcomingJobs;
   final List<OrderDetails> upcomingOrders;
+  final String? noOrdersMessage;
   final bool isLoading;
   final String? error;
   final bool showPermissionDialog;
@@ -24,6 +27,7 @@ class DashboardState {
     this.acceptedJobIds = const {},
     this.upcomingJobs = const [],
     this.upcomingOrders = const [],
+    this.noOrdersMessage,
     this.isLoading = false,
     this.error,
     this.showPermissionDialog = false,
@@ -36,8 +40,9 @@ class DashboardState {
     Set<String>? acceptedJobIds,
     List<SlotAvailability>? upcomingJobs,
     List<OrderDetails>? upcomingOrders,
+    Object? noOrdersMessage = _sentinel,
     bool? isLoading,
-    String? error,
+    Object? error = _sentinel,
     bool? showPermissionDialog,
     List<String>? missingPermissions,
   }) {
@@ -47,8 +52,11 @@ class DashboardState {
       acceptedJobIds: acceptedJobIds ?? this.acceptedJobIds,
       upcomingJobs: upcomingJobs ?? this.upcomingJobs,
       upcomingOrders: upcomingOrders ?? this.upcomingOrders,
+      noOrdersMessage: noOrdersMessage == _sentinel
+          ? this.noOrdersMessage
+          : noOrdersMessage as String?,
       isLoading: isLoading ?? this.isLoading,
-      error: error,
+      error: error == _sentinel ? this.error : error as String?,
       showPermissionDialog: showPermissionDialog ?? this.showPermissionDialog,
       missingPermissions: missingPermissions ?? this.missingPermissions,
     );
@@ -109,11 +117,15 @@ class DashboardController extends Notifier<DashboardState> {
   }
 
   Future<void> fetchUpcomingJobs() async {
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(isLoading: true, error: null, noOrdersMessage: null);
     try {
       final jobs = await ApiService.getAgentSlotAvailability();
-      final orders = await ApiService.agentOrder();
+      final agentOrderResponse = await ApiService.agentOrder();
       
+      final orders = agentOrderResponse?.orders ?? [];
+      final noOrdersMsg = agentOrderResponse?.message;
+      print("API Response - noOrdersMessage: $noOrdersMsg");
+
       // Fetch profile to get availability status
       final profileResult = await ApiService.getAgentProfile();
       bool isAvailable = state.isAvailable;
@@ -123,10 +135,12 @@ class DashboardController extends Notifier<DashboardState> {
 
       state = state.copyWith(
         upcomingJobs: jobs,
-        upcomingOrders: orders ?? [],
+        upcomingOrders: orders,
+        noOrdersMessage: noOrdersMsg,
         isAvailable: isAvailable,
         isLoading: false,
       );
+      print("Dashboard State - isAvailable: $isAvailable");
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -189,6 +203,12 @@ class DashboardController extends Notifier<DashboardState> {
       _stopBackgroundService();
       state = state.copyWith(isAvailable: false);
     }
+
+    // Call API to sync status with server
+    await ApiService.toggleActiveStatus();
+    
+    // Refresh jobs to reflect new availability
+    await fetchUpcomingJobs();
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_availabilityKey, state.isAvailable);

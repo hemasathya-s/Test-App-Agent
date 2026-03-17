@@ -360,7 +360,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                 child: Column(
                   children: [
                     _editableField("Bank Name", _bankNameController),
-                    _editableField("Account Number", _accountNumberController),
+                    _editableField("Account Number", _accountNumberController, keyboardType: TextInputType.number),
                     _editableField("IFSC Code", _ifscController),
                     _editableField("UPI ID", _upiController),
                   ],
@@ -435,7 +435,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     );
   }
 
-  Widget _editableField(String label, TextEditingController controller, {bool enabled = true, bool isRating = false}) {
+  Widget _editableField(String label, TextEditingController controller, {bool enabled = true, bool isRating = false, TextInputType? keyboardType}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
@@ -444,6 +444,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
           Text(label, style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w500, color: AppTheme.textSecondary)),
           const SizedBox(height: 6),
           TextField(
+            keyboardType: keyboardType,
             controller: controller,
             enabled: enabled,
             style: GoogleFonts.outfit(

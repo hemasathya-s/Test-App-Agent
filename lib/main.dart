@@ -2,10 +2,6 @@ import 'dart:convert';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'dart:convert';
-
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,8 +24,7 @@ Future<void> initializeNotifications() async {
     'Modification Alerts',
     description: 'Used for service modification notifications',
     importance: Importance.max,
-    playSound: true,
-    sound: RawResourceAndroidNotificationSound('new_order'),
+    playSound: false,
   );
 
   await flutterLocalNotificationsPlugin
@@ -46,19 +41,6 @@ Future<void> initializeNotifications() async {
     initializationSettings,
     onDidReceiveNotificationResponse: (details) {
       print("🔔 [main] Notification tapped. Payload: ${details.payload}");
-      if (details.payload != null) {
-        try {
-          final Map<String, dynamic> data = jsonDecode(details.payload!);
-          // Navigate to Home with full data from payload
-          navigatorKey.currentState?.pushNamedAndRemoveUntil(
-            '/Home',
-                (route) => false,
-            arguments: data,
-          );
-        } catch (e) {
-          print("❌ [main] Error decoding notification payload: $e");
-        }
-      }
     },
   );
 }
@@ -66,10 +48,9 @@ Future<void> initializeNotifications() async {
 bool _isAlarmNotification(RemoteMessage message) {
   final data = message.data;
   // This logic MUST match MyFirebaseMessagingService.kt shouldTriggerAlarm criteria
-  return data['playSound']?.toString().toLowerCase() == 'true' ;
-      // ||
-      // data['type']?.toString().toLowerCase() == 'modification' ||
-      // data.containsKey('modification_id');
+  return data['playSound']?.toString().toLowerCase() == 'true' ||
+      data['type']?.toString().toLowerCase() == 'modification' ||
+      data.containsKey('modification_id');
 }
 
 @pragma('vm:entry-point')
@@ -105,7 +86,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
           importance: Importance.max,
           priority: Priority.high,
           playSound: true,
-          sound: const RawResourceAndroidNotificationSound('new_order'),
+          sound: const RawResourceAndroidNotificationSound('notification'),
         ),
       ),
       payload: jsonEncode({
@@ -132,11 +113,11 @@ void main()async{
   );
 
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-      FlutterLocalNotificationsPlugin();
+  FlutterLocalNotificationsPlugin();
 
   await flutterLocalNotificationsPlugin
       .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>()
+      AndroidFlutterLocalNotificationsPlugin>()
       ?.createNotificationChannel(channel);
 
   // Initialize the background service configuration.
@@ -173,7 +154,7 @@ void main()async{
             importance: Importance.max,
             priority: Priority.high,
             playSound: true,
-            sound: const RawResourceAndroidNotificationSound('new_order'),
+            sound: const RawResourceAndroidNotificationSound('notification'),
           ),
         ),
         payload: jsonEncode({

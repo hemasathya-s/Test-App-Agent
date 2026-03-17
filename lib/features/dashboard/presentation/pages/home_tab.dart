@@ -232,8 +232,11 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                       size: 48, color: Colors.grey.shade400),
                   const SizedBox(height: 16),
                   Text(
-                    'No upcoming orders for today',
+                    (state.noOrdersMessage != null && state.noOrdersMessage!.isNotEmpty)
+                        ? state.noOrdersMessage!
+                        : 'No upcoming orders for today',
                     style: GoogleFonts.outfit(color: AppTheme.textSecondary),
+                    textAlign: TextAlign.center,
                   ),
                 ],
               ),
@@ -394,9 +397,6 @@ class _HomeTabState extends ConsumerState<HomeTab> {
         if (!state.isAvailable) {
           // GOING ONLINE
           await controller.toggleAvailability(true);
-          if (ref.read(dashboardProvider).isAvailable) {
-            ApiService.toggleActiveStatus();
-          }
         } else {
           // GOING OFFLINE — show confirmation dialog first
           final shouldTurnOff = await showDialog<bool>(
@@ -436,7 +436,6 @@ class _HomeTabState extends ConsumerState<HomeTab> {
 
           if (shouldTurnOff == true) {
             await controller.toggleAvailability(false);
-            ApiService.toggleActiveStatus();
           }
         }
       },

@@ -36,6 +36,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
   void initState() {
     super.initState();
     _loadFullDetails();
+    print("Order Id ${widget.order?.id}");
   }
 
   Future<void> _loadFullDetails() async {
@@ -367,7 +368,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
       );
     }
 
-
+print("Order ttt $orderId");
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -1673,7 +1674,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                               final messenger = ScaffoldMessenger.of(context);
                               setState(() => isSubmitting = false);
                               print('✅ Cancellation Success/Fail - Popping');
-                              Navigator.pop(sheetContext);
+                                 Navigator.pop(sheetContext);
                               
                               final successMsg = res.data?['message'] ?? 'Job cancelled';
                               messenger.showSnackBar(SnackBar(

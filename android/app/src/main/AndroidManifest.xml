@@ -4,59 +4,36 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
-
-    <application
-        android:label="IT Fixer Partner"
-        android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
-        android:enableOnBackInvokedCallback="true">
-
-        <!-- Updated to use existing app icon to prevent build error -->
-        <meta-data
-            android:name="com.google.firebase.messaging.default_notification_icon"
-            android:resource="@mipmap/ic_launcher" />
-        <meta-data
-            android:name="id.flutter.flutter_background_service.notification_icon"
-            android:resource="@mipmap/ic_launcher" />
-
-        <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:launchMode="singleTop"
-            android:taskAffinity=""
-            android:theme="@style/LaunchTheme"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-            android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize">
-            <meta-data
-              android:name="io.flutter.embedding.android.NormalTheme"
-              android:resource="@style/NormalTheme"
-              />
+    <application android:label="IT Fixer Partner" android:name="${applicationName}" android:icon="@mipmap/ic_launcher" android:enableOnBackInvokedCallback="true">
+        <!--  Updated to use existing app icon to prevent build error  -->
+        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@mipmap/ic_launcher"/>
+        <meta-data android:name="id.flutter.flutter_background_service.notification_icon" android:resource="@mipmap/ic_launcher"/>
+        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:taskAffinity="" android:theme="@style/LaunchTheme" android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" android:hardwareAccelerated="true" android:windowSoftInputMode="adjustResize">
+            <meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/NormalTheme"/>
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <meta-data
-            android:name="flutterEmbedding"
-            android:value="2" />
-        <meta-data android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyAflftNedMvJ812sMI1l0h7kqj1-HBYDE8"/>
-<!--        AIzaSyBtciSghWgfoM4B2-Ews_QjM3azDYz4ZWY-->
-        <service
-            android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:exported="true"
-            android:foregroundServiceType="location"/>
-        <receiver
-            android:name="id.flutter.flutter_background_service.BootReceiver"
-            android:enabled="true"
-            android:exported="true">
+        <meta-data android:name="flutterEmbedding" android:value="2"/>
+        <meta-data android:name="com.google.android.geo.API_KEY" android:value="AIzaSyAflftNedMvJ812sMI1l0h7kqj1-HBYDE8"/>
+        <service android:name="id.flutter.flutter_background_service.BackgroundService" android:exported="true" android:foregroundServiceType="location"/>
+        <service android:name=".AlarmService" android:exported="false" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="This service plays an alarm sound and shows a persistent notification when a new order or modification is received via FCM, ensuring the agent is alerted even if the app is in the background."/>
+        </service>
+        <service android:name=".MyFirebaseMessagingService" android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT"/>
+            </intent-filter>
+        </service>
+        <receiver android:name="id.flutter.flutter_background_service.BootReceiver" android:enabled="true" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
             </intent-filter>
@@ -64,12 +41,12 @@
     </application>
     <queries>
         <intent>
-            <action android:name="android.intent.action.DIAL" />
-            <data android:scheme="tel" />
+            <action android:name="android.intent.action.DIAL"/>
+            <data android:scheme="tel"/>
         </intent>
         <intent>
-            <action android:name="android.intent.action.SENDTO" />
-            <data android:scheme="mailto" />
+            <action android:name="android.intent.action.SENDTO"/>
+            <data android:scheme="mailto"/>
         </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>

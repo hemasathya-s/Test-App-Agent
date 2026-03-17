@@ -60,11 +60,11 @@ class TrackingService {
 
     _isConnecting = true;
 
-    final uri = _buildWsUri();
+    final uri = await _buildWsUri();
     debugPrint("[TRACKING] Connecting to WS: $uri");
 
     try {
-      _channel = WebSocketChannel.connect(await uri);
+      _channel = WebSocketChannel.connect(uri);
 
       _channel!.stream.listen(
         (message) {

@@ -1,4 +1,4 @@
-package Agent.itfixer199.`in`
+package `in`.itfixer199.agent
 
 import android.content.Intent
 import android.os.Build

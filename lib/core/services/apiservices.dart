@@ -256,7 +256,7 @@ class ApiService {
     return [];
   }
 
-  static Future<List<OrderDetails>?> agentOrder() async {
+  static Future<AgentOrderResponse?> agentOrder() async {
     try {
       final userId = await getUserId();
       final accessToken = await _getAccessToken();
@@ -264,7 +264,7 @@ class ApiService {
       if (accessToken == null || userId == null || userId.isEmpty) {
         // Even if session is missing, we ensure local accessTokens are cleared
         await AuthResponse.clearTokens();
-        return [];
+        return null;
       }
 
       String url = "$baseUrl/api/order/agent-orders/?is_active=true";
@@ -284,9 +284,20 @@ class ApiService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
         print("DEBUG: [API] Agent Orders Response Body: ${jsonEncode(data)}");
-        return AgentOrderResponse.fromJson(data).orders;
+        return AgentOrderResponse.fromJson(data);
+      } else {
+        print("DEBUG: [API] Request Failed with status: ${response.statusCode}");
+        try {
+          final data = jsonDecode(response.body);
+          return AgentOrderResponse.fromJson(data);
+        } catch (_) {
+          return AgentOrderResponse(
+            success: false,
+            message: 'Failed to load orders (${response.statusCode})',
+            orders: [],
+          );
+        }
       }
-      return null;
     } catch (e) {
       print("DEBUG: [API] Agent Order Exception: $e");
       return null;
@@ -1119,15 +1130,15 @@ class ApiService {
       }
 
       final jsonData = jsonDecode(response.body);
-      final appSettings = AppSettings.fromJson(jsonData);
 
-      if (!appSettings.success) {
-        throw Exception(appSettings.message);
+      if (jsonData['success'] != true) {
+        throw Exception(jsonData['message']?.toString() ?? 'Version API failed');
       }
 
-      final int serverMinBuild = appSettings.data.appVersion;
-      // Use fallback if playStoreUrl is null
-      final String? storeUrl = appSettings.data.playStoreUrl;
+      final data = jsonData['data'] ?? {};
+      final rawVersion = data['partner_app_version'];
+      final int serverMinBuild = int.tryParse(rawVersion?.toString() ?? '0') ?? 0;
+      final String? storeUrl = data['partner_app_play_store_url'];
 
       return {
         'app_version': serverMinBuild,
