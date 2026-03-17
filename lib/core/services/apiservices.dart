@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -879,6 +879,8 @@ class ApiService {
       String userId,
       Map<String, dynamic> updatedData, {
         File? profileImage,
+        File? rcDocument,
+        File? licenseDocument,
       }) async {
     try {
       print('?? Updating agent profile: $userId');
@@ -891,8 +893,8 @@ class ApiService {
 
       final uri = Uri.parse('$baseUrl/api/user/agent/$userId');
 
-      // We use MultipartRequest if an image is provided, otherwise a standard PUT
-      if (profileImage != null) {
+      // We use MultipartRequest if an image or document is provided, otherwise a standard PUT
+      if (profileImage != null || rcDocument != null || licenseDocument != null) {
         final request = http.MultipartRequest('PUT', uri)
           ..headers.addAll({
             'accept': 'application/json',
@@ -904,13 +906,32 @@ class ApiService {
           request.fields[key] = value.toString();
         });
 
-        // Add profile image
-        final ext = _fileExtension(profileImage.path);
-        request.files.add(await http.MultipartFile.fromPath(
-          'profile_image',
-          profileImage.path,
-          contentType: http.MediaType('image', ext),
-        ));
+        if (profileImage != null) {
+          final ext = _fileExtension(profileImage.path);
+          request.files.add(await http.MultipartFile.fromPath(
+            'profile_image',
+            profileImage.path,
+            contentType: http.MediaType('image', ext),
+          ));
+        }
+
+        if (rcDocument != null) {
+          final ext = _fileExtension(rcDocument.path);
+          request.files.add(await http.MultipartFile.fromPath(
+            'rc_document',
+            rcDocument.path,
+            contentType: http.MediaType(ext == 'pdf' ? 'application' : 'image', ext),
+          ));
+        }
+
+        if (licenseDocument != null) {
+          final ext = _fileExtension(licenseDocument.path);
+          request.files.add(await http.MultipartFile.fromPath(
+            'license_document',
+            licenseDocument.path,
+            contentType: http.MediaType(ext == 'pdf' ? 'application' : 'image', ext),
+          ));
+        }
 
         print('?? Sending Multipart PUT to: $uri');
         final streamedResponse = await request.send().timeout(const Duration(seconds: 300));
@@ -1779,6 +1800,8 @@ class ApiService {
     File? aadharDoc,
     File? panCard,
     File? videoKyc,
+    File? rcDocument,
+    File? licenseDocument,
   }) async {
     try {
       print('📝 Registering agent: ${request.name}');
@@ -1823,6 +1846,22 @@ class ApiService {
           'video_kyc',
           videoKyc.path,
           contentType: http.MediaType('video', 'mp4'),
+        ));
+      }
+      if (rcDocument != null) {
+        final ext = _fileExtension(rcDocument.path);
+        multipartRequest.files.add(await http.MultipartFile.fromPath(
+          'rc_document',
+          rcDocument.path,
+          contentType: http.MediaType(ext == 'pdf' ? 'application' : 'image', ext),
+        ));
+      }
+      if (licenseDocument != null) {
+        final ext = _fileExtension(licenseDocument.path);
+        multipartRequest.files.add(await http.MultipartFile.fromPath(
+          'license_document',
+          licenseDocument.path,
+          contentType: http.MediaType(ext == 'pdf' ? 'application' : 'image', ext),
         ));
       }
 

@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -21,7 +21,22 @@ class AgentRegistrationPage extends StatefulWidget {
 
 class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
   final _formKey = GlobalKey<FormState>();
+  final _scrollController = ScrollController();
   bool _isLoading = false;
+
+  // ── Per-field keys for precise auto-scroll on error ──────────────────────
+  final _keyName          = GlobalKey<FormFieldState>();
+  final _keyEmail         = GlobalKey<FormFieldState>();
+  final _keyMobile        = GlobalKey<FormFieldState>();
+  final _keyPassword      = GlobalKey<FormFieldState>();
+  final _keyConfirmPass   = GlobalKey<FormFieldState>();
+  final _keyVehicleNumber = GlobalKey<FormFieldState>();
+  final _keyBankName      = GlobalKey<FormFieldState>();
+  final _keyAccountNumber = GlobalKey<FormFieldState>();
+  final _keyIfsc          = GlobalKey<FormFieldState>();
+  final _keyUpiId         = GlobalKey<FormFieldState>();
+  final _keyRcBookNumber  = GlobalKey<FormFieldState>();
+  final _keyLicenseNumber = GlobalKey<FormFieldState>();
 
   // ── Controllers ───────────────────────────────────────────────────────────
   final _nameController = TextEditingController();
@@ -37,6 +52,8 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
   final _upiIdController = TextEditingController();
  // final _alternateNumberController = TextEditingController();
   final _vehicleNumberController = TextEditingController();
+  final _rcBookNumberController  = TextEditingController();
+  final _licenseNumberController = TextEditingController();
   //final _dlExpiryController = TextEditingController();
 
   bool _obscurePassword = true;
@@ -61,6 +78,8 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
   File? _aadharDoc;
   File? _panCard;
   File? _videoKyc;
+  File? _rcBookImage;
+  File? _licenseImage;
 
   final _picker = ImagePicker();
 
@@ -73,6 +92,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _nameController.dispose();
     _emailController.dispose();
     _mobileController.dispose();
@@ -86,6 +106,8 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
     _upiIdController.dispose();
    // _alternateNumberController.dispose();
     _vehicleNumberController.dispose();
+    _rcBookNumberController.dispose();
+    _licenseNumberController.dispose();
    // _dlExpiryController.dispose();
     super.dispose();
   }
@@ -231,10 +253,52 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
   }
 */
 
+  /// Scrolls and focuses the first TextFormField that has a validation error.
+  void _scrollToFirstError() {
+    // Fields ordered top-to-bottom as they appear on screen
+    final orderedKeys = [
+      _keyName,
+      _keyEmail,
+      _keyMobile,
+      _keyPassword,
+      _keyConfirmPass,
+      _keyVehicleNumber,
+      _keyRcBookNumber,
+      _keyLicenseNumber,
+      _keyBankName,
+      _keyAccountNumber,
+      _keyIfsc,
+      _keyUpiId,
+    ];
+
+    for (final key in orderedKeys) {
+      final state = key.currentState;
+      if (state != null && !state.isValid) {
+        final ctx = key.currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(
+            ctx,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeInOut,
+            alignment: 0.2, // show the field a little below the top
+          );
+          // Also focus the field so keyboard pops up
+          FocusScope.of(ctx).requestFocus(FocusNode()..requestFocus());
+          FocusScope.of(ctx).nextFocus();
+        }
+        return;
+      }
+    }
+  }
+
   // ── Submit ────────────────────────────────────────────────────────────────
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      // Scroll to the first section with an error
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToFirstError());
+      return;
+    }
 
     if (_profileImage == null) {
       _showSnack('Please upload a profile image');
@@ -250,6 +314,14 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
     }
     if (_panCard == null) {
       _showSnack('Please upload your PAN card');
+      return;
+    }
+    if (_rcBookImage == null) {
+      _showSnack('Please upload your RC Book document');
+      return;
+    }
+    if (_licenseImage == null) {
+      _showSnack('Please upload your Driving License');
       return;
     }
 
@@ -273,6 +345,8 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
       upiId: _upiIdController.text.trim(),
       vehicleNumber: _vehicleNumberController.text.trim(),
       vehicleType: _vehicleType,
+      rcNumber: _rcBookNumberController.text.trim(),
+      licenseNumber: _licenseNumberController.text.trim(),
       // dlExpiryDate: _dlExpiryController.text.trim(),
     );
 
@@ -282,6 +356,8 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
       aadharDoc: _aadharDoc,
       panCard: _panCard,
       videoKyc: _videoKyc,
+      rcDocument: _rcBookImage,
+      licenseDocument: _licenseImage,
     );
 
     if (!mounted) return;
@@ -380,6 +456,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
         ),
       ),
       body: CustomScrollView(
+        controller: _scrollController,
         slivers: [
           SliverToBoxAdapter(
             child: Form(
@@ -449,6 +526,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                       color: const Color(0xFF5C6BC0),
                       children: [
                         _field(
+                          fieldKey: _keyName,
                           controller: _nameController,
                           label: 'Full Name *',
                           icon: Icons.badge_outlined,
@@ -457,6 +535,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                         ),
                         const SizedBox(height: 16),
                         _field(
+                          fieldKey: _keyEmail,
                           controller: _emailController,
                           label: 'Email Address *',
                           icon: Icons.email_outlined,
@@ -470,6 +549,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                         ),
                         const SizedBox(height: 16),
                         _field(
+                          fieldKey: _keyMobile,
                           controller: _mobileController,
                           label: 'Mobile Number *',
                           icon: Icons.phone_outlined,
@@ -502,6 +582,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                         ), */
                         const SizedBox(height: 16),
                         _field(
+                          fieldKey: _keyPassword,
                           controller: _passwordController,
                           label: 'Password *',
                           icon: Icons.lock_outline_rounded,
@@ -525,6 +606,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                         ),
                         const SizedBox(height: 16),
                         _field(
+                          fieldKey: _keyConfirmPass,
                           controller: _confirmPasswordController,
                           label: 'Confirm Password *',
                           icon: Icons.lock_outline_rounded,
@@ -581,6 +663,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                         ),
                         const SizedBox(height: 20),
                         _field(
+                          fieldKey: _keyVehicleNumber,
                           controller: _vehicleNumberController,
                           label: 'Vehicle Number *',
                           icon: Icons.numbers_rounded,
@@ -591,6 +674,33 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                           validator: (v) =>
                           v!.isEmpty ? 'Vehicle number is required' : null,
                         ),
+                        const SizedBox(height: 16),
+                        _field(
+                          fieldKey: _keyRcBookNumber,
+                          controller: _rcBookNumberController,
+                          label: 'RC Book Number *',
+                          icon: Icons.article_outlined,
+                          inputFormatters: [
+                            _UpperCaseTextFormatter(),
+                            LengthLimitingTextInputFormatter(20),
+                          ],
+                          validator: (v) =>
+                              v == null || v.isEmpty ? 'RC Book number is required' : null,
+                        ),
+                        const SizedBox(height: 16),
+                        _field(
+                          fieldKey: _keyLicenseNumber,
+                          controller: _licenseNumberController,
+                          label: 'License Number *',
+                          icon: Icons.badge_outlined,
+                          inputFormatters: [
+                            _UpperCaseTextFormatter(),
+                            LengthLimitingTextInputFormatter(20),
+                          ],
+                          validator: (v) =>
+                              v == null || v.isEmpty ? 'License number is required' : null,
+                        ),
+                        const SizedBox(height: 20),
                         /* const SizedBox(height: 16),
                         GestureDetector(
                           onTap: _pickDlExpiry,
@@ -618,6 +728,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                         _labelText('Bank Name'),
                         const SizedBox(height: 8),
                         _field(
+                          fieldKey: _keyBankName,
                           controller: _bankNameController,
                           label: 'Bank Name',
                           icon: Icons.business_rounded,
@@ -628,6 +739,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                         _labelText('Account Number'),
                         const SizedBox(height: 8),
                         _field(
+                          fieldKey: _keyAccountNumber,
                           controller: _accountNumberController,
                           label: 'Account Number',
                           icon: Icons.numbers_rounded,
@@ -647,6 +759,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                         _labelText('IFSC Code'),
                         const SizedBox(height: 8),
                         _field(
+                          fieldKey: _keyIfsc,
                           controller: _ifscController,
                           label: 'IFSC Code',
                           icon: Icons.code_rounded,
@@ -668,6 +781,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                         _labelText('UPI ID'),
                         const SizedBox(height: 8),
                         _field(
+                          fieldKey: _keyUpiId,
                           controller: _upiIdController,
                           label: 'UPI ID (e.g. name@upi)',
                           icon: Icons.account_balance_wallet_rounded,
@@ -681,6 +795,8 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                             return null;
                           },
                         ),
+
+
                       ],
                     ),
 
@@ -701,6 +817,31 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                           onTap: () => _pickFile(
                             isImage: true,
                             onPicked: (f) => setState(() => _aadharDoc = f),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _uploadTile(
+                          label: 'RC Book Image *',
+                          subtitle: 'JPG / PNG — Front page',
+                          icon: Icons.article_rounded,
+                          file: _rcBookImage,
+                          isVideo: false,
+                          onTap: () => _pickFile(
+                            isImage: true,
+                            onPicked: (f) => setState(() => _rcBookImage = f),
+                          ),
+                        ),
+
+                        const SizedBox(height: 12),
+                        _uploadTile(
+                          label: 'Driving License Image *',
+                          subtitle: 'JPG / PNG — Front & back',
+                          icon: Icons.drive_eta_rounded,
+                          file: _licenseImage,
+                          isVideo: false,
+                          onTap: () => _pickFile(
+                            isImage: true,
+                            onPicked: (f) => setState(() => _licenseImage = f),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -747,12 +888,14 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
   // ── Widget Builders ───────────────────────────────────────────────────────
 
   Widget _sectionCard({
+    Key? key,
     required IconData icon,
     required String title,
     required Color color,
     required List<Widget> children,
   }) {
     return Container(
+      key: key,
       decoration: BoxDecoration(
         color: _cardBg,
         borderRadius: BorderRadius.circular(20),
@@ -818,6 +961,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
   );
 
   Widget _field({
+    GlobalKey<FormFieldState>? fieldKey,
     required TextEditingController controller,
     required String label,
     required IconData icon,
@@ -829,6 +973,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
     String? Function(String?)? validator,
   }) {
     return TextFormField(
+      key: fieldKey,
       controller: controller,
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,

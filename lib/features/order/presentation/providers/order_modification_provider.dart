@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 class OrderItem {
@@ -47,6 +47,8 @@ class OrderItem {
       type: type ?? this.type,
     );
   }
+
+  bool get isChanged => !isNew && (quantity != originalQuantity || price != originalPrice);
 }
 
 class RequestRecord {
@@ -96,6 +98,22 @@ class OrderModificationState {
     );
   }
 
+  // Original items that remain unchanged
+  List<OrderItem> get unmodifiedItems =>
+      items.where((i) => !i.isNew && !i.isRemoved && !i.isChanged).toList();
+
+  // Original items that were modified (price/qty change)
+  List<OrderItem> get modifiedOriginalItems =>
+      items.where((i) => !i.isNew && !i.isRemoved && i.isChanged).toList();
+
+  // New items added during this session
+  List<OrderItem> get newlyAddedItems =>
+      items.where((i) => i.isNew && !i.isRemoved).toList();
+
+  // Items marked for removal
+  List<OrderItem> get removedItems =>
+      items.where((i) => i.isRemoved).toList();
+
   double get originalTotal =>
       items.where((i) => !i.isNew).fold(0, (sum, i) => sum + (i.originalPrice * i.originalQuantity));
 
@@ -112,7 +130,7 @@ class OrderModificationController extends StateNotifier<OrderModificationState> 
     state = state.copyWith(items: items);
   }
 
-  void addItem(String name, double price) {
+  void addItem(String name, double price, {String? type}) {
     final newItem = OrderItem(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
@@ -121,6 +139,7 @@ class OrderModificationController extends StateNotifier<OrderModificationState> 
       quantity: 1,
       originalPrice: 0,
       originalQuantity: 0,
+      type: type,
     );
     state = state.copyWith(items: [...state.items, newItem]);
   }

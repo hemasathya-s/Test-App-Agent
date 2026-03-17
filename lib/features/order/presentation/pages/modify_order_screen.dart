@@ -1,9 +1,10 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/model/order_details.dart' as api;
 import '../../../../core/model/ServiceModal.dart';
+import '../../../../Model/Product.dart';
 import '../../../../core/services/apiservices.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../providers/order_modification_provider.dart';
@@ -18,8 +19,11 @@ class ModifyOrderScreen extends ConsumerStatefulWidget {
 }
 
 class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
+  final ApiService _apiService = ApiService();
   List<ServiceModal> _services = [];
+  List<Product> _products = [];
   bool _isLoadingServices = false;
+  bool _isLoadingProducts = false;
   bool _hasMoreServices = true;
   int _servicesPage = 1;
   bool _isSubmitting = false;
@@ -55,8 +59,9 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
       }).toList();
       ref.read(orderModificationProvider.notifier).loadFromOrderItems(modItems);
 
-      // Load first page of services
+      // Load first page of services and products
       _loadMoreServices();
+      _loadProducts();
     });
   }
 
@@ -78,6 +83,24 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
       }
     } catch (e) {
       if (mounted) setState(() => _isLoadingServices = false);
+    }
+  }
+
+  Future<void> _loadProducts() async {
+    if (_isLoadingProducts) return;
+    setState(() => _isLoadingProducts = true);
+    try {
+      final result = await _apiService.getProducts();
+      if (mounted && result.isSuccess && result.data != null) {
+        setState(() {
+          _products = result.data!;
+          _isLoadingProducts = false;
+        });
+      } else {
+        if (mounted) setState(() => _isLoadingProducts = false);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingProducts = false);
     }
   }
 
@@ -122,10 +145,10 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
                 };
               });
             } else {
-              controller.addItem(service.title, service.price);
+              controller.addItem(service.title, service.price, type: 'service');
             }
           },
-          onServicesUpdated: (updatedList, hasMore, nextPage) {
+        onServicesUpdated: (updatedList, hasMore, nextPage) {
             setState(() {
               _services = updatedList;
               _hasMoreServices = hasMore;
@@ -151,6 +174,7 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
+        scrolledUnderElevation: 0,
         title: Text(
           'Modify Order',
           style: GoogleFonts.outfit(
@@ -263,107 +287,31 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Items',
-                      style: GoogleFonts.outfit(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    // Text(
-                    //   '${_services.length} services loaded',
-                    //   style: GoogleFonts.outfit(
-                    //     fontSize: 12,
-                    //     color: AppTheme.textSecondary,
-                    //   ),
-                    // ),
-                  ],
+                // --- Service Section ---
+                _buildSectionHeader(
+                  title: 'Service',
+                  addLabel: 'Add Service',
+                  color: AppTheme.primaryColor,
+                  onAdd: () => _openServicePicker(controller: controller, orderId: orderId),
                 ),
-                const SizedBox(height: 16),
-
-                // If no active items, show add service button
-                if (state.items.where((i) => !i.isRemoved).isEmpty)
-                  _buildServicePickerButton(
-                    controller: controller,
-                    orderId: orderId,
-                  ),
-
-                // Render each item card
+                const SizedBox(height: 12),
                 ...state.items
-                    .where((i) => !i.isRemoved)
-                    .map(
-                      (item) => Container(
-                        margin: const EdgeInsets.only(bottom: 24),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.grey.shade200),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.04),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _buildItemImage(item.imageUrl),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          item.name,
-                                          style: GoogleFonts.outfit(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppTheme.textPrimary,
-                                          ),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 4),
-                                        if (item.quantity > 0)
-                                          Text(
-                                            '₹${(item.price * item.quantity).toStringAsFixed(2)}',
-                                            style: GoogleFonts.outfit(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                              color: AppTheme.primaryColor,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              // Replace button — only for service type items
-                              if ((item.type ?? '').toLowerCase() == 'service')
-                                _buildServicePickerButton(
-                                  controller: controller,
-                                  replaceId: item.id,
-                                  orderId: orderId,
-                                  isReplace: true,
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
+                    .where((i) => !i.isRemoved && (i.type ?? '').toLowerCase() == 'service')
+                    .map((item) => _buildItemCard(item, controller, orderId, isReadOnly: !item.isNew)),
+                const SizedBox(height: 24),
 
-                const SizedBox(height: 16),
+                // --- Product Section ---
+                _buildSectionHeader(
+                  title: 'Product',
+                  addLabel: 'Add Product',
+                  color: AppTheme.primaryColor,
+                  onAdd: () => _openProductPicker(controller: controller),
+                ),
+                const SizedBox(height: 12),
+                ...state.items
+                    .where((i) => !i.isRemoved && (i.type ?? '').toLowerCase() == 'product')
+                    .map((item) => _buildItemCard(item, controller, orderId, isReadOnly: !item.isNew)),
+                const SizedBox(height: 24),
 
                 // Totals
                 Container(
@@ -497,7 +445,7 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
                   child: CircularProgressIndicator(color: AppTheme.primaryColor),
                 )
               : ElevatedButton(
-                  onPressed: _submitForApproval,
+                  onPressed: _showSummaryBeforeSubmit,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primaryColor,
                     minimumSize: const Size(double.infinity, 56),
@@ -519,90 +467,95 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
     );
   }
 
-  Widget _buildServicePickerButton({
-    required OrderModificationController controller,
-    String? replaceId,
-    required String orderId,
-    bool isReplace = false,
-  }) {
-    return GestureDetector(
-      onTap: () => _openServicePicker(
-        controller: controller,
-        replaceId: replaceId,
-        orderId: orderId,
-      ),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: AppTheme.primaryColor.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.primaryColor.withOpacity(0.2)),
+  Future<void> _showSummaryBeforeSubmit() async {
+    final state = ref.read(orderModificationProvider);
+    if (state.newlyAddedItems.isEmpty && state.modifiedOriginalItems.isEmpty && state.removedItems.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No changes to submit.')),
+        );
+      }
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Review Modifications',
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
         ),
-        child: Row(
-          children: [
-            Icon(
-              isReplace ? Icons.swap_horiz : Icons.add_circle_outline,
-              color: AppTheme.primaryColor,
-              size: isReplace ? 18 : 22,
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (state.newlyAddedItems.isNotEmpty) ...[
+                  _summaryHeader('New Items Added'),
+                  ...state.newlyAddedItems.map((i) => _summaryItem(i.name, i.price, i.quantity)),
+                  const SizedBox(height: 12),
+                ],
+                if (state.modifiedOriginalItems.isNotEmpty) ...[
+                  _summaryHeader('Modifications'),
+                  ...state.modifiedOriginalItems.map((i) => _summaryItem(i.name, i.price, i.quantity, isUpdate: true)),
+                  const SizedBox(height: 12),
+                ],
+                if (state.removedItems.isNotEmpty) ...[
+                  _summaryHeader('Items Removed'),
+                  ...state.removedItems.map((i) => Text('• ${i.name}', style: GoogleFonts.outfit(color: Colors.red))),
+                  const SizedBox(height: 12),
+                ],
+                const Divider(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Total Amount:', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                    Text('₹${state.newTotal.toStringAsFixed(2)}', 
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.primaryColor, fontSize: 18)),
+                  ],
+                ),
+              ],
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                isReplace ? 'Replace Item' : 'Add Item from List',
-                style: GoogleFonts.outfit(
-                  fontSize: isReplace ? 13 : 15,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.primaryColor,
-                ),
-              ),
-            ),
-            if (_isLoadingServices && _services.isEmpty)
-              const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppTheme.primaryColor,
-                ),
-              )
-            else
-              Text(
-                '${_services.length} services',
-                style: GoogleFonts.outfit(
-                  fontSize: 12,
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-            const SizedBox(width: 8),
-            const Icon(Icons.arrow_forward_ios,
-                color: AppTheme.primaryColor, size: 14),
-          ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Dismiss', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: Text('Confirm & Proceed', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
+
+    if (confirmed == true && mounted) {
+      _submitForApproval();
+    }
   }
 
   Future<void> _submitForApproval() async {
     final orderId = widget.order?.id;
-    final note = _reasonController.text.trim().isEmpty
-        ? null
-        : _reasonController.text.trim();
+    final note = _reasonController.text.trim().isEmpty ? null : _reasonController.text.trim();
     final controller = ref.read(orderModificationProvider.notifier);
 
     setState(() => _isSubmitting = true);
 
     try {
       final pending = _pendingReplacement;
-      if (pending != null &&
-          orderId != null &&
-          pending['orderItemId'] != null &&
-          pending['serviceId'] != null) {
-        await ApiService.serviceModification(
-          orderId,
-          pending['orderItemId']!,
-          pending['serviceId']!,
-          note,
-        );
+      if (pending != null && orderId != null && pending['orderItemId'] != null && pending['serviceId'] != null) {
+        await ApiService.serviceModification(orderId, pending['orderItemId']!, pending['serviceId']!, note);
       }
 
       controller.submitRequest();
@@ -610,18 +563,13 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
       if (mounted) {
         Navigator.push(
           context,
-          MaterialPageRoute(
-              builder: (context) => ApprovalWaitingScreen(orderId: orderId)),
+          MaterialPageRoute(builder: (context) => ApprovalWaitingScreen(orderId: orderId)),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to submit. Please try again.'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
-          ),
+          const SnackBar(content: Text('Failed to submit. Please try again.'), backgroundColor: Colors.red, duration: Duration(seconds: 3)),
         );
       }
     } finally {
@@ -629,32 +577,253 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
     }
   }
 
+  Widget _summaryHeader(String title) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text(title, style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 14, color: AppTheme.textSecondary)),
+  );
+
+  Widget _summaryItem(String name, double price, int qty, {bool isUpdate = false}) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Row(
+      children: [
+        Text(isUpdate ? '• ' : '+ ', style: TextStyle(color: isUpdate ? Colors.orange : Colors.green, fontWeight: FontWeight.bold)),
+        Expanded(child: Text(name, style: GoogleFonts.outfit(fontSize: 13))),
+        Text('${qty}x ₹${price.toStringAsFixed(2)}', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600)),
+      ],
+    ),
+  );
+
+  Widget _buildSectionHeader({required String title, required String addLabel, required Color color, required VoidCallback onAdd}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(title, style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold)),
+        GestureDetector(
+          onTap: onAdd,
+          child: Text(
+            addLabel,
+            style: GoogleFonts.outfit(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildItemCard(OrderItem item, OrderModificationController controller, String orderId, {bool isReadOnly = false}) {
+    final itemType = (item.type ?? '').toLowerCase();
+    final isService = itemType == 'service';
+    final typeLabel = isService ? 'SERVICE' : 'PRODUCT';
+    final typeColor =  AppTheme.primaryColor ;
+    final typeBgColor =  AppTheme.primaryColor.withOpacity(0.1);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade200)),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(color: item.isChanged || item.isNew ? typeBgColor : Colors.grey.shade50, borderRadius: const BorderRadius.vertical(top: Radius.circular(16))),
+            child: Row(
+              children: [
+                Icon(isService ? Icons.design_services_outlined : Icons.inventory_2_outlined, size: 12, color: typeColor),
+                const SizedBox(width: 6),
+                Text(typeLabel, style: GoogleFonts.outfit(fontSize: 10, fontWeight: FontWeight.w700, color: typeColor, letterSpacing: 1.0)),
+                if (item.isNew) ...[
+                  const SizedBox(width: 8),
+                  _badge('NEW', Colors.orange),
+                ] else if (item.isChanged) ...[
+                  const SizedBox(width: 8),
+                  _badge('MODIFIED', Colors.blue),
+                ],
+                const Spacer(),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                _buildItemImage(item.imageUrl),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(item.name, style: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.bold), maxLines: 2, overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 4),
+                      Text('₹${(item.price * item.quantity).toStringAsFixed(2)}', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.red, size: 24),
+                  onPressed: () => _confirmDeleteItem(controller, item),
+                ),
+              ],
+            ),
+          ),
+          if (!isReadOnly && isService && !item.isNew) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              child: _buildServicePickerButton(controller: controller, replaceId: item.id, orderId: orderId, isReplace: true),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _badge(String text, Color color) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+    child: Text(text, style: GoogleFonts.outfit(fontSize: 8, fontWeight: FontWeight.w800, color: color)),
+  );
+
   Widget _buildItemImage(String? imageUrl) {
     return Container(
-      width: 80,
-      height: 80,
-      decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(12),
-      ),
+      width: 80, height: 80,
+      decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(12)),
       child: imageUrl != null && imageUrl.isNotEmpty
           ? ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const Icon(
-                  Icons.inventory_2_outlined,
-                  color: Colors.grey,
-                  size: 32,
+              child: Image.network(imageUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.inventory_2_outlined, color: Colors.grey, size: 32)),
+            )
+          : const Icon(Icons.inventory_2_outlined, color: Colors.grey, size: 32),
+    );
+  }
+
+  Future<void> _confirmDeleteItem(OrderModificationController controller, OrderItem item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Remove item?', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+        content: Text('Are you sure you want to remove "${item.name}" from this order?', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Cancel', style: GoogleFonts.outfit(color: AppTheme.textSecondary))),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            child: Text('Remove', style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      controller.removeItem(item.id);
+    }
+  }
+
+  Future<void> _openProductPicker({required OrderModificationController controller}) async {
+    String query = '';
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (bsCtx) => SafeArea(
+        child: StatefulBuilder(
+          builder: (bsCtx, setSheetState) {
+            final filtered = _products.where((p) => p.name.toLowerCase().contains(query)).toList();
+            return DraggableScrollableSheet(
+              initialChildSize: 0.6,
+              minChildSize: 0.4,
+              maxChildSize: 0.85,
+              expand: false,
+              builder: (_, sc) => Container(
+                decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+                child: Column(
+                  children: [
+                    Container(margin: const EdgeInsets.only(top: 12, bottom: 16), width: 36, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Row(
+                        children: [
+                          Icon(Icons.inventory_2_outlined, color: AppTheme.primaryColor, size: 22),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text('Add Product', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary))),
+                          Text('${_products.length} products', style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: TextField(
+                        onChanged: (v) => setSheetState(() => query = v.toLowerCase()),
+                        decoration: InputDecoration(
+                          hintText: 'Search products…',
+                          prefixIcon: const Icon(Icons.search),
+                          filled: true,
+                          fillColor: Colors.grey.shade100,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: _isLoadingProducts
+                          ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
+                          : filtered.isEmpty
+                              ? Center(child: Text('No products found', style: GoogleFonts.outfit(color: AppTheme.textSecondary)))
+                              : ListView.builder(
+                                  controller: sc,
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                                  itemCount: filtered.length,
+                                  itemBuilder: (_, i) {
+                                    final p = filtered[i];
+                                    const double price = 0.0;
+                                    return ListTile(
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                      leading: Container(
+                                        width: 44, height: 44,
+                                        decoration: BoxDecoration(color: Colors.orangeAccent.withOpacity(0.08), borderRadius: BorderRadius.circular(10)),
+                                        child: Icon(Icons.inventory_2_outlined, color: AppTheme.primaryColor, size: 22),
+                                      ),
+                                      title: Text(p.name, style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
+                                      subtitle: p.brand != null ? Text(p.brand!, style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontSize: 12)) : null,
+                                      onTap: () {
+                                        controller.addItem(p.name, price, type: 'product');
+                                        Navigator.pop(bsCtx);
+                                      },
+                                    );
+                                  },
+                                ),
+                    ),
+                  ],
                 ),
               ),
-            )
-          : const Icon(
-              Icons.inventory_2_outlined,
-              color: Colors.grey,
-              size: 32,
-            ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildServicePickerButton({required OrderModificationController controller, String? replaceId, required String orderId, bool isReplace = false}) {
+    return GestureDetector(
+      onTap: () => _openServicePicker(controller: controller, replaceId: replaceId, orderId: orderId),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.05), borderRadius: BorderRadius.circular(12), border: Border.all(color: AppTheme.primaryColor.withOpacity(0.2))),
+        child: Row(
+          children: [
+            Icon(isReplace ? Icons.swap_horiz : Icons.add_circle_outline, color: AppTheme.primaryColor, size: isReplace ? 18 : 22),
+            const SizedBox(width: 10),
+            Expanded(child: Text(isReplace ? 'Replace Item' : 'Add Item from List', style: GoogleFonts.outfit(fontSize: isReplace ? 13 : 15, fontWeight: FontWeight.bold, color: AppTheme.primaryColor))),
+            if (_isLoadingServices && _services.isEmpty) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryColor))
+            else Text('${_services.length} services', style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary)),
+            const SizedBox(width: 8),
+            const Icon(Icons.arrow_forward_ios, color: AppTheme.primaryColor, size: 14),
+          ],
+        ),
+      ),
     );
   }
 }
