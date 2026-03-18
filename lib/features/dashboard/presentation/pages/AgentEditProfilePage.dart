@@ -444,6 +444,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
           Text(label, style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w500, color: AppTheme.textSecondary)),
           const SizedBox(height: 6),
           TextField(
+            enableInteractiveSelection: false,
             keyboardType: keyboardType,
             controller: controller,
             enabled: enabled,

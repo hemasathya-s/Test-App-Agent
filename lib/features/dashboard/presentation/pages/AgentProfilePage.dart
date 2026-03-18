@@ -60,6 +60,7 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
            supportPhone = appSettings?['support_phone'] ?? '';
            supportEmail = appSettings?['support_email'] ?? '';
           _isLoading = false;
+          print("Terms Url ${appSettings} $termsUrl");
         });
       } else {
         print("❌ AgentProfilePage: Error loading profile: ${result.error}");
@@ -201,7 +202,7 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
               context,
               icon: Icons.description_outlined,
               title: "Terms and Condition",
-              onTap: () => _launchURL(termsUrl ?? ''),
+              onTap: () => _launchURL(termsUrl ??""),
             ),
             _buildMenuItem(
               context,
@@ -392,7 +393,7 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
                     label: 'Call',
                     onTap: () {
                       Navigator.pop(context);
-                      final phone = supportPhone?.isNotEmpty == true ? supportPhone! : '+1234567890';
+                      final phone = supportPhone?.isNotEmpty == true ? supportPhone! : '';
                       _launchURL('tel:$phone');
                     },
                   ),
@@ -402,7 +403,7 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
                     label: 'Email',
                     onTap: () {
                       Navigator.pop(context);
-                      final email = supportEmail?.isNotEmpty == true ? supportEmail! : 'support@example.com';
+                      final email = supportEmail?.isNotEmpty == true ? supportEmail! : '';
                       _launchURL('mailto:$email');
                     },
                   ),

@@ -167,6 +167,7 @@ class _InventoryScreenState extends State<InventoryScreen>
     } else {
       print('❌ [INVENTORY DIAGNOSTICS] Failed to load tool stocks: ${res.error}');
       setState(() => _toolsError = res.error ?? 'Failed to load tool stocks');
+      _showErrorSnackBar(res.error ?? 'Failed to load tool stocks');
     }
   }
 
@@ -181,7 +182,23 @@ class _InventoryScreenState extends State<InventoryScreen>
       });
     } else {
       setState(() => _productsError = res.error ?? 'Failed to load product stocks');
+      _showErrorSnackBar(res.error ?? 'Failed to load product stocks');
     }
+  }
+
+  void _showErrorSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: GoogleFonts.outfit(color: Colors.white),
+        ),
+        backgroundColor: Colors.black54,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
   Future<void> _loadProducts() async {
@@ -404,9 +421,9 @@ class _InventoryScreenState extends State<InventoryScreen>
           children: [
             Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey.shade300),
             const SizedBox(height: 16),
-            Text('No $_activeTab in stock', style: GoogleFonts.outfit(fontSize: 16, color: AppTheme.textSecondary)),
+            Text('No tools in Inventory', style: GoogleFonts.outfit(fontSize: 16, color: AppTheme.textSecondary)),
             const SizedBox(height: 8),
-            Text('Tap "Add Item" to request stock', style: GoogleFonts.outfit(fontSize: 13, color: Colors.grey.shade400)),
+            Text('Please check back later', style: GoogleFonts.outfit(fontSize: 13, color: Colors.grey.shade400)),
           ],
         ),
       );
@@ -772,7 +789,7 @@ class _InventoryScreenState extends State<InventoryScreen>
                         setDialogState(() => isRequesting = true);
 
                         bool success = false;
-                        String? movementId;
+                        String? errorMsg;
                         String movementType = 'GET';
 
                             if (_activeTab == 'Products' && selectedProduct != null) {
@@ -782,7 +799,7 @@ class _InventoryScreenState extends State<InventoryScreen>
                                 type: movementType,
                               );
                               success = res.isSuccess;
-                              movementId = res.data?.id;
+                              errorMsg = res.error;
                             } else if (_activeTab == 'Tools' && selectedTool != null) {
                               final res = await _apiService.requestToolMovement(
                                 toolId: selectedTool!.id,
@@ -790,25 +807,26 @@ class _InventoryScreenState extends State<InventoryScreen>
                                 type: movementType,
                               );
                               success = res.isSuccess;
-                              movementId = res.data?.id;
+                              errorMsg = res.error;
                             }
 
                         if (success) {
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Movement request submitted successfully'),
-                              backgroundColor: Colors.grey,
+                            SnackBar(
+                              content: Text('Movement request submitted successfully', style: GoogleFonts.outfit(color: Colors.white)),
+                              backgroundColor: AppTheme.primaryColor,
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
                           );
                         } else {
-                          setDialogState(() => isRequesting = false);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Failed to submit request'),
-                              backgroundColor: Colors.grey,
-                            ),
-                          );
+                          // Note: the dialog is already dismissed or we stay in it?
+                          // The original code did Navigator.pop(context) in BOTH cases.
+                          // Usually for errors we might want to stay in the dialog, 
+                          // but the user's request implies showing a snackbar which usually happens after dialog close or on top.
+                          Navigator.pop(context);
+                          _showErrorSnackBar(errorMsg ?? 'Failed to submit request');
                         }
                       },
                 style: ElevatedButton.styleFrom(

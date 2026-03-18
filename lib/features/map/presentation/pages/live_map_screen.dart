@@ -32,7 +32,18 @@ class _MyZonePageState extends State<MyZonePage> {
   Future<void> loadZones() async {
     debugPrint("DEBUG: LOADING AGENT ZONES...");
     try {
-      final zones = await ApiService.getAgentZones();
+      final res = await ApiService.getAgentZones();
+      
+      if (!res.isSuccess) {
+        debugPrint("DEBUG: API Error loading zones: ${res.error}");
+        _showErrorSnackBar(res.error ?? 'Failed to load zones');
+        setState(() {
+          isLoading = false;
+        });
+        return;
+      }
+
+      final zones = res.data ?? [];
       int index = 0;
       zonePolygons.clear();
       polygons.clear();
@@ -64,13 +75,31 @@ class _MyZonePageState extends State<MyZonePage> {
         isLoading = false;
       });
 
-      await checkAgentLocation();
+      if (zonePolygons.isNotEmpty) {
+        await checkAgentLocation();
+      }
     } catch (e) {
       debugPrint("DEBUG: Error loading zones: $e");
       setState(() {
         isLoading = false;
       });
+      _showErrorSnackBar(e.toString());
     }
+  }
+
+  void _showErrorSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: GoogleFonts.outfit(color: Colors.white),
+        ),
+        backgroundColor: Colors.black54,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
   void moveCameraToAllZones() {
@@ -180,7 +209,53 @@ class _MyZonePageState extends State<MyZonePage> {
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
-          : Stack(
+          : zonePolygons.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.map_outlined, size: 64, color: Colors.grey.shade300),
+                        const SizedBox(height: 16),
+                        Text(
+                          "Service Area Not Assigned",
+                          style: GoogleFonts.outfit(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textPrimary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          "Please contact support for assistance.",
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            color: AppTheme.textSecondary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            setState(() => isLoading = true);
+                            loadZones();
+                          },
+                          icon: const Icon(Icons.refresh),
+                          label: const Text("Retry"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : Stack(
               children: [
                 // Map
                 GoogleMap(

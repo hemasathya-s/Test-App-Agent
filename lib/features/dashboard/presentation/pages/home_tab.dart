@@ -386,7 +386,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     );
   }
 
-  Widget _buildAvailabilityToggle(
+  Widget   _buildAvailabilityToggle(
     DashboardState state,
     DashboardController controller,
     BuildContext context,

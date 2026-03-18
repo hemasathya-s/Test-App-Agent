@@ -1,6 +1,7 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/apiservices.dart';
@@ -21,6 +22,7 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen>
   List<OrderDetails> _allOrders = [];
   bool _isLoading = true;
   String? _error;
+  DateTime? _selectedDate;
 
   @override
   void initState() {
@@ -35,7 +37,11 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen>
       _error = null;
     });
     try {
-      final orders = await ApiService.getAgentOrderHistory();
+      String? dateParam;
+      if (_selectedDate != null) {
+        dateParam = DateFormat('yyyy-MM-dd').format(_selectedDate!);
+      }
+      final orders = await ApiService.getAgentOrderHistory(startDate: dateParam);
       if (mounted) {
         setState(() {
           _allOrders = orders;
@@ -45,10 +51,37 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen>
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = "Failed to load orders. Please try again.";
+          _error = e.toString().replaceFirst('Exception: ', '');
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _selectDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppTheme.primaryColor,
+              onPrimary: Colors.white,
+              onSurface: AppTheme.textPrimary,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+      });
+      _loadOrders();
     }
   }
 
@@ -74,13 +107,24 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen>
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(HugeIcons.strokeRoundedArrowLeft01, color: Colors.black),
           onPressed: () => context.pop(),
         ),
         actions: [
+          // if (_selectedDate != null)
+          //   IconButton(
+          //     onPressed: () {
+          //       setState(() {
+          //         _selectedDate = null;
+          //       });
+          //       _loadOrders();
+          //     },
+          //     icon: const Icon(Icons.close, color: Colors.red),
+          //     tooltip: 'Clear Filter',
+          //   ),
           IconButton(
-            onPressed: _loadOrders,
-            icon: const Icon(Icons.refresh, color: AppTheme.primaryColor),
+            onPressed: _selectDate,
+            icon: const Icon(Icons.calendar_month, color: AppTheme.primaryColor),
           ),
         ],
         bottom: TabBar(
@@ -111,18 +155,66 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen>
                     ],
                   ),
                 )
-              : TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildOrdersList(isUpcoming: true),
-                    _buildOrdersList(isUpcoming: false),
-                  ],
-                ),
+              : RefreshIndicator(
+                onRefresh:_loadOrders,
+                child: Column(
+                    children: [
+                      if (_selectedDate != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 16, left: 16, right: 16),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.calendar_today, size: 16, color: AppTheme.primaryColor),
+                                const SizedBox(width: 8),
+                                Text(
+                                  "Date: ${DateFormat('yyyy-MM-dd').format(_selectedDate!)}",
+                                  style: GoogleFonts.outfit(
+                                    color: AppTheme.primaryColor,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      Expanded(
+                        child: TabBarView(
+                          controller: _tabController,
+                          children: [
+                            _buildOrdersList(isUpcoming: true),
+                            _buildOrdersList(isUpcoming: false),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+              ),
     );
   }
 
   Widget _buildOrdersList({required bool isUpcoming}) {
     final filteredOrders = _allOrders.where((order) {
+      // Local date filtering for strict matching if date is selected
+      if (_selectedDate != null && order.createdAt != null) {
+        try {
+          DateTime orderDate = DateTime.parse(order.createdAt!);
+          if (orderDate.year != _selectedDate!.year ||
+              orderDate.month != _selectedDate!.month ||
+              orderDate.day != _selectedDate!.day) {
+            return false;
+          }
+        } catch (_) {
+          return false;
+        }
+      }
+
       final status = order.orderStatus?.toUpperCase() ?? '';
       if (isUpcoming) {
         return status != 'COMPLETED' && status != 'CANCELLED' && status != 'DELIVERED';

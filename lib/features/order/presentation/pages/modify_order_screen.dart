@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -616,11 +616,17 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
       }
     } catch (e) {
       if (mounted) {
+        // Extract the real message from the exception
+        final rawMsg = e.toString();
+        final errorMessage = rawMsg.startsWith('Exception: ')
+            ? rawMsg.replaceFirst('Exception: ', '')
+            : rawMsg;
+
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to submit. Please try again.'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 4),
           ),
         );
       }

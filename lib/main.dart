@@ -15,6 +15,7 @@ import 'firebase_options.dart';
 
 FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 Future<void> initializeNotifications() async {
   print("🔔 [main] Initializing Local Notifications...");
@@ -252,6 +253,7 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp.router(
       title: 'IT Fixer Agent',
       debugShowCheckedModeBanner: false,
+    //  scaffoldMessengerKey: scaffoldMessengerKey,
       theme: AppTheme.lightTheme,
       routerConfig: app_router.router,
     );

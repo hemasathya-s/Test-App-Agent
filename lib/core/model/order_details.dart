@@ -1,6 +1,22 @@
 import 'dart:convert';
 import 'service_modification.dart';
 
+List<dynamic>? _safeList(dynamic value) {
+  if (value == null) return null;
+  if (value is List) return value;
+  if (value is Map) {
+    if (value.containsKey('results') && value['results'] is List) {
+      return value['results'] as List;
+    } else if (value.containsKey('data') && value['data'] is List) {
+      return value['data'] as List;
+    } else if (value.containsKey('items') && value['items'] is List) {
+      return value['items'] as List;
+    }
+    return [];
+  }
+  return [];
+}
+
 class OrderDetails {
   final String? id;
   final List<OrderItem>? items;
@@ -30,6 +46,8 @@ class OrderDetails {
   final List<ServiceModification>? serviceModifications;
   final bool? isActive;
   final bool? isInstantSlot;
+
+
 
   OrderDetails({
     this.id,
@@ -65,10 +83,10 @@ class OrderDetails {
   factory OrderDetails.fromJson(Map<String, dynamic> json) {
     return OrderDetails(
       id: json['id'],
-      items: json['items'] != null
-          ? (json['items'] as List).map((i) => OrderItem.fromJson(i)).toList()
-          : null,
-      agentHistory: json['agent_history'],
+      items: _safeList(json['items'])
+          ?.map((i) => OrderItem.fromJson(i))
+          .toList(),
+      agentHistory: _safeList(json['agent_history']),
       userDetails: json['user_details'] != null
           ? UserDetails.fromJson(json['user_details'])
           : null,
@@ -97,11 +115,9 @@ class OrderDetails {
       assignedAgentId: json['assigned_agent_id'],
       startingAgentCoordinates: json['starting_agent_coordinates'],
       zoneId: json['zone_id'],
-      serviceModifications: json['service_modifications'] != null
-          ? (json['service_modifications'] as List)
-              .map((m) => ServiceModification.fromJson(m as Map<String, dynamic>))
-              .toList()
-          : null,
+      serviceModifications: _safeList(json['service_modifications'])
+          ?.map((m) => ServiceModification.fromJson(m as Map<String, dynamic>))
+          .toList(),
       isActive: json['is_active'],
       isInstantSlot: json['is_instant_slot'],
     );
@@ -197,9 +213,9 @@ class OrderItem {
   factory OrderItem.fromJson(Map<String, dynamic> json) {
     return OrderItem(
       id: json['id'],
-      media: json['media'] != null
-          ? (json['media'] as List).map((m) => ItemMedia.fromJson(m)).toList()
-          : null,
+      media: _safeList(json['media'])
+          ?.map((m) => ItemMedia.fromJson(m))
+          .toList(),
       itemDetails: json['item_details'] != null
           ? ItemDetails.fromJson(json['item_details'])
           : null,
@@ -367,41 +383,31 @@ class FullDetails {
       brandDetails: json['brand_details'] != null
           ? BrandDetails.fromJson(json['brand_details'])
           : null,
-      categories: json['categories'] != null
-          ? (json['categories'] as List).map((c) {
+      categories: _safeList(json['categories'])?.map((c) {
               if (c is Map<String, dynamic> && c.containsKey('category_name')) {
                 return Category.fromJson(c);
               } else if (c is Map<String, dynamic> && c.containsKey('name')) {
                 return Category(id: c['id'], categoryName: c['name']);
               }
               return Category();
-            }).toList()
-          : null,
-      pricingModels: json['pricing_models'] != null
-          ? (json['pricing_models'] as List)
-              .map((p) => PricingModel.fromJson(p))
-              .toList()
-          : null,
-      zoneHubMappings: json['zone_hub_mappings'] != null
-          ? (json['zone_hub_mappings'] as List)
-              .map((z) => ZoneHubMapping.fromJson(z))
-              .toList()
-          : null,
-      mediaFiles: json['media_files'] != null
-          ? (json['media_files'] as List)
-              .map((m) => MediaFile.fromJson(m))
-              .toList()
-          : null,
-      pricing: json['pricing'] != null
-          ? (json['pricing'] as List).map((p) => Pricing.fromJson(p)).toList()
-          : null,
+            }).toList(),
+      pricingModels: _safeList(json['pricing_models'])
+              ?.map((p) => PricingModel.fromJson(p))
+              .toList(),
+      zoneHubMappings: _safeList(json['zone_hub_mappings'])
+              ?.map((z) => ZoneHubMapping.fromJson(z))
+              .toList(),
+      mediaFiles: _safeList(json['media_files'])
+              ?.map((m) => MediaFile.fromJson(m))
+              .toList(),
+      pricing: _safeList(json['pricing'])?.map((p) => Pricing.fromJson(p)).toList(),
       modelName: json['model_name'],
       sku: json['sku'],
-      specification: json['specification'],
-      attributes: json['attributes'],
-      media: json['media'],
+      specification: _safeList(json['specification']),
+      attributes: _safeList(json['attributes']),
+      media: _safeList(json['media']),
       inventory: json['inventory'],
-      children: json['children'],
+      children: _safeList(json['children']),
       parent: json['parent'],
       parentName: json['parent_name'],
       createdAt: json['created_at'],
@@ -782,11 +788,9 @@ class AgentDetails {
       accountNumber: json['account_number'],
       ifscCode: json['ifsc_code'],
       upiId: json['upi_id'],
-      zoneDetails: json['zone_details'] != null
-          ? (json['zone_details'] as List)
-              .map((z) => ZoneDetail.fromJson(z))
-              .toList()
-          : null,
+      zoneDetails: _safeList(json['zone_details'])
+              ?.map((z) => ZoneDetail.fromJson(z))
+              .toList(),
       managerDetails: json['manager_details'],
       createdAt: json['created_at'],
       createdBy: json['created_by'],
@@ -935,11 +939,9 @@ class ZoneDetail {
       status: json['status'],
       description: json['description'],
       deleteStatus: json['delete_status'],
-      coordinates: json['coordinates'] != null
-          ? (json['coordinates'] as List)
-              .map((c) => Coordinate.fromJson(c))
-              .toList()
-          : null,
+      coordinates: _safeList(json['coordinates'])
+              ?.map((c) => Coordinate.fromJson(c))
+              .toList(),
     );
   }
 
