@@ -378,8 +378,8 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> listService({
-    int page = 1,
-    int pageSize = 1,
+    int? page,
+    int? size,
     String? lat,
     String? lng,
   }) async {
@@ -392,11 +392,21 @@ class ApiService {
         return {'services': <ServiceModal>[], 'hasMore': false};
       }
 
-      String url =
-          '$baseUrl/api/services/?include_categories=true&include_media=true&include_pricing=true&include_zones=true&page=$page&size=$pageSize';
+      final queryParams = <String, String>{
+        'include_categories': 'true',
+        'include_media': 'true',
+        'include_pricing': 'true',
+        'include_zones': 'true',
+        if (page != null) 'page': '$page',
+        if (size != null) 'size': '$size',
+        if (lat != null) 'lat': lat,
+        if (lng != null) 'lng': lng,
+      };
+
+      final uri = Uri.parse('$baseUrl/api/services/').replace(queryParameters: queryParams);
 
       final response = await http.get(
-        Uri.parse(url),
+        uri,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $accessToken',
@@ -409,6 +419,7 @@ class ApiService {
         final Map<String, dynamic> data = jsonDecode(response.body);
         List<dynamic> list = [];
         bool hasMore = false;
+        final currentSize = size ?? 10;
         if (data['success'] == true && data['services'] != null) {
           list = data['services'];
           // Check pagination metadata
@@ -418,14 +429,14 @@ class ApiService {
                 pagination['next'] != null;
           } else {
             // If no pagination metadata, assume more data if we got a full page
-            hasMore = list.length >= pageSize;
+            hasMore = list.length >= currentSize;
           }
         } else if (data.containsKey('results')) {
           list = data['results'];
           hasMore = data['next'] != null;
         } else if (data.containsKey('data')) {
           list = data['data'];
-          hasMore = list.length >= pageSize;
+          hasMore = list.length >= currentSize;
         }
 
         print('listService [page=$page] count=${list.length} hasMore=$hasMore');

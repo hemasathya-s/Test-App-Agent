@@ -59,26 +59,25 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
       }).toList();
       ref.read(orderModificationProvider.notifier).loadFromOrderItems(modItems);
 
-      // Load first page of services and products
-      _loadMoreServices();
+      // Load all services and products initially for correct total counts
+      _loadServices();
       _loadProducts();
     });
   }
 
-  Future<void> _loadMoreServices() async {
-    if (_isLoadingServices || !_hasMoreServices) return;
+  Future<void> _loadServices() async {
+    if (_isLoadingServices) return;
     setState(() => _isLoadingServices = true);
     try {
-      final result = await ApiService.listService(page: _servicesPage);
+      // Fetch a large number of services to get the "total count" accurately
+      final result = await ApiService.listService(page: 1 ,size: 100);
       final fetched = result['services'] as List<ServiceModal>;
-      final hasMore = result['hasMore'] as bool;
       if (mounted) {
         setState(() {
-          _services.addAll(fetched);
-          _hasMoreServices = hasMore;
-          _servicesPage++;
+          _services = fetched;
+          _hasMoreServices = false; // Loaded all at once
           _isLoadingServices = false;
-          print('Services loaded: ${_services.length}, hasMore: $hasMore');
+          print('All services loaded: ${_services.length}');
         });
       }
     } catch (e) {
@@ -90,11 +89,13 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
     if (_isLoadingProducts) return;
     setState(() => _isLoadingProducts = true);
     try {
-      final result = await _apiService.getProducts();
+      // Fetch a large number of products to get the "total count" accurately
+      final result = await _apiService.getProducts(page: 1 ,size: 100);
       if (mounted && result.isSuccess && result.data != null) {
         setState(() {
           _products = result.data!;
           _isLoadingProducts = false;
+          print('All products loaded: ${_products.length}');
         });
       } else {
         if (mounted) setState(() => _isLoadingProducts = false);
@@ -667,12 +668,15 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
               ],
             ),
           ),
-          if (!isReadOnly && isService && !item.isNew) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              child: _buildServicePickerButton(controller: controller, replaceId: item.id, orderId: orderId, isReplace: true),
+          Padding(
+            padding: const EdgeInsets.only(left: 12, right: 12, bottom: 12),
+            child: _buildReplacementPickerButton(
+              controller: controller,
+              replaceId: item.id,
+              orderId: orderId,
+              type: itemType,
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -721,7 +725,7 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
     }
   }
 
-  Future<void> _openProductPicker({required OrderModificationController controller}) async {
+  Future<void> _openProductPicker({required OrderModificationController controller, String? replaceId}) async {
     String query = '';
     await showModalBottomSheet(
       context: context,
@@ -747,7 +751,7 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
                         children: [
                           Icon(Icons.inventory_2_outlined, color: AppTheme.primaryColor, size: 22),
                           const SizedBox(width: 10),
-                          Expanded(child: Text('Add Product', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary))),
+                          Expanded(child: Text(replaceId != null ? 'Replace Product' : 'Add Product', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary))),
                           Text('${_products.length} products', style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary)),
                         ],
                       ),
@@ -789,7 +793,11 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
                                       title: Text(p.name, style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
                                       subtitle: p.brand != null ? Text(p.brand!, style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontSize: 12)) : null,
                                       onTap: () {
-                                        controller.addItem(p.name, price, type: 'product');
+                                        if (replaceId != null) {
+                                          controller.replaceItem(replaceId, p.name, price);
+                                        } else {
+                                          controller.addItem(p.name, price, type: 'product');
+                                        }
                                         Navigator.pop(bsCtx);
                                       },
                                     );
@@ -801,6 +809,72 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
               ),
             );
           },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReplacementPickerButton({
+    required OrderModificationController controller,
+    required String replaceId,
+    required String orderId,
+    required String type,
+  }) {
+    final isService = type.toLowerCase() == 'service';
+    final count = isService ? _services.length : _products.length;
+    final label = isService ? 'services' : 'products';
+    final isLoading = isService ? _isLoadingServices : _isLoadingProducts;
+
+    return GestureDetector(
+      onTap: () {
+        if (isService) {
+          _openServicePicker(
+            controller: controller,
+            replaceId: replaceId,
+            orderId: orderId,
+          );
+        } else {
+          _openProductPicker(
+            controller: controller,
+            replaceId: replaceId,
+          );
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.primaryColor.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.primaryColor.withOpacity(0.2)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.swap_horiz, color: AppTheme.primaryColor, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Replace Item',
+                style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.primaryColor,
+                ),
+              ),
+            ),
+            if (isLoading && count == 0)
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryColor),
+              )
+            else
+              Text(
+                '$count $label',
+                style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary),
+              ),
+            const SizedBox(width: 8),
+            const Icon(Icons.arrow_forward_ios, color: AppTheme.primaryColor, size: 14),
+          ],
         ),
       ),
     );

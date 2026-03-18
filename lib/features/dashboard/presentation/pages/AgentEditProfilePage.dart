@@ -542,6 +542,9 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                 _showVerifiedSnackbar(verificationMessage);
               }
             } : null,
+            enableInteractiveSelection: false,
+            selectionControls: EmptyTextSelectionControls(),
+            autofocus: false,
             readOnly: isVerified,
             keyboardType: keyboardType,
             controller: controller,
