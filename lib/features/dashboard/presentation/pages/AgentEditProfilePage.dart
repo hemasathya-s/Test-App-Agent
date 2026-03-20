@@ -154,43 +154,77 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     setState(() => _isLoading = true);
     final updatedData = <String, dynamic>{};
 
-    if (_nameController.text.trim().isNotEmpty) {
-      updatedData['name'] = _nameController.text.trim();
-    }
-    if (_emailController.text.trim().isNotEmpty) {
-      updatedData['email'] = _emailController.text.trim();
-    }
-    
-    // Bank Details (Flat as per registration)
-    if (_bankNameController.text.trim().isNotEmpty) {
-      updatedData['bank_name'] = _bankNameController.text.trim();
-    }
-    if (_accountNumberController.text.trim().isNotEmpty) {
-      updatedData['account_number'] = _accountNumberController.text.trim();
-    }
-    if (_ifscController.text.trim().isNotEmpty) {
-      updatedData['ifsc_code'] = _ifscController.text.trim();
-    }
-    if (_upiController.text.trim().isNotEmpty) {
-      updatedData['upi_id'] = _upiController.text.trim();
-    }
-    
-    // Vehicle Details (Flat as per registration)
-    if (_vehicleTypeController.text.trim().isNotEmpty) {
-      updatedData['vehicle_type'] = _vehicleTypeController.text.trim();
-    }
-    if (_vehicleNumberController.text.trim().isNotEmpty) {
-      updatedData['vehicle_number'] = _vehicleNumberController.text.trim();
-    }
-    if (_rcNumberController.text.trim().isNotEmpty) {
-      updatedData['rc_number'] = _rcNumberController.text.trim();
-    }
-    if (_licenseNumberController.text.trim().isNotEmpty) {
-      updatedData['license_number'] = _licenseNumberController.text.trim();
+    final original = _agentData ?? widget.agentData;
+
+    // Only add to updatedData if the value has actually changed
+    final name = _nameController.text.trim();
+    if (name.isNotEmpty && name != original.userDetails.name) {
+      updatedData['name'] = name;
     }
 
-    print('✏️ Sending update for User ID: ${_agentData?.userId}');
+    final email = _emailController.text.trim();
+    if (email.isNotEmpty && email != original.userDetails.email) {
+      updatedData['email'] = email;
+    }
+    
+    // Bank Details
+    final bank = _bankNameController.text.trim();
+    if (bank.isNotEmpty && bank != original.bankName) {
+      updatedData['bank_name'] = bank;
+    }
+
+    final account = _accountNumberController.text.trim();
+    if (account.isNotEmpty && account != original.accountNumber) {
+      updatedData['account_number'] = account;
+    }
+
+    final ifsc = _ifscController.text.trim();
+    if (ifsc.isNotEmpty && ifsc != original.ifscCode) {
+      updatedData['ifsc_code'] = ifsc;
+    }
+
+    final upi = _upiController.text.trim();
+    if (upi.isNotEmpty && upi != original.upiId) {
+      updatedData['upi_id'] = upi;
+    }
+    
+    // Vehicle Details
+    final vType = _vehicleTypeController.text.trim();
+    if (vType.isNotEmpty && vType != original.vehicleType) {
+      updatedData['vehicle_type'] = vType;
+    }
+
+    final vNum = _vehicleNumberController.text.trim();
+    if (vNum.isNotEmpty && vNum != original.vehicleNumber) {
+      updatedData['vehicle_number'] = vNum;
+    }
+
+    final rcNum = _rcNumberController.text.trim();
+    if (rcNum.isNotEmpty && rcNum != original.rcNumber) {
+      updatedData['rc_number'] = rcNum;
+    }
+
+    final lNum = _licenseNumberController.text.trim();
+    if (lNum.isNotEmpty && lNum != original.licenseNumber) {
+      updatedData['license_number'] = lNum;
+    }
+
+    print('✏️ Sending update for User ID: ${original.userId}');
     print('✏️ Payload: $updatedData');
+
+    /* if  you wants user no edit then click submit throw error snakbar*/
+
+   /* if (updatedData.isEmpty && _profileImage == null && _rcDocument == null && _licenseDocument == null) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No changes to update', style: GoogleFonts.outfit()),
+          backgroundColor: Colors.grey,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }*/
 
     final result = await ApiService().updateAgentProfile(
       _agentData?.userId ?? widget.agentData.userId,
@@ -542,9 +576,8 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                 _showVerifiedSnackbar(verificationMessage);
               }
             } : null,
-            enableInteractiveSelection: false,
+            enableInteractiveSelection: true,
             selectionControls: EmptyTextSelectionControls(),
-            autofocus: false,
             readOnly: isVerified,
             keyboardType: keyboardType,
             controller: controller,

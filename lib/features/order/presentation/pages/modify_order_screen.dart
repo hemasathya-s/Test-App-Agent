@@ -70,7 +70,7 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
     setState(() => _isLoadingServices = true);
     try {
       // Fetch a large number of services to get the "total count" accurately
-      final result = await ApiService.listService(page: 1 ,size: 100);
+      final result = await ApiService.listService(page: 1, size: 500);
       final fetched = result['services'] as List<ServiceModal>;
       if (mounted) {
         setState(() {
@@ -90,7 +90,7 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
     setState(() => _isLoadingProducts = true);
     try {
       // Fetch a large number of products to get the "total count" accurately
-      final result = await _apiService.getProducts(page: 1 ,size: 100);
+      final result = await _apiService.getProducts();
       if (mounted && result.isSuccess && result.data != null) {
         setState(() {
           _products = result.data!;

@@ -929,7 +929,7 @@ class ApiService {
         if (rcDocument != null) {
           final ext = _fileExtension(rcDocument.path);
           request.files.add(await http.MultipartFile.fromPath(
-            'rc_document',
+            'rc_doc',
             rcDocument.path,
             contentType: http.MediaType(ext == 'pdf' ? 'application' : 'image', ext),
           ));
@@ -938,7 +938,7 @@ class ApiService {
         if (licenseDocument != null) {
           final ext = _fileExtension(licenseDocument.path);
           request.files.add(await http.MultipartFile.fromPath(
-            'license_document',
+            'license_doc',
             licenseDocument.path,
             contentType: http.MediaType(ext == 'pdf' ? 'application' : 'image', ext),
           ));
@@ -1862,7 +1862,7 @@ class ApiService {
       if (rcDocument != null) {
         final ext = _fileExtension(rcDocument.path);
         multipartRequest.files.add(await http.MultipartFile.fromPath(
-          'rc_document',
+          'rc_doc',
           rcDocument.path,
           contentType: http.MediaType(ext == 'pdf' ? 'application' : 'image', ext),
         ));
@@ -1870,7 +1870,7 @@ class ApiService {
       if (licenseDocument != null) {
         final ext = _fileExtension(licenseDocument.path);
         multipartRequest.files.add(await http.MultipartFile.fromPath(
-          'license_document',
+          'license_doc',
           licenseDocument.path,
           contentType: http.MediaType(ext == 'pdf' ? 'application' : 'image', ext),
         ));

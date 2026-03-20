@@ -41,7 +41,15 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
       if (mounted) {
         setState(() {
           if (data['type'] == 'initial_data' || data['type'] == 'update') {
-            _requests = data['data'] ?? data['requests'] ?? [];
+            final incoming = data['data'] ?? data['requests'] ?? [];
+
+            // Only overwrite the list on initial_data OR if incoming is non-empty.
+            // This prevents the server echoing today's empty list and wiping a
+            // past-date result after a status update.
+            if (incoming.isNotEmpty || data['type'] == 'initial_data') {
+              _requests = incoming;
+            }
+
             _isLoading = false;
             _error = null;
           } else if (data['type'] == 'error') {
@@ -80,7 +88,9 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
       setState(() {
         _selectedDate = picked;
         _isLoading = true;
+        _requests = []; // clear stale list while loading new date
       });
+      _subscription?.cancel();
       _apiService.disconnectRequestWebSocket();
       _connectWebSocket();
     }
@@ -110,7 +120,8 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.calendar_month, color: AppTheme.primaryColor),
+            icon: const Icon(Icons.calendar_month,
+                color: AppTheme.primaryColor),
             onPressed: () => _selectDate(context),
           ),
         ],
@@ -118,11 +129,13 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
       body: Column(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             color: Colors.white,
             child: Row(
               children: [
-                Icon(Icons.filter_list, size: 16, color: AppTheme.textSecondary),
+                Icon(Icons.filter_list,
+                    size: 16, color: AppTheme.textSecondary),
                 const SizedBox(width: 8),
                 Text(
                   "Showing: ${DateFormat('MMM dd, yyyy').format(_selectedDate)}",
@@ -140,28 +153,34 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
               child: Text(
                 _error!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.red, fontSize: 12),
+                style:
+                const TextStyle(color: Colors.red, fontSize: 12),
               ),
             ),
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _requests.isEmpty
-                    ? _buildEmptyState()
-                    : RefreshIndicator(
-                        onRefresh: () async {
-                          _apiService.disconnectRequestWebSocket();
-                          _connectWebSocket();
-                        },
-                        child: ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _requests.length,
-                          itemBuilder: (context, index) {
-                            final request = _requests[index];
-                            return _buildRequestCard(context, request);
-                          },
-                        ),
-                      ),
+                ? _buildEmptyState()
+                : RefreshIndicator(
+              onRefresh: () async {
+                setState(() {
+                  _isLoading = true;
+                  _requests = [];
+                });
+                _subscription?.cancel();
+                _apiService.disconnectRequestWebSocket();
+                _connectWebSocket();
+              },
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: _requests.length,
+                itemBuilder: (context, index) {
+                  final request = _requests[index];
+                  return _buildRequestCard(context, request);
+                },
+              ),
+            ),
           ),
         ],
       ),
@@ -179,7 +198,8 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.track_changes_outlined, size: 64, color: Colors.grey[300]),
+          Icon(Icons.track_changes_outlined,
+              size: 64, color: Colors.grey[300]),
           const SizedBox(height: 16),
           Text(
             "No requests found for this date",
@@ -191,10 +211,12 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
     );
   }
 
-  Widget _buildRequestCard(BuildContext context, Map<String, dynamic> request) {
+  Widget _buildRequestCard(
+      BuildContext context, Map<String, dynamic> request) {
     final status = (request['status'] ?? 'PENDING').toString();
     final type =
-        (request['request_type'] ?? request['type'] ?? 'GENERIC').toString();
+    (request['request_type'] ?? request['type'] ?? 'GENERIC')
+        .toString();
     final reason = request['cancellation_reason_description'] ??
         request['slot_change_reason_description'] ??
         request['reason_description'];
@@ -220,8 +242,8 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
 
     String typeLabel = type.replaceAll('_', ' ');
     if (typeLabel.isNotEmpty) {
-      typeLabel =
-          typeLabel[0].toUpperCase() + typeLabel.substring(1).toLowerCase();
+      typeLabel = typeLabel[0].toUpperCase() +
+          typeLabel.substring(1).toLowerCase();
     } else {
       typeLabel = 'Unknown';
     }
@@ -269,8 +291,8 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
                   ),
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                       color: statusColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20)),
@@ -298,7 +320,8 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildInfoRow(Icons.shopping_bag_outlined,
+                _buildInfoRow(
+                    Icons.shopping_bag_outlined,
                     'Order ID: ${_truncateId(request['order_id']?.toString())}'),
                 if (request['requested_date'] != null) ...[
                   const SizedBox(height: 8),
@@ -315,7 +338,8 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
                   _buildInfoRow(Icons.qr_code,
                       'Serial: ${request['device_serial_number']}'),
                 ],
-                if (reason != null && reason.toString().trim().isNotEmpty) ...[
+                if (reason != null &&
+                    reason.toString().trim().isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Container(
                     width: double.infinity,
@@ -335,7 +359,8 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
                         Text(
                           reason.toString(),
                           style: GoogleFonts.outfit(
-                              fontSize: 13, color: AppTheme.textPrimary),
+                              fontSize: 13,
+                              color: AppTheme.textPrimary),
                         ),
                       ],
                     ),
@@ -361,13 +386,12 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
                     ),
                   ),
                 ],
-
                 if (request['device_serial_number'] != null &&
                     (status.toUpperCase() == 'APPROVED' ||
                         status.toUpperCase() == 'COMPLETED')) ...[
                   const SizedBox(height: 12),
                   Text(
-                    'Hub Status: ${request['hub_status']?.toString().replaceAll('_', ' ').toUpperCase()}',
+                    'Hub Status: ${(request['hub_status']?.toString() ?? 'PENDING').replaceAll('_', ' ').toUpperCase()}',
                     style: GoogleFonts.outfit(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
@@ -431,22 +455,21 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
       value: null,
       decoration: InputDecoration(
         filled: true,
-        fillColor: Colors.transparent, // Changed to transparent for footer look
-        contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-        border: InputBorder.none, // Removed border for footer look
+        fillColor: Colors.transparent,
+        contentPadding:
+        const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        border: InputBorder.none,
         enabledBorder: InputBorder.none,
         focusedBorder: InputBorder.none,
       ),
       hint: Text(
         'Update Status',
-        style: GoogleFonts.outfit(fontSize: 14, color: AppTheme.textSecondary),
+        style: GoogleFonts.outfit(
+            fontSize: 14, color: AppTheme.textSecondary),
       ),
       items: statuses.entries.map((e) {
         final int itemIndex = statusOrder.indexOf(e.key);
-        // Status is enabled/selectable only if it's AFTER the current status
-        // Exception: keep 'DELIVERED' selectable if that's where verify OTP leads
         final bool isEnabled = itemIndex > currentIndex;
-
         return DropdownMenuItem<String>(
           value: e.key,
           enabled: isEnabled,
@@ -462,24 +485,26 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
       onChanged: isUpdating
           ? null
           : (val) {
-              if (val == null || val == currentHubStatus) return;
-              _performStatusUpdate(requestId, request, val);
-            },
+        if (val == null || val == currentHubStatus) return;
+        _performStatusUpdate(requestId, request, val);
+      },
       buttonStyleData:
-          const ButtonStyleData(padding: EdgeInsets.only(right: 12)),
+      const ButtonStyleData(padding: EdgeInsets.only(right: 12)),
       iconStyleData: IconStyleData(
         icon: isUpdating
             ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: AppTheme.primaryColor))
-            : Icon(HugeIcons.strokeRoundedArrowDown01, size: 16, color: Colors.grey[400]),
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+                strokeWidth: 2, color: AppTheme.primaryColor))
+            : Icon(HugeIcons.strokeRoundedArrowDown01,
+            size: 16, color: Colors.grey[400]),
         iconSize: 22,
       ),
       dropdownStyleData: DropdownStyleData(
         maxHeight: 250,
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(15)),
+        decoration:
+        BoxDecoration(borderRadius: BorderRadius.circular(15)),
         offset: const Offset(0, -4),
         scrollbarTheme: ScrollbarThemeData(
           radius: const Radius.circular(40),
@@ -501,8 +526,8 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
         Expanded(
           child: Text(
             text,
-            style:
-                GoogleFonts.outfit(fontSize: 14, color: AppTheme.textPrimary),
+            style: GoogleFonts.outfit(
+                fontSize: 14, color: AppTheme.textPrimary),
           ),
         ),
       ],
@@ -511,63 +536,90 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
 
   Future<void> _performStatusUpdate(
       String requestId, Map<String, dynamic> request, String val) async {
+
+    // ── DELIVERED: call API first, then show OTP dialog on success ──
     if (val == 'DELIVERED') {
-      setState(() {
-        _updatingRequests[requestId] = true;
-      });
+      setState(() => _updatingRequests[requestId] = true);
 
       final res = await ApiService.updateHubServiceStatus(requestId, val);
 
-      if (mounted) {
-        setState(() => _updatingRequests[requestId] = false);
-      }
+      if (!mounted) return;
+      setState(() => _updatingRequests[requestId] = false);
 
       if (res.isSuccess) {
-        if (mounted) {
-          _showOtpDialog(context, requestId, request, () {
-            if (mounted) {
-              setState(() {
-                request['hub_status'] = 'DELIVERED';
-                request['status'] = 'COMPLETED';
-              });
-            }
-          });
-        }
+        _showOtpDialog(context, requestId, request, () {
+          if (mounted) {
+            // Update locally — do NOT reconnect WebSocket
+            setState(() {
+              final idx = _requests
+                  .indexWhere((r) => r['id']?.toString() == requestId);
+              if (idx != -1) {
+                _requests[idx]['hub_status'] = 'DELIVERED';
+                _requests[idx]['status'] = 'COMPLETED';
+              }
+            });
+          }
+        });
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text(res.error ?? 'Failed to initiate delivery')),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content:
+              Text(res.error ?? 'Failed to initiate delivery')),
+        );
       }
       return;
     }
 
+    // ── All other statuses ──
+    // Save old value in case we need to revert
+    final String? previousHubStatus =
+    request['hub_status']?.toString();
+
+    // Optimistic local update — do NOT reconnect WebSocket
     setState(() {
       _updatingRequests[requestId] = true;
-      request['hub_status'] = val;
+      final idx =
+      _requests.indexWhere((r) => r['id']?.toString() == requestId);
+      if (idx != -1) {
+        _requests[idx]['hub_status'] = val;
+      }
     });
 
     final res = await ApiService.updateHubServiceStatus(requestId, val);
 
-    if (mounted) {
+    if (!mounted) return;
+
+    if (res.isSuccess) {
       setState(() => _updatingRequests[requestId] = false);
-      if (!res.isSuccess) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(res.error ?? 'Failed to update status')),
-        );
-      }
+    } else {
+      // Revert local update on failure
+      setState(() {
+        _updatingRequests[requestId] = false;
+        final idx = _requests
+            .indexWhere((r) => r['id']?.toString() == requestId);
+        if (idx != -1) {
+          _requests[idx]['hub_status'] = previousHubStatus;
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(res.error ?? 'Failed to update status')),
+      );
     }
   }
 
-  void _showOtpDialog(BuildContext context, String requestId,
-      Map<String, dynamic> request, VoidCallback onSuccess) {
-    print('🛠️ [OTP DIAGNOSTICS] Delivered clicked for Request ID: $requestId');
+  void _showOtpDialog(
+      BuildContext context,
+      String requestId,
+      Map<String, dynamic> request,
+      VoidCallback onSuccess) {
+    print(
+        '🛠️ [OTP DIAGNOSTICS] Delivered clicked for Request ID: $requestId');
 
     final List<TextEditingController> controllers =
-        List.generate(6, (index) => TextEditingController());
-    final List<FocusNode> focusNodes = List.generate(6, (index) => FocusNode());
+    List.generate(6, (index) => TextEditingController());
+    final List<FocusNode> focusNodes =
+    List.generate(6, (index) => FocusNode());
 
     String? dialogError;
     bool isVerifying = false;
@@ -581,15 +633,15 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
-            // ── Feedback screen (success / failure) ──────────────────────
+            // ── Feedback screen ───────────────────────────────────────
             if (showFeedback) {
               return Dialog(
                 backgroundColor: const Color(0xFF121212),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20)),
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 40, horizontal: 24),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -608,12 +660,15 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
                         child: Icon(
                           isSuccess ? Icons.check : Icons.close,
                           size: 40,
-                          color: isSuccess ? Colors.green : Colors.red,
+                          color:
+                          isSuccess ? Colors.green : Colors.red,
                         ),
                       ),
                       const SizedBox(height: 32),
                       Text(
-                        isSuccess ? 'Successfully' : 'Verification Failed',
+                        isSuccess
+                            ? 'Successfully'
+                            : 'Verification Failed',
                         style: GoogleFonts.outfit(
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
@@ -635,7 +690,7 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
               );
             }
 
-            // ── OTP input screen ──────────────────────────────────────────
+            // ── OTP input screen ──────────────────────────────────────
             return Dialog(
               backgroundColor: Colors.white,
               shape: RoundedRectangleBorder(
@@ -669,41 +724,47 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
                       'Enter the code from your\nCustomer App',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.outfit(
-                          fontSize: 14, color: AppTheme.textSecondary),
+                          fontSize: 14,
+                          color: AppTheme.textSecondary),
                     ),
                     const SizedBox(height: 32),
-                    // ── 6-digit OTP fields ──
                     Row(
                       children: List.generate(6, (index) {
                         return Expanded(
                           child: Padding(
-                            padding: EdgeInsets.only(right: index == 5 ? 0 : 6),
+                            padding: EdgeInsets.only(
+                                right: index == 5 ? 0 : 6),
                             child: TextField(
                               controller: controllers[index],
                               focusNode: focusNodes[index],
                               keyboardType: TextInputType.number,
                               textAlign: TextAlign.center,
                               style: GoogleFonts.outfit(
-                                  fontSize: 18, fontWeight: FontWeight.bold),
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold),
                               maxLength: 1,
                               decoration: InputDecoration(
                                 counterText: "",
                                 contentPadding: EdgeInsets.zero,
                                 enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide:
-                                      BorderSide(color: Colors.grey.shade300),
+                                  borderRadius:
+                                  BorderRadius.circular(12),
+                                  borderSide: BorderSide(
+                                      color: Colors.grey.shade300),
                                 ),
                                 focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius:
+                                  BorderRadius.circular(12),
                                   borderSide: const BorderSide(
-                                      color: AppTheme.primaryColor, width: 2),
+                                      color: AppTheme.primaryColor,
+                                      width: 2),
                                 ),
                               ),
                               onChanged: (value) {
                                 if (value.isNotEmpty && index < 5) {
                                   focusNodes[index + 1].requestFocus();
-                                } else if (value.isEmpty && index > 0) {
+                                } else if (value.isEmpty &&
+                                    index > 0) {
                                   focusNodes[index - 1].requestFocus();
                                 }
                               },
@@ -713,7 +774,6 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
                       }),
                     ),
                     const SizedBox(height: 32),
-                    // ── Verify button ──
                     SizedBox(
                       width: double.infinity,
                       height: 54,
@@ -721,68 +781,67 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
                         onPressed: isVerifying
                             ? null
                             : () async {
-                                final String otp =
-                                    controllers.map((c) => c.text).join();
+                          final String otp = controllers
+                              .map((c) => c.text)
+                              .join();
 
-                                if (otp.length < 6) {
-                                  setDialogState(() => dialogError =
-                                      'Please enter all 6 digits');
-                                  return;
-                                }
+                          if (otp.length < 6) {
+                            setDialogState(() => dialogError =
+                            'Please enter all 6 digits');
+                            return;
+                          }
 
+                          setDialogState(() {
+                            isVerifying = true;
+                            dialogError = null;
+                          });
+
+                          print(
+                              '📡 [OTP DIAGNOSTICS] Starting verification for ID: $requestId with OTP: $otp');
+
+                          final res =
+                          await ApiService.verifyRequestOtp(
+                              requestId, otp);
+
+                          print(
+                              '📡 [OTP DIAGNOSTICS] Result: ${res.isSuccess} | Error: ${res.error}');
+
+                          if (!dialogContext.mounted) return;
+
+                          if (res.isSuccess) {
+                            setDialogState(() {
+                              isVerifying = false;
+                              isSuccess = true;
+                              showFeedback = true;
+                            });
+                            Future.delayed(
+                                const Duration(seconds: 3), () {
+                              if (dialogContext.mounted &&
+                                  Navigator.canPop(dialogContext)) {
+                                Navigator.pop(dialogContext);
+                                onSuccess();
+                              }
+                            });
+                          } else {
+                            setDialogState(() {
+                              isVerifying = false;
+                              isSuccess = false;
+                              showFeedback = true;
+                            });
+                            Future.delayed(
+                                const Duration(seconds: 3), () {
+                              if (dialogContext.mounted) {
                                 setDialogState(() {
-                                  isVerifying = true;
-                                  dialogError = null;
+                                  showFeedback = false;
+                                  for (var c in controllers) {
+                                    c.clear();
+                                  }
+                                  focusNodes[0].requestFocus();
                                 });
-
-                                print(
-                                    '📡 [OTP DIAGNOSTICS] Starting verification for ID: $requestId with OTP: $otp');
-
-                                final res = await ApiService.verifyRequestOtp(
-                                    requestId, otp);
-
-                                print(
-                                    '📡 [OTP DIAGNOSTICS] Result: ${res.isSuccess} | Error: ${res.error}');
-
-                                // Use dialogContext.mounted — NOT the outer mounted
-                                if (!dialogContext.mounted) return;
-
-                                if (res.isSuccess) {
-                                  setDialogState(() {
-                                    isVerifying = false;
-                                    isSuccess = true;
-                                    showFeedback = true;
-                                  });
-
-                                  Future.delayed(const Duration(seconds: 3),
-                                      () {
-                                    if (dialogContext.mounted &&
-                                        Navigator.canPop(dialogContext)) {
-                                      Navigator.pop(dialogContext);
-                                      onSuccess();
-                                    }
-                                  });
-                                } else {
-                                  setDialogState(() {
-                                    isVerifying = false;
-                                    isSuccess = false;
-                                    showFeedback = true;
-                                  });
-
-                                  Future.delayed(const Duration(seconds: 3),
-                                      () {
-                                    if (dialogContext.mounted) {
-                                      setDialogState(() {
-                                        showFeedback = false;
-                                        for (var c in controllers) {
-                                          c.clear();
-                                        }
-                                        focusNodes[0].requestFocus();
-                                      });
-                                    }
-                                  });
-                                }
-                              },
+                              }
+                            });
+                          }
+                        },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.primaryColor,
                           shape: RoundedRectangleBorder(
@@ -791,25 +850,26 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
                         ),
                         child: isVerifying
                             ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white))
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white))
                             : Text(
-                                'Verify OTP',
-                                style: GoogleFonts.outfit(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600),
-                              ),
+                          'Verify OTP',
+                          style: GoogleFonts.outfit(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600),
+                        ),
                       ),
                     ),
                     if (dialogError != null) ...[
                       const SizedBox(height: 12),
                       Text(
                         dialogError!,
-                        style:
-                            GoogleFonts.outfit(color: Colors.red, fontSize: 12),
+                        style: GoogleFonts.outfit(
+                            color: Colors.red, fontSize: 12),
                       ),
                     ],
                   ],
