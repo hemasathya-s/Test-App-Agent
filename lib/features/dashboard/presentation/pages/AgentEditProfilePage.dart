@@ -28,10 +28,14 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
   late final TextEditingController _accountNumberController;
   late final TextEditingController _ifscController;
   late final TextEditingController _upiController;
+  late final TextEditingController _rcNumberController;
+  late final TextEditingController _licenseNumberController;
 
   bool _isLoading = true; // Start with loading for fetch
   AgentProfileData? _agentData;
   File? _profileImage;
+  File? _rcDocument;
+  File? _licenseDocument;
   final ImagePicker _picker = ImagePicker();
 
   @override
@@ -56,6 +60,8 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     _accountNumberController = TextEditingController(text: agent.accountNumber ?? "");
     _ifscController = TextEditingController(text: agent.ifscCode ?? "");
     _upiController = TextEditingController(text: agent.upiId ?? "");
+    _rcNumberController = TextEditingController(text: agent.rcNumber ?? "");
+    _licenseNumberController = TextEditingController(text: agent.licenseNumber ?? "");
   }
 
   Future<void> _fetchProfile() async {
@@ -103,6 +109,8 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     _accountNumberController.text = agent.accountNumber ?? "";
     _ifscController.text = agent.ifscCode ?? "";
     _upiController.text = agent.upiId ?? "";
+    _rcNumberController.text = agent.rcNumber ?? "";
+    _licenseNumberController.text = agent.licenseNumber ?? "";
   }
 
   @override
@@ -113,6 +121,8 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     _accountNumberController.dispose();
     _ifscController.dispose();
     _upiController.dispose();
+    _rcNumberController.dispose();
+    _licenseNumberController.dispose();
     super.dispose();
   }
 
@@ -121,6 +131,19 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     if (image != null) {
       setState(() {
         _profileImage = File(image.path);
+      });
+    }
+  }
+
+  Future<void> _pickDocument(bool isRc) async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      setState(() {
+        if (isRc) {
+          _rcDocument = File(image.path);
+        } else {
+          _licenseDocument = File(image.path);
+        }
       });
     }
   }
@@ -159,6 +182,12 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     if (_vehicleNumberController.text.trim().isNotEmpty) {
       updatedData['vehicle_number'] = _vehicleNumberController.text.trim();
     }
+    if (_rcNumberController.text.trim().isNotEmpty) {
+      updatedData['rc_number'] = _rcNumberController.text.trim();
+    }
+    if (_licenseNumberController.text.trim().isNotEmpty) {
+      updatedData['license_number'] = _licenseNumberController.text.trim();
+    }
 
     print('✏️ Sending update for User ID: ${_agentData?.userId}');
     print('✏️ Payload: $updatedData');
@@ -167,6 +196,8 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
       _agentData?.userId ?? widget.agentData.userId,
       updatedData,
       profileImage: _profileImage,
+      rcDocument: _rcDocument,
+      licenseDocument: _licenseDocument,
     );
 
     if (!mounted) return;
@@ -177,7 +208,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
         SnackBar(
           content: Text('Profile updated successfully',
               style: GoogleFonts.outfit()),
-          backgroundColor: Colors.grey,
+          backgroundColor: Colors.black87,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10)),
@@ -193,7 +224,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
           SnackBar(
             content: Text(result.error ?? 'Update failed',
                 style: GoogleFonts.outfit()),
-            backgroundColor: Colors.red[400],
+            backgroundColor: Colors.black87,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10)),
@@ -347,6 +378,57 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                         Expanded(child: _editableField("Vehicle Number", _vehicleNumberController)),
                       ],
                     ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(child: _editableField("RC Number", _rcNumberController,
+                          isVerified: _agentData?.isRcVerified == "APPROVED",
+                          verificationMessage: "RC Number is verified and cannot be changed.")),
+                        const SizedBox(width: 12),
+                        Expanded(child: _editableField("License Number", _licenseNumberController,
+                          isVerified: _agentData?.isLicenseVerified == "APPROVED",
+                          verificationMessage: "License Number is verified and cannot be changed.")),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              /// 🔹 Documents
+              _sectionCard(
+                title: "Documents",
+                icon: Icons.folder_copy_outlined,
+                child: Column(
+                  children: [
+                    _documentTile(
+                      label: "RC Document",
+                      file: _rcDocument,
+                      remoteUrl: _agentData?.rcDocumentUrl,
+                      isVerified: _agentData?.isRcVerified == "APPROVED",
+                      onTap: () {
+                        if (_agentData?.isRcVerified == "APPROVED") {
+                          _showVerifiedSnackbar("RC Document is verified and cannot be changed.");
+                        } else {
+                          _pickDocument(true);
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    _documentTile(
+                      label: "License Document",
+                      file: _licenseDocument,
+                      remoteUrl: _agentData?.licenseDocumentUrl,
+                      isVerified: _agentData?.isLicenseVerified == "APPROVED",
+                      onTap: () {
+                        if (_agentData?.isLicenseVerified == "APPROVED") {
+                          _showVerifiedSnackbar("License Document is verified and cannot be changed.");
+                        } else {
+                          _pickDocument(false);
+                        }
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -435,7 +517,18 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     );
   }
 
-  Widget _editableField(String label, TextEditingController controller, {bool enabled = true, bool isRating = false, TextInputType? keyboardType}) {
+  void _showVerifiedSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: GoogleFonts.outfit()),
+        backgroundColor: Colors.black87,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  Widget _editableField(String label, TextEditingController controller, {bool enabled = true, bool isRating = false, TextInputType? keyboardType, bool isVerified = false, String? verificationMessage}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
@@ -444,7 +537,15 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
           Text(label, style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w500, color: AppTheme.textSecondary)),
           const SizedBox(height: 6),
           TextField(
+            onTap: isVerified ? () {
+              if (verificationMessage != null) {
+                _showVerifiedSnackbar(verificationMessage);
+              }
+            } : null,
             enableInteractiveSelection: false,
+            selectionControls: EmptyTextSelectionControls(),
+            autofocus: false,
+            readOnly: isVerified,
             keyboardType: keyboardType,
             controller: controller,
             enabled: enabled,
@@ -457,7 +558,9 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
               filled: true,
               fillColor: enabled ? AppTheme.surfaceColor.withOpacity(0.5) : Colors.grey.shade50,
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              suffixIcon: isRating ? const Icon(Icons.star, color: Colors.amber, size: 18) : null,
+              suffixIcon: isVerified
+                ? const Icon(Icons.verified_user_rounded, color: AppTheme.successColor, size: 18)
+                : (isRating ? const Icon(Icons.star, color: Colors.amber, size: 18) : null),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
               enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
               disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade100)),
@@ -465,6 +568,90 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _documentTile({required String label, File? file, String? remoteUrl, required VoidCallback onTap, bool isVerified = false}) {
+    bool hasImage = file != null || (remoteUrl != null && remoteUrl.isNotEmpty);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceColor.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: isVerified ? AppTheme.successColor.withOpacity(0.3) : Colors.grey.shade200),
+        ),
+        child: Row(
+          children: [
+            if (hasImage)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: file != null
+                      ? Image.file(
+                          file,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(Icons.broken_image_outlined, size: 20, color: Colors.grey),
+                        )
+                      : Image.network(
+                          remoteUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(Icons.broken_image_outlined, size: 20, color: Colors.grey),
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return const Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryColor),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: (isVerified ? AppTheme.successColor : AppTheme.primaryColor).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  isVerified ? Icons.verified_user_outlined : Icons.description_outlined,
+                  color: isVerified ? AppTheme.successColor : AppTheme.primaryColor,
+                  size: 24,
+                ),
+              ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                  const SizedBox(height: 2),
+                  Text(isVerified ? "Verified Document" : (file != null ? "New file selected" : (remoteUrl != null ? "Document uploaded" : "No document uploaded")),
+                    style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary)),
+                ],
+              ),
+            ),
+            if (isVerified)
+              const Icon(Icons.check_circle_rounded, size: 18, color: AppTheme.successColor)
+            else
+              const Icon(Icons.edit_outlined, size: 18, color: AppTheme.textSecondary),
+          ],
+        ),
       ),
     );
   }

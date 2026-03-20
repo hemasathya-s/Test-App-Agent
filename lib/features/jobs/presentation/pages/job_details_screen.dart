@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:urban_agent_app/core/model/slot_availability.dart';
 import 'package:urban_agent_app/core/model/order_details.dart';
 import 'package:urban_agent_app/core/model/service_modification.dart';
+import 'package:urban_agent_app/core/model/order_item_modification.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/services/apiservices.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -86,11 +87,13 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
 
     final isInstant = effectiveOrder?.isInstantSlot ?? false;
 
-    // Real service modifications from API
+    // Real service modifications from API (Old structure)
     final serviceModifications = effectiveOrder?.serviceModifications ?? [];
-
-    // Latest modification (last in list)
     final latestMod = serviceModifications.isNotEmpty ? serviceModifications.last : null;
+
+    // New order item modifications (Bulk structure)
+    final orderItemModifications = effectiveOrder?.orderItemModifications ?? [];
+    final latestOrderItemMod = orderItemModifications.isNotEmpty ? orderItemModifications.last : null;
 
     // Legacy mock — kept so provider-based pending button still works
     // final modificationState = ref.watch(orderModificationProvider);
@@ -196,8 +199,12 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                     physics: const NeverScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(16),
                     children: [
-                      // ?? Real Modification Request Section (from API data)
-                      if (latestMod != null) ...[
+                      // Modification Request Section
+                      if (latestOrderItemMod != null) ...[
+                        _buildSectionHeader('Modification Request'),
+                        _buildOrderItemModificationCard(context, latestOrderItemMod),
+                        const SizedBox(height: 24),
+                      ] else if (latestMod != null) ...[
                         _buildSectionHeader('Modification Request'),
                         _buildServiceModificationCard(context, latestMod),
                         const SizedBox(height: 24),
@@ -324,7 +331,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                   ),
                   const SizedBox(height: 12),
                   // Modify Order button — driven by real API serviceModifications
-                  if (latestMod == null)
+                  if (latestOrderItemMod == null)
                   // No modification exists ? show Modify Order button
                     TextButton.icon(
                       onPressed: () => context.push('/modify-order', extra: effectiveOrder),
@@ -337,7 +344,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                         ),
                       ),
                     )
-                  else if ((latestMod.status ?? '').toUpperCase() == 'PENDING')
+                  else if ((latestOrderItemMod.status ?? '').toUpperCase() == 'PENDING')
                   // Modification pending → show waiting label, no tap
                     Container(
                       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -826,6 +833,209 @@ print("Order ttt $orderId");
     );
   }
 
+  /// Card for real OrderItemModification data from the API (Bulk)
+  Widget _buildOrderItemModificationCard(BuildContext context, OrderItemModification mod) {
+    final st = (mod.status ?? '').toUpperCase();
+    final isFinal = mod.isApproved || mod.isRejected;
+    final isApproved = mod.isApproved;
+
+    Color statusColor = Colors.orange;
+    IconData statusIcon = Icons.hourglass_top;
+    String statusLabel = 'Waiting for Approval';
+
+    if (isFinal) {
+      if (isApproved) {
+        statusColor = AppTheme.successColor;
+        statusIcon = Icons.check_circle;
+        statusLabel = 'Approved';
+      } else {
+        statusColor = AppTheme.errorColor;
+        statusIcon = Icons.cancel;
+        statusLabel = 'Rejected';
+      }
+    }
+
+    final reason = mod.reason;
+    final modId = (mod.id ?? '').length > 8
+        ? '#${(mod.id ?? '').substring(0, 8).toUpperCase()}'
+        : '#${mod.id ?? '—'}';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: statusColor.withOpacity(0.3), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: statusColor.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(statusIcon, size: 18, color: statusColor),
+                  const SizedBox(width: 6),
+                  Text(
+                    statusLabel,
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: statusColor,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                modId,
+                style: GoogleFonts.outfit(
+                  fontSize: 11,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+
+          // Modification Items
+          ...(mod.modificationItems ?? []).map((item) => _buildModificationItemRow(item)).toList(),
+
+          // Note / Reason
+          if (reason != null && reason.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceColor,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.notes, size: 16, color: Colors.grey),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      reason,
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        color: AppTheme.textSecondary,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModificationItemRow(ModificationItem item) {
+    final type = (item.modificationType ?? '').toUpperCase();
+    Color typeColor = Colors.blue;
+    IconData typeIcon = Icons.edit_note;
+    String typeLabel = type;
+
+    if (item.isAdd) {
+      typeColor = Colors.green;
+      typeIcon = Icons.add_circle_outline;
+      typeLabel = 'ADDED';
+    } else if (item.isRemove) {
+      typeColor = Colors.red;
+      typeIcon = Icons.remove_circle_outline;
+      typeLabel = 'REMOVED';
+    } else if (item.isReplace) {
+      typeColor = Colors.orange;
+      typeIcon = Icons.swap_horiz;
+      typeLabel = 'REPLACED';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(typeIcon, size: 14, color: typeColor),
+              const SizedBox(width: 4),
+              Text(
+                typeLabel,
+                style: GoogleFonts.outfit(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: typeColor,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                item.itemType ?? '',
+                style: GoogleFonts.outfit(fontSize: 10, color: Colors.grey),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          if (item.isReplace)
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(item.originalName ?? 'Original', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w500)),
+                      Text('₹ ${item.originalPrice ?? "—"}', style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey)),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward, size: 16, color: Colors.grey),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(item.newName ?? 'New', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold), textAlign: TextAlign.end),
+                      Text('₹ ${item.newPrice ?? "—"}', style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primaryColor), textAlign: TextAlign.end),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          else if (item.isAdd)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item.newName ?? 'New Item', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.bold)),
+                Text('₹ ${item.newPrice ?? "—"} (x${item.quantity ?? 1})', style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.primaryColor, fontWeight: FontWeight.bold)),
+              ],
+            )
+          else if (item.isRemove)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item.originalName ?? 'Original Item', style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w500, decoration: TextDecoration.lineThrough)),
+                Text('₹ ${item.originalPrice ?? "—"}', style: GoogleFonts.outfit(fontSize: 12, color: Colors.grey)),
+              ],
+            ),
+          const SizedBox(height: 8),
+          const Divider(height: 1, thickness: 0.5),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDetailRow(IconData icon, String label, String value) {
     return Row(
       children: [
@@ -1055,8 +1265,8 @@ print("Order ttt $orderId");
                               Navigator.pop(sheetContext);
                               final successMsg = res.data?['message'] ?? 'Request submitted successfully';
                               messenger.showSnackBar(SnackBar(
-                                content: Text(successMsg, style: const TextStyle(color: Colors.black87)),
-                                backgroundColor: Colors.grey.shade300,
+                                content: Text(successMsg, style: const TextStyle(color: Colors.white)),
+                                backgroundColor: Colors.black87,
                               ));
                               _loadFullDetails();
                             } else {
@@ -1506,8 +1716,8 @@ print("Order ttt $orderId");
 
                               if (isSameDate && selectedSlotId == currentId) {
                                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                  content: Text('Please select a different slot or date to request a change.'),
-                                  backgroundColor: Colors.orange,
+                                  content: Text('Please select a different slot or date to request a change.',style: TextStyle(color: Colors.white),),
+                                  backgroundColor: Colors.black87,
                                 ));
                                 return;
                               }
@@ -1534,8 +1744,8 @@ print("Order ttt $orderId");
                                 Navigator.pop(sheetContext);
                                 final successMsg = res.data?['message'] ?? 'Slot change requested';
                                 messenger.showSnackBar(SnackBar(
-                                  content: Text(res.isSuccess ? successMsg : 'Error: ${res.error ?? "Unknown error"}', style: const TextStyle(color: Colors.black87)),
-                                  backgroundColor: Colors.grey.shade300,
+                                  content: Text(res.isSuccess ? successMsg : 'Error: ${res.error ?? "Unknown error"}', style: const TextStyle(color: Colors.white)),
+                                  backgroundColor: Colors.black87,
                                 ));
                                 if (res.isSuccess) {
                                   _loadFullDetails();
@@ -1678,8 +1888,8 @@ print("Order ttt $orderId");
                               
                               final successMsg = res.data?['message'] ?? 'Job cancelled';
                               messenger.showSnackBar(SnackBar(
-                                content: Text(res.isSuccess ? successMsg : 'Error: ${res.error ?? "Unknown error"}', style: const TextStyle(color: Colors.black87)),
-                                backgroundColor: Colors.grey.shade300,
+                                content: Text(res.isSuccess ? successMsg : 'Error: ${res.error ?? "Unknown error"}', style: const TextStyle(color: Colors.white)),
+                                backgroundColor: Colors.black87,
                               ));
                               if (res.isSuccess) {
                                 _loadFullDetails();

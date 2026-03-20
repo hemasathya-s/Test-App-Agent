@@ -135,22 +135,55 @@ print("Response Code pn ${response.statusCode}");
     return controller.stream;
   }
 
-  static Future<void> serviceAndProductModification()async{
-    try{
-      String url= '$baseUrl/api/order/order-item-modification/request/';
+  /// Bulk modify order items – add, replace, or delete services/products.
+  ///
+  /// [orderId] – the order UUID
+  /// [reason]  – optional note from the agent
+  /// [items]   – list of modification objects, each containing:
+  ///   { "order_item_id", "modification_type", "item_type", "new_entity_id", "quantity" }
+  static Future<bool> serviceAndProductModification(
+    String orderId,
+    String? reason,
+    List<Map<String, dynamic>> items,
+  ) async {
+    try {
+      final String url = '$baseUrl/api/order/order-item-modification/request/';
+      final Map<String, dynamic> body = {
+        'order_id': orderId,
+        'items': items,
+        if (reason != null && reason.isNotEmpty) 'reason': reason,
+      };
+
+      print('serviceAndProductModification → POST $url');
+      print('Payload: ${jsonEncode(body)}');
 
       final response = await _authorizedRequest(
-              (accessToken) => http.post(
-        Uri.parse(url),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $accessToken',
-        },
-                body: jsonEncode({})
-      ));
-    }
-    catch(e){
-      print("Error on the service and product modification $e");
+        (accessToken) => http.post(
+          Uri.parse(url),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $accessToken',
+          },
+          body: jsonEncode(body),
+        ),
+      );
+
+      print('serviceAndProductModification status: ${response.statusCode}');
+      print('serviceAndProductModification body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return true;
+      }
+
+      String errorMsg = 'Request failed (${response.statusCode})';
+      try {
+        final errBody = jsonDecode(response.body);
+        errorMsg = errBody['message'] ?? errBody['detail'] ?? errBody['error'] ?? errorMsg;
+      } catch (_) {}
+      throw Exception(errorMsg);
+    } catch (e) {
+      print('Error on serviceAndProductModification: $e');
+      rethrow;
     }
   }
 
@@ -345,7 +378,7 @@ print("Response Code pn ${response.statusCode}");
           return ordersData.map((json) => OrderDetails.fromJson(json as Map<String, dynamic>)).toList();
         }
       }
-      
+
       String errorMsg = 'Failed to load orders (${response.statusCode})';
       try {
         final data = jsonDecode(response.body);
@@ -391,14 +424,16 @@ print("Response Code pn ${response.statusCode}");
   }
 
   static Future<Map<String, dynamic>> listService({
-    int page = 1,
-    int pageSize = 1,
+    int? page,
+    int? size,
     String? lat,
     String? lng,
   }) async {
     try {
       String url =
-          '$baseUrl/api/services/?include_categories=true&include_media=true&include_pricing=true&include_zones=true&page=$page&size=$pageSize';
+          '$baseUrl/api/services/?include_categories=true&include_media=true&include_pricing=true&include_zones=true&page=$page&size=$size';
+      if (lat != null && lat.isNotEmpty) url += '&lat=$lat';
+      if (lng != null && lng.isNotEmpty) url += '&lng=$lng';
 
       final response = await _authorizedRequest(
         (accessToken) => http.get(
@@ -409,13 +444,14 @@ print("Response Code pn ${response.statusCode}");
           },
         ),
       );
-
+print("service Response body ${response.body}");
       print('listService [page=$page] status=${response.statusCode}');
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
         List<dynamic> list = [];
         bool hasMore = false;
+        final currentSize = size ?? 10;
         if (data['success'] == true && data['services'] != null) {
           list = data['services'];
           // Check pagination metadata
@@ -425,14 +461,14 @@ print("Response Code pn ${response.statusCode}");
                 pagination['next'] != null;
           } else {
             // If no pagination metadata, assume more data if we got a full page
-            hasMore = list.length >= pageSize;
+            hasMore = list.length >= currentSize;
           }
         } else if (data.containsKey('results')) {
           list = data['results'];
           hasMore = data['next'] != null;
         } else if (data.containsKey('data')) {
           list = data['data'];
-          hasMore = list.length >= pageSize;
+          hasMore = list.length >= currentSize;
         }
 
         print('listService [page=$page] count=${list.length} hasMore=$hasMore');
@@ -451,7 +487,7 @@ print("Response Code pn ${response.statusCode}");
     }
   }
 
-  static Future<void> serviceModification(String orderId, String orderItemId, String serviceId, String? reason) async {
+  static Future<void> serviceModification(String orderId, String orderItemId, String serviceId, String? reason, {int? quantity}) async {
     try {
       final response = await _authorizedRequest(
         (accessToken) => http.post(
@@ -464,6 +500,7 @@ print("Response Code pn ${response.statusCode}");
             "order_id": orderId,
             "order_item_id": orderItemId,
             "new_service_id": serviceId,
+            if (quantity != null) "quantity": quantity,
             if (reason != null && reason.isNotEmpty) "reason": reason,
           }),
         ),
@@ -753,7 +790,7 @@ print("Response Code pn ${response.statusCode}");
         }).toList();
         return ApiResponse(isSuccess: true, data: items);
       }
-      
+
       String errorMsg = 'Failed to load zones (${response.statusCode})';
       try {
         final data = jsonDecode(response.body);
@@ -870,6 +907,8 @@ print("Response Code pn ${response.statusCode}");
       String userId,
       Map<String, dynamic> updatedData, {
         File? profileImage,
+        File? rcDocument,
+        File? licenseDocument,
       }) async {
     try {
       print('?? Updating agent profile: $userId');
@@ -882,8 +921,8 @@ print("Response Code pn ${response.statusCode}");
 
       final uri = Uri.parse('$baseUrl/api/user/agent/$userId');
 
-      // We use MultipartRequest if an image is provided, otherwise a standard PUT
-      if (profileImage != null) {
+      // We use MultipartRequest if an image or document is provided, otherwise a standard PUT
+      if (profileImage != null || rcDocument != null || licenseDocument != null) {
         final request = http.MultipartRequest('PUT', uri)
           ..headers.addAll({
             'accept': 'application/json',
@@ -895,13 +934,32 @@ print("Response Code pn ${response.statusCode}");
           request.fields[key] = value.toString();
         });
 
-        // Add profile image
-        final ext = _fileExtension(profileImage.path);
-        request.files.add(await http.MultipartFile.fromPath(
-          'profile_image',
-          profileImage.path,
-          contentType: http.MediaType('image', ext),
-        ));
+        if (profileImage != null) {
+          final ext = _fileExtension(profileImage.path);
+          request.files.add(await http.MultipartFile.fromPath(
+            'profile_image',
+            profileImage.path,
+            contentType: http.MediaType('image', ext),
+          ));
+        }
+
+        if (rcDocument != null) {
+          final ext = _fileExtension(rcDocument.path);
+          request.files.add(await http.MultipartFile.fromPath(
+            'rc_document',
+            rcDocument.path,
+            contentType: http.MediaType(ext == 'pdf' ? 'application' : 'image', ext),
+          ));
+        }
+
+        if (licenseDocument != null) {
+          final ext = _fileExtension(licenseDocument.path);
+          request.files.add(await http.MultipartFile.fromPath(
+            'license_document',
+            licenseDocument.path,
+            contentType: http.MediaType(ext == 'pdf' ? 'application' : 'image', ext),
+          ));
+        }
 
         print('?? Sending Multipart PUT to: $uri');
         final streamedResponse = await request.send().timeout(const Duration(seconds: 300));
@@ -1840,6 +1898,8 @@ print("Response Code pn ${response.statusCode}");
     File? aadharDoc,
     File? panCard,
     File? videoKyc,
+    File? rcDocument,
+    File? licenseDocument,
   }) async {
     try {
       print('📝 Registering agent: ${request.name}');
@@ -1884,6 +1944,22 @@ print("Response Code pn ${response.statusCode}");
           'video_kyc',
           videoKyc.path,
           contentType: http.MediaType('video', 'mp4'),
+        ));
+      }
+      if (rcDocument != null) {
+        final ext = _fileExtension(rcDocument.path);
+        multipartRequest.files.add(await http.MultipartFile.fromPath(
+          'rc_document',
+          rcDocument.path,
+          contentType: http.MediaType(ext == 'pdf' ? 'application' : 'image', ext),
+        ));
+      }
+      if (licenseDocument != null) {
+        final ext = _fileExtension(licenseDocument.path);
+        multipartRequest.files.add(await http.MultipartFile.fromPath(
+          'license_document',
+          licenseDocument.path,
+          contentType: http.MediaType(ext == 'pdf' ? 'application' : 'image', ext),
         ));
       }
 
@@ -2063,6 +2139,8 @@ print("Response Code pn ${response.statusCode}");
   Future<ApiResponse<List<Product>>> getProducts({
     int? page,
     int? size,
+    String? lat,
+    String? lng,
   }) async {
     try {
       final queryParams = {
@@ -2074,6 +2152,8 @@ print("Response Code pn ${response.statusCode}");
         'include_pricing': 'true',
         if (page != null) 'page': '$page',
         if (size != null) 'size': '$size',
+        if (lat != null && lat.isNotEmpty) 'lat': lat,
+        if (lng != null && lng.isNotEmpty) 'lng': lng,
       };
 
       final uri = Uri.parse('$baseUrl/api/product').replace(
@@ -2167,7 +2247,16 @@ print("Response Code pn ${response.statusCode}");
       String errorMsg = 'Failed to request movement (${response.statusCode})';
       try {
         final data = jsonDecode(response.body);
-        errorMsg = data['message'] ?? data['detail'] ?? errorMsg;
+        if (response.statusCode == 422 && data['errors'] != null) {
+          final errors = data['errors'];
+          if (data['errors'] != null) {
+            errorMsg = data['errors'];
+          } else {
+            errorMsg = data['message'] ?? errorMsg;
+          }
+        } else {
+          errorMsg = data['message'] ?? data['detail'] ?? errorMsg;
+        }
       } catch (_) {}
       return ApiResponse(isSuccess: false, error: errorMsg);
     } catch (e) {
@@ -2248,7 +2337,7 @@ print("Response Code pn ${response.statusCode}");
     String type = 'GET',
   }) async {
     try {
-      final url = Uri.parse('$baseUrl/api/tool-inventory/movements/request/');
+      final url = Uri.parse('$baseUrl/api/tools/movement/request/');
       print('📡 Requesting Tool Movement: $url');
 
       final response = await _authorizedRequest(
@@ -2268,6 +2357,7 @@ print("Response Code pn ${response.statusCode}");
       );
 
       print('📡 Tool Movement Status: ${response.statusCode}');
+      print('📡 Tool Movement Status Body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
@@ -2277,7 +2367,18 @@ print("Response Code pn ${response.statusCode}");
       String errorMsg = 'Failed to request tool movement (${response.statusCode})';
       try {
         final data = jsonDecode(response.body);
-        errorMsg = data['message'] ?? data['detail'] ?? errorMsg;
+        if (response.statusCode == 422 && data['errors'] != null) {
+          // Flatten validation errors if present
+          // final errors = data['errors'];
+          if (data['errors'] != null) {
+            errorMsg = data['errors'];
+          } else {
+            errorMsg = data['message'] ?? errorMsg;
+          }
+        } else {
+          errorMsg = data['message'] ?? data['detail'] ?? errorMsg;
+        }
+        print('❌ requestToolMovement error: $errorMsg');
       } catch (_) {}
       return ApiResponse(isSuccess: false, error: errorMsg);
     } catch (e) {

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 class OrderItem {
@@ -13,6 +13,18 @@ class OrderItem {
   final String? imageUrl;
   final String? type;
 
+  // API payload fields
+  /// The original order item UUID from the server (used for REPLACE/DELETE)
+  final String? originalOrderItemId;
+  /// The original service/product UUID (used to detect entity changes)
+  final String? originalEntityId;
+  /// The new service/product UUID (used for ADD/REPLACE)
+  final String? newEntityId;
+  /// REPLACE | ADD | REMOVE
+  final String? modificationType;
+  /// SERVICE | PRODUCT
+  final String? itemType;
+
   const OrderItem({
     required this.id,
     required this.name,
@@ -24,6 +36,11 @@ class OrderItem {
     this.isRemoved = false,
     this.imageUrl,
     this.type,
+    this.originalOrderItemId,
+    this.originalEntityId,
+    this.newEntityId,
+    this.modificationType,
+    this.itemType,
   });
 
   OrderItem copyWith({
@@ -33,6 +50,11 @@ class OrderItem {
     bool? isRemoved,
     String? imageUrl,
     String? type,
+    String? originalOrderItemId,
+    String? originalEntityId,
+    String? newEntityId,
+    String? modificationType,
+    String? itemType,
   }) {
     return OrderItem(
       id: id,
@@ -45,8 +67,15 @@ class OrderItem {
       isRemoved: isRemoved ?? this.isRemoved,
       imageUrl: imageUrl ?? this.imageUrl,
       type: type ?? this.type,
+      originalOrderItemId: originalOrderItemId ?? this.originalOrderItemId,
+      originalEntityId: originalEntityId ?? this.originalEntityId,
+      newEntityId: newEntityId ?? this.newEntityId,
+      modificationType: modificationType ?? this.modificationType,
+      itemType: itemType ?? this.itemType,
     );
   }
+
+  bool get isChanged => !isNew && (quantity != originalQuantity || price != originalPrice || newEntityId != originalEntityId);
 }
 
 class RequestRecord {
@@ -96,6 +125,22 @@ class OrderModificationState {
     );
   }
 
+  // Original items that remain unchanged
+  List<OrderItem> get unmodifiedItems =>
+      items.where((i) => !i.isNew && !i.isRemoved && !i.isChanged).toList();
+
+  // Original items that were modified (price/qty change)
+  List<OrderItem> get modifiedOriginalItems =>
+      items.where((i) => !i.isNew && !i.isRemoved && i.isChanged).toList();
+
+  // New items added during this session
+  List<OrderItem> get newlyAddedItems =>
+      items.where((i) => i.isNew && !i.isRemoved).toList();
+
+  // Items marked for removal
+  List<OrderItem> get removedItems =>
+      items.where((i) => i.isRemoved).toList();
+
   double get originalTotal =>
       items.where((i) => !i.isNew).fold(0, (sum, i) => sum + (i.originalPrice * i.originalQuantity));
 
@@ -112,7 +157,23 @@ class OrderModificationController extends StateNotifier<OrderModificationState> 
     state = state.copyWith(items: items);
   }
 
-  void addItem(String name, double price) {
+  /// Add a brand-new item.
+  /// [newEntityId] = the service/product UUID from the catalogue.
+  /// [type] = 'service' or 'product'.
+  /// Returns false if the item is a duplicate and already exists in the list.
+  bool addItem(String name, double price, {String? type, String? newEntityId}) {
+    // Check if item already exists and is NOT removed
+    final exists = state.items.any((i) => !i.isRemoved && (i.newEntityId == newEntityId || i.originalEntityId == newEntityId));
+    if (exists) return false;
+
+    // Check if item was removed, if so, restore it
+    final removedItem = state.items.where((i) => i.isRemoved && (i.newEntityId == newEntityId || i.originalEntityId == newEntityId)).firstOrNull;
+    if (removedItem != null) {
+      updateQuantity(removedItem.id, 1);
+      return true;
+    }
+
+    final itemTypeUpper = (type ?? '').toUpperCase();
     final newItem = OrderItem(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
@@ -121,25 +182,51 @@ class OrderModificationController extends StateNotifier<OrderModificationState> 
       quantity: 1,
       originalPrice: 0,
       originalQuantity: 0,
+      type: type,
+      newEntityId: newEntityId,
+      modificationType: 'ADD',
+      itemType: itemTypeUpper,
     );
     state = state.copyWith(items: [...state.items, newItem]);
+    return true;
   }
 
-  void replaceItem(String id, String newName, double newPrice) {
+  /// Replace an existing order item with a new service/product.
+  /// [id] = the local OrderItem.id (also the original order_item_id from server for original items).
+  /// [newEntityId] = the new service/product UUID.
+  void replaceItem(String id, String newName, double newPrice, {String? newEntityId}) {
     state = state.copyWith(
-      items: state.items
-          .map((i) => i.id == id
-              ? i.copyWith(name: newName, price: newPrice, quantity: 1, isRemoved: false)
-              : i)
-          .toList(),
+      items: state.items.map((i) {
+        if (i.id == id) {
+          return i.copyWith(
+            name: newName,
+            price: newPrice,
+            quantity: 1,
+            isRemoved: false,
+            newEntityId: newEntityId,
+            modificationType: 'REPLACE',
+            itemType: (i.type ?? '').toUpperCase(),
+          );
+        }
+        return i;
+      }).toList(),
     );
   }
 
+  /// Mark an existing order item as removed.
   void removeItem(String id) {
     state = state.copyWith(
-      items: state.items
-          .map((i) => i.id == id ? i.copyWith(isRemoved: true, quantity: 0) : i)
-          .toList(),
+      items: state.items.map((i) {
+        if (i.id == id) {
+          return i.copyWith(
+            isRemoved: true,
+            quantity: 0,
+            modificationType: 'REMOVE',
+            itemType: (i.itemType ?? i.type ?? '').toUpperCase(),
+          );
+        }
+        return i;
+      }).toList(),
     );
   }
 
@@ -150,9 +237,19 @@ class OrderModificationController extends StateNotifier<OrderModificationState> 
       return;
     }
     state = state.copyWith(
-      items: state.items
-          .map((i) => i.id == id ? i.copyWith(quantity: qty) : i)
-          .toList(),
+      items: state.items.map((i) {
+        if (i.id == id) {
+          final isChanged = !i.isNew && (qty != i.originalQuantity || i.price != i.originalPrice || i.newEntityId != i.originalEntityId);
+          return i.copyWith(
+            quantity: qty,
+            isRemoved: false,
+            modificationType: i.isNew
+                ? 'ADD'
+                : (isChanged ? 'REPLACE' : null),
+          );
+        }
+        return i;
+      }).toList(),
     );
   }
 

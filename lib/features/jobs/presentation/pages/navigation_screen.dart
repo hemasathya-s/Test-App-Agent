@@ -280,7 +280,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(success ? "Status updated: $status" : "Failed to update status"),
-          backgroundColor: success ? Colors.green : Colors.red,
+          backgroundColor: success ? Colors.black87 : Colors.black87,
           duration: const Duration(seconds: 1),
         ),
       );

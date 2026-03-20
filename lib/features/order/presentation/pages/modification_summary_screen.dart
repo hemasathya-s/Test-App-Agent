@@ -286,7 +286,7 @@ class ModificationSummaryScreen extends ConsumerWidget {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Modification request sent to customer'),
-                  backgroundColor: AppTheme.primaryColor,
+                  backgroundColor: Colors.black87,
                 ),
               );
             },

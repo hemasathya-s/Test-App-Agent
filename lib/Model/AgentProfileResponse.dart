@@ -1,4 +1,4 @@
-﻿class AgentProfileResponse {
+class AgentProfileResponse {
   final bool success;
   final AgentProfileData agent;
 
@@ -25,6 +25,8 @@ class AgentProfileData {
   final String? videoKycUrl;
   final String isPanVerified;
   final String isAadharVerified;
+  final String isRcVerified;
+  final String isLicenseVerified;
   final String cumulativeRating;
   final String? profileImageUrl;
   final String? startTime;
@@ -37,6 +39,10 @@ class AgentProfileData {
   final String? upiId;
   final String? vehicleType;
   final String? vehicleNumber;
+  final String? rcNumber;
+  final String? licenseNumber;
+  final String? rcDocumentUrl;
+  final String? licenseDocumentUrl;
 
   AgentProfileData({
     required this.id,
@@ -48,6 +54,8 @@ class AgentProfileData {
     this.videoKycUrl,
     required this.isPanVerified,
     required this.isAadharVerified,
+    required this.isRcVerified,
+    required this.isLicenseVerified,
     required this.cumulativeRating,
     this.profileImageUrl,
     this.startTime,
@@ -60,15 +68,26 @@ class AgentProfileData {
     this.upiId,
     this.vehicleType,
     this.vehicleNumber,
+    this.rcNumber,
+    this.licenseNumber,
+    this.rcDocumentUrl,
+    this.licenseDocumentUrl,
   });
 
   factory AgentProfileData.fromJson(Map<String, dynamic> json) {
     final details = json['agent_details'] as Map<String, dynamic>? ?? {};
     
-    String? profileUrl = details['profile_image_url']?.toString();
-    if (profileUrl != null && profileUrl.startsWith('/')) {
-      profileUrl = 'https://api.itfixer199.com$profileUrl';
+    String? _ensureAbsoluteUrl(dynamic url) {
+      if (url == null) return null;
+      String urlStr = url.toString();
+      if (urlStr.isEmpty) return null;
+      if (urlStr.startsWith('/')) {
+        return 'https://api.itfixer199.com$urlStr';
+      }
+      return urlStr;
     }
+
+    String? profileUrl = _ensureAbsoluteUrl(details['profile_image_url']);
 
     return AgentProfileData(
       id: details['agent_id']?.toString() ?? json['id']?.toString() ?? '',
@@ -80,6 +99,8 @@ class AgentProfileData {
       videoKycUrl: details['video_kyc_url'],
       isPanVerified: details['is_pan_verified']?.toString() ?? 'PENDING',
       isAadharVerified: details['is_aadhar_verified']?.toString() ?? 'PENDING',
+      isRcVerified: details['is_rc_verified']?.toString() ?? 'PENDING',
+      isLicenseVerified: details['is_license_verified']?.toString() ?? 'PENDING',
       cumulativeRating: details['cumulative_rating']?.toString() ?? '0.00',
       profileImageUrl: profileUrl,
       startTime: details['start_time'],
@@ -92,6 +113,10 @@ class AgentProfileData {
       upiId: details['upi_id'],
       vehicleType: details['vehicle_type'],
       vehicleNumber: details['vehicle_number'],
+      rcNumber: details['rc_number'],
+      licenseNumber: details['license_number'],
+      rcDocumentUrl: _ensureAbsoluteUrl(details['rc_doc_url'] ?? details['rc_doc'] ?? details['rc_document_url']),
+      licenseDocumentUrl: _ensureAbsoluteUrl(details['license_doc_url'] ?? details['license_doc'] ?? details['license_document_url']),
     );
   }
 }

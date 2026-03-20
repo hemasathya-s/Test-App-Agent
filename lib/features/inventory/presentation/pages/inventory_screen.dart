@@ -815,7 +815,7 @@ class _InventoryScreenState extends State<InventoryScreen>
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Movement request submitted successfully', style: GoogleFonts.outfit(color: Colors.white)),
-                              backgroundColor: AppTheme.primaryColor,
+                              backgroundColor: Colors.black87,
                               behavior: SnackBarBehavior.floating,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),

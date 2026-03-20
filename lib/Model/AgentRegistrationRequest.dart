@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // ────────────────── Request Model ────────────────────────────────────────────────
@@ -20,6 +20,8 @@ class AgentRegistrationRequest {
   final String? upiId;
   final String? vehicleNumber;
   final String? vehicleType;     // '2_WHEELER' | '4_WHEELER'
+  final String? rcNumber;
+  final String? licenseNumber;
   // final String? dlExpiryDate;    // Commented out for now
   // Files are handled separately as multipart
 
@@ -36,11 +38,13 @@ class AgentRegistrationRequest {
     this.startTime,
     this.endTime,
     this.bankName,
-    this.accountNumber,
-    this.ifscCode,
+    required this.accountNumber,
+    required this.ifscCode,
     this.upiId,
-    this.vehicleNumber,
-    this.vehicleType,
+    required this.vehicleNumber,
+    required this.vehicleType,
+    this.rcNumber,
+    this.licenseNumber,
     // this.dlExpiryDate,
   });
 
@@ -79,6 +83,10 @@ class AgentRegistrationRequest {
       map['vehicle_number'] = vehicleNumber!;
     if (vehicleType != null && vehicleType!.isNotEmpty)
       map['vehicle_type'] = vehicleType!;
+    if (rcNumber != null && rcNumber!.isNotEmpty)
+      map['rc_number'] = rcNumber!;
+    if (licenseNumber != null && licenseNumber!.isNotEmpty)
+      map['license_number'] = licenseNumber!;
     // if (dlExpiryDate != null && dlExpiryDate!.isNotEmpty)
     //   map['dl_expiry_date'] = dlExpiryDate!;
     return map;

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'service_modification.dart';
+import 'order_item_modification.dart';
 
 List<dynamic>? _safeList(dynamic value) {
   if (value == null) return null;
@@ -44,6 +45,7 @@ class OrderDetails {
   final dynamic startingAgentCoordinates;
   final String? zoneId;
   final List<ServiceModification>? serviceModifications;
+  final List<OrderItemModification>? orderItemModifications;
   final bool? isActive;
   final bool? isInstantSlot;
 
@@ -76,6 +78,7 @@ class OrderDetails {
     this.startingAgentCoordinates,
     this.zoneId,
     this.serviceModifications,
+    this.orderItemModifications,
     this.isActive,
     this.isInstantSlot,
   });
@@ -118,6 +121,9 @@ class OrderDetails {
       serviceModifications: _safeList(json['service_modifications'])
           ?.map((m) => ServiceModification.fromJson(m as Map<String, dynamic>))
           .toList(),
+      orderItemModifications: _safeList(json['order_item_modifications'])
+          ?.map((m) => OrderItemModification.fromJson(m as Map<String, dynamic>))
+          .toList(),
       isActive: json['is_active'],
       isInstantSlot: json['is_instant_slot'],
     );
@@ -151,6 +157,7 @@ class OrderDetails {
       'starting_agent_coordinates': startingAgentCoordinates,
       'zone_id': zoneId,
       'service_modifications': serviceModifications?.map((m) => m.toJson()).toList(),
+      'order_item_modifications': orderItemModifications?.map((m) => m.toJson()).toList(),
       'is_active': isActive,
       'is_instant_slot': isInstantSlot,
     };

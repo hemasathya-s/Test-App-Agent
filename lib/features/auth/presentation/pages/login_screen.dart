@@ -393,7 +393,7 @@ class LoginPageState extends State<LoginPage> {
         ScaffoldMessenger.of(pageContext).showSnackBar(
           SnackBar(
             content: Text('No account found for this mobile number. Please create an account.', style: GoogleFonts.lato()),
-            backgroundColor: Colors.orange[400],
+            backgroundColor: Colors.black87,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -406,7 +406,7 @@ class LoginPageState extends State<LoginPage> {
         ScaffoldMessenger.of(pageContext).showSnackBar(
           SnackBar(
             content: Text(error, style: GoogleFonts.lato()),
-            backgroundColor: Colors.red[400],
+            backgroundColor: Colors.black87,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -447,7 +447,7 @@ class LoginPageState extends State<LoginPage> {
       ScaffoldMessenger.of(pageContext).showSnackBar(
         SnackBar(
           content: Text(error, style: GoogleFonts.lato()),
-          backgroundColor: Colors.red[400],
+          backgroundColor: Colors.black87,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
@@ -879,7 +879,7 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('OTP resent successfully', style: GoogleFonts.lato()),
-          backgroundColor: Colors.green[600],
+          backgroundColor: Colors.black87,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
