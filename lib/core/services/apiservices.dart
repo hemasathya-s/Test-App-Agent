@@ -892,6 +892,9 @@ class ApiService {
         File? profileImage,
         File? rcDocument,
         File? licenseDocument,
+        File? aadharDoc,
+        File? panCard,
+        File? videoKyc,
       }) async {
     try {
       print('?? Updating agent profile: $userId');
@@ -905,7 +908,9 @@ class ApiService {
       final uri = Uri.parse('$baseUrl/api/user/agent/$userId');
 
       // We use MultipartRequest if an image or document is provided, otherwise a standard PUT
-      if (profileImage != null || rcDocument != null || licenseDocument != null) {
+      final hasFiles = profileImage != null || rcDocument != null || licenseDocument != null || aadharDoc != null || panCard != null || videoKyc != null;
+
+      if (hasFiles) {
         final request = http.MultipartRequest('PUT', uri)
           ..headers.addAll({
             'accept': 'application/json',
@@ -941,6 +946,32 @@ class ApiService {
             'license_doc',
             licenseDocument.path,
             contentType: http.MediaType(ext == 'pdf' ? 'application' : 'image', ext),
+          ));
+        }
+
+        if (aadharDoc != null) {
+          final ext = _fileExtension(aadharDoc.path);
+          request.files.add(await http.MultipartFile.fromPath(
+            'aadhar_doc',
+            aadharDoc.path,
+            contentType: http.MediaType(ext == 'pdf' ? 'application' : 'image', ext),
+          ));
+        }
+
+        if (panCard != null) {
+          final ext = _fileExtension(panCard.path);
+          request.files.add(await http.MultipartFile.fromPath(
+            'pan_card',
+            panCard.path,
+            contentType: http.MediaType('image', ext),
+          ));
+        }
+
+        if (videoKyc != null) {
+          request.files.add(await http.MultipartFile.fromPath(
+            'video_kyc',
+            videoKyc.path,
+            contentType: http.MediaType('video', 'mp4'),
           ));
         }
 
@@ -1978,10 +2009,23 @@ class ApiService {
       print('📡 getAgentProfile body: ${response.body}');
 
       if (response.statusCode == 200) {
-        final json = jsonDecode(response.body);
+        final Map<String, dynamic> jsonResponse = jsonDecode(response.body);
+        print("📡 Raw Response Body: ${response.body}");
+        
+        final user = jsonResponse['user'];
+        if (user != null && user['agent_details'] != null) {
+          final details = user['agent_details'];
+          print("🔍 Verification Statuses for Console Debugging:");
+          print("   - is_rc_verified: ${details['is_rc_verified']} (Type: ${details['is_rc_verified']?.runtimeType})");
+          print("   - is_license_verified: ${details['is_license_verified']} (Type: ${details['is_license_verified']?.runtimeType})");
+          print("   - is_pan_verified: ${details['is_pan_verified']} (Type: ${details['is_pan_verified']?.runtimeType})");
+          print("   - is_aadhar_verified: ${details['is_aadhar_verified']} (Type: ${details['is_aadhar_verified']?.runtimeType})");
+          print("   - is_video_kyc_verified: ${details['is_video_kyc_verified']} (Type: ${details['is_video_kyc_verified']?.runtimeType})");
+        }
+
         return ApiResponse(
           isSuccess: true,
-          data: AgentProfileResponse.fromJson(json),
+          data: AgentProfileResponse.fromJson(jsonResponse),
         );
       }
 

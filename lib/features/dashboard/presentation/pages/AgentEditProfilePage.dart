@@ -36,6 +36,9 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
   File? _profileImage;
   File? _rcDocument;
   File? _licenseDocument;
+  File? _aadharDoc;
+  File? _panCard;
+  File? _videoKyc;
   final ImagePicker _picker = ImagePicker();
 
   @override
@@ -135,14 +138,29 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     }
   }
 
-  Future<void> _pickDocument(bool isRc) async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
+  Future<void> _pickDocument(String type) async {
+    final XFile? media = (type == 'VIDEO')
+        ? await _picker.pickVideo(source: ImageSource.gallery)
+        : await _picker.pickImage(source: ImageSource.gallery);
+
+    if (media != null) {
       setState(() {
-        if (isRc) {
-          _rcDocument = File(image.path);
-        } else {
-          _licenseDocument = File(image.path);
+        switch (type) {
+          case 'RC':
+            _rcDocument = File(media.path);
+            break;
+          case 'LICENSE':
+            _licenseDocument = File(media.path);
+            break;
+          case 'AADHAR':
+            _aadharDoc = File(media.path);
+            break;
+          case 'PAN':
+            _panCard = File(media.path);
+            break;
+          case 'VIDEO':
+            _videoKyc = File(media.path);
+            break;
         }
       });
     }
@@ -212,26 +230,33 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     print('✏️ Sending update for User ID: ${original.userId}');
     print('✏️ Payload: $updatedData');
 
-    /* if  you wants user no edit then click submit throw error snakbar*/
-
-   /* if (updatedData.isEmpty && _profileImage == null && _rcDocument == null && _licenseDocument == null) {
+    if (updatedData.isEmpty && 
+        _profileImage == null && 
+        _rcDocument == null && 
+        _licenseDocument == null &&
+        _aadharDoc == null &&
+        _panCard == null &&
+        _videoKyc == null) {
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('No changes to update', style: GoogleFonts.outfit()),
-          backgroundColor: Colors.grey,
+          backgroundColor: Colors.blueGrey,
           behavior: SnackBarBehavior.floating,
         ),
       );
       return;
-    }*/
+    }
 
     final result = await ApiService().updateAgentProfile(
-      _agentData?.userId ?? widget.agentData.userId,
+      original.userId,
       updatedData,
       profileImage: _profileImage,
       rcDocument: _rcDocument,
       licenseDocument: _licenseDocument,
+      aadharDoc: _aadharDoc,
+      panCard: _panCard,
+      videoKyc: _videoKyc,
     );
 
     if (!mounted) return;
@@ -416,12 +441,12 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                     Row(
                       children: [
                         Expanded(child: _editableField("RC Number", _rcNumberController, 
-                          isVerified: _agentData?.isRcVerified == "APPROVED",
-                          verificationMessage: "RC Number is verified and cannot be changed.")),
+                          isVerified: _agentData?.isRcVerified.toUpperCase() != "REJECTED",
+                          verificationMessage: "RC Number can only be modified if rejected.")),
                         const SizedBox(width: 12),
                         Expanded(child: _editableField("License Number", _licenseNumberController,
-                          isVerified: _agentData?.isLicenseVerified == "APPROVED",
-                          verificationMessage: "License Number is verified and cannot be changed.")),
+                          isVerified: _agentData?.isLicenseVerified.toUpperCase() != "REJECTED",
+                          verificationMessage: "License Number can only be modified if rejected.")),
                       ],
                     ),
                   ],
@@ -432,34 +457,86 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
 
               /// 🔹 Documents
               _sectionCard(
-                title: "Documents",
+                title: "Legal Documents",
                 icon: Icons.folder_copy_outlined,
                 child: Column(
                   children: [
+                    // Aadhar
                     _documentTile(
-                      label: "RC Document",
-                      file: _rcDocument,
-                      remoteUrl: _agentData?.rcDocumentUrl,
-                      isVerified: _agentData?.isRcVerified == "APPROVED",
+                      label: "Aadhar Card",
+                      file: _aadharDoc,
+                      remoteUrl: _agentData?.aadharDocUrl,
+                      isVerified: _agentData?.isAadharVerified.toUpperCase() != "REJECTED",
+                      status: _agentData?.isAadharVerified,
                       onTap: () {
-                        if (_agentData?.isRcVerified == "APPROVED") {
-                          _showVerifiedSnackbar("RC Document is verified and cannot be changed.");
+                        if (_agentData?.isAadharVerified.toUpperCase() != "REJECTED") {
+                          _showVerifiedSnackbar("Aadhar can only be modified if rejected.");
                         } else {
-                          _pickDocument(true);
+                          _pickDocument('AADHAR');
                         }
                       },
                     ),
                     const SizedBox(height: 16),
+                    // PAN
                     _documentTile(
-                      label: "License Document",
+                      label: "PAN Card",
+                      file: _panCard,
+                      remoteUrl: _agentData?.panCardUrl,
+                      isVerified: _agentData?.isPanVerified.toUpperCase() != "REJECTED",
+                      status: _agentData?.isPanVerified,
+                      onTap: () {
+                        if (_agentData?.isPanVerified.toUpperCase() != "REJECTED") {
+                          _showVerifiedSnackbar("PAN Card can only be modified if rejected.");
+                        } else {
+                          _pickDocument('PAN');
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    // RC
+                    _documentTile(
+                      label: "RC Document",
+                      file: _rcDocument,
+                      remoteUrl: _agentData?.rcDocumentUrl,
+                      isVerified: _agentData?.isRcVerified.toUpperCase() != "REJECTED",
+                      status: _agentData?.isRcVerified,
+                      onTap: () {
+                        if (_agentData?.isRcVerified.toUpperCase() != "REJECTED") {
+                          _showVerifiedSnackbar("RC Document can only be modified if rejected.");
+                        } else {
+                          _pickDocument('RC');
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    // License
+                    _documentTile(
+                      label: "Driving License",
                       file: _licenseDocument,
                       remoteUrl: _agentData?.licenseDocumentUrl,
-                      isVerified: _agentData?.isLicenseVerified == "APPROVED",
+                      isVerified: _agentData?.isLicenseVerified.toUpperCase() != "REJECTED",
+                      status: _agentData?.isLicenseVerified,
                       onTap: () {
-                        if (_agentData?.isLicenseVerified == "APPROVED") {
-                          _showVerifiedSnackbar("License Document is verified and cannot be changed.");
+                        if (_agentData?.isLicenseVerified.toUpperCase() != "REJECTED") {
+                          _showVerifiedSnackbar("License can only be modified if rejected.");
                         } else {
-                          _pickDocument(false);
+                          _pickDocument('LICENSE');
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    // Video KYC
+                    _documentTile(
+                      label: "Video KYC",
+                      file: _videoKyc,
+                      remoteUrl: _agentData?.videoKycUrl,
+                      isVerified: _agentData?.isVideoKycVerified.toUpperCase() != "REJECTED",
+                      status: _agentData?.isVideoKycVerified,
+                      onTap: () {
+                        if (_agentData?.isVideoKycVerified.toUpperCase() != "REJECTED") {
+                          _showVerifiedSnackbar("Video KYC can only be modified if rejected.");
+                        } else {
+                          _pickDocument('VIDEO');
                         }
                       },
                     ),
@@ -605,8 +682,10 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     );
   }
 
-  Widget _documentTile({required String label, File? file, String? remoteUrl, required VoidCallback onTap, bool isVerified = false}) {
+  Widget _documentTile({required String label, File? file, String? remoteUrl, required VoidCallback onTap, bool isVerified = false, String? status}) {
     bool hasImage = file != null || (remoteUrl != null && remoteUrl.isNotEmpty);
+    bool isActuallyVerified = status?.toUpperCase() == "VERIFIED";
+    bool isVideo = label.toLowerCase().contains("video");
 
     return GestureDetector(
       onTap: onTap,
@@ -615,11 +694,11 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
         decoration: BoxDecoration(
           color: AppTheme.surfaceColor.withOpacity(0.5),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isVerified ? AppTheme.successColor.withOpacity(0.3) : Colors.grey.shade200),
+          border: Border.all(color: isActuallyVerified ? AppTheme.successColor.withOpacity(0.3) : Colors.grey.shade200),
         ),
         child: Row(
           children: [
-            if (hasImage)
+            if (hasImage && !isVideo)
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: Container(
@@ -658,12 +737,14 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: (isVerified ? AppTheme.successColor : AppTheme.primaryColor).withOpacity(0.1),
+                  color: (isActuallyVerified ? AppTheme.successColor : AppTheme.primaryColor).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
-                  isVerified ? Icons.verified_user_outlined : Icons.description_outlined,
-                  color: isVerified ? AppTheme.successColor : AppTheme.primaryColor,
+                  isActuallyVerified 
+                    ? Icons.verified_user_outlined 
+                    : (isVideo ? Icons.videocam_rounded : Icons.description_outlined),
+                  color: isActuallyVerified ? AppTheme.successColor : AppTheme.primaryColor,
                   size: 24,
                 ),
               ),
@@ -674,13 +755,15 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                 children: [
                   Text(label, style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
                   const SizedBox(height: 2),
-                  Text(isVerified ? "Verified Document" : (file != null ? "New file selected" : (remoteUrl != null ? "Document uploaded" : "No document uploaded")),
+                  Text(isActuallyVerified ? "Verified Document" : (file != null ? "New file selected" : (remoteUrl != null ? "Document uploaded" : "No document uploaded")),
                     style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary)),
                 ],
               ),
             ),
-            if (isVerified)
+            if (isActuallyVerified)
               const Icon(Icons.check_circle_rounded, size: 18, color: AppTheme.successColor)
+            else if (isVerified)
+              const Icon(Icons.lock_outline_rounded, size: 18, color: Colors.blueGrey)
             else
               const Icon(Icons.edit_outlined, size: 18, color: AppTheme.textSecondary),
           ],

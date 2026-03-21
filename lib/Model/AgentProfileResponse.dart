@@ -92,6 +92,16 @@ class AgentProfileData {
     this.licenseDocModelId,
   });
 
+  static String _parseStatus(dynamic value) {
+    if (value == null) return 'PENDING';
+    if (value is bool) return value ? 'VERIFIED' : 'PENDING';
+    if (value is int) return value == 1 ? 'VERIFIED' : 'PENDING';
+    final s = value.toString().trim().toUpperCase();
+    if (s == 'TRUE') return 'VERIFIED';
+    if (s == 'FALSE') return 'PENDING';
+    return s.isEmpty ? 'PENDING' : s;
+  }
+
   static String? _ensureAbsoluteUrl(dynamic url) {
     if (url == null) return null;
     final urlStr = url.toString().trim();
@@ -157,14 +167,12 @@ class AgentProfileData {
       licenseNumber: agentDetails['license_number']?.toString(),
 
       // ── Verification statuses ──────────────────────────────────────
-      isPanVerified:
-      agentDetails['is_pan_verified']?.toString() ?? 'PENDING',
-      isAadharVerified:
-      agentDetails['is_aadhar_verified']?.toString() ?? 'PENDING',
-      isVideoKycVerified:
-      agentDetails['is_video_kyc_verified']?.toString() ?? 'PENDING',
-      isRcVerified: agentDetails['is_rc_verified']?.toString() ?? 'PENDING',
-      isLicenseVerified: agentDetails['is_license_verified']?.toString() ?? 'PENDING',
+      // Normalizing statuses to consistent "VERIFIED", "PENDING", or original string
+      isPanVerified: _parseStatus(agentDetails['is_pan_verified']),
+      isAadharVerified: _parseStatus(agentDetails['is_aadhar_verified']),
+      isVideoKycVerified: _parseStatus(agentDetails['is_video_kyc_verified']),
+      isRcVerified: _parseStatus(agentDetails['is_rc_verified']),
+      isLicenseVerified: _parseStatus(agentDetails['is_license_verified']),
 
       // ── Other agent details ────────────────────────────────────────
       cumulativeRating:
