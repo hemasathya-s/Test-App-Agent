@@ -1045,7 +1045,13 @@ class ApiService {
       }
     }
 
-    print('? Update Error: $errorMsg');
+    // 🔹 Intercept confusing backend errors (e.g. from file pickling/size) and translate to user-friendly messages
+    if (errorMsg.toString().toLowerCase().contains('pickle') || 
+        errorMsg.toString().toLowerCase().contains('bufferedrandom')) {
+      errorMsg = 'Video size exceeded limit';
+    }
+
+    print('❌ Update Error [${response.statusCode}]: $errorMsg');
     return AgentApiResult.failure(errorMsg);
   }
 

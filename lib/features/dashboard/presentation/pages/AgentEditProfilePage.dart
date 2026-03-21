@@ -41,6 +41,9 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
   File? _videoKyc;
   final ImagePicker _picker = ImagePicker();
 
+  // 🔹 Max allowed video size (e.g. 25 MB)
+  static const double _maxVideoSizeMB = 20.0;
+
   @override
   void initState() {
     super.initState();
@@ -83,8 +86,8 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
       if (mounted) {
         setState(() => _isLoading = false);
         print("❌ Failed to fetch fresh profile: ${result.error}");
-        
-        if (result.error?.toLowerCase().contains('authenticated') == true || 
+
+        if (result.error?.toLowerCase().contains('authenticated') == true ||
             result.error?.toLowerCase().contains('login') == true) {
           context.go('/login');
         } else {
@@ -102,7 +105,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
       name = agent.userName;
     }
     print("✏️ Profile Update -> Name: $name, Vehicle: ${agent.vehicleType}/${agent.vehicleNumber}, Bank: ${agent.bankName}/${agent.accountNumber}");
-    
+
     _nameController.text = name;
     _emailController.text = agent.userDetails.email;
     _phoneController.text = agent.userDetails.mobileNumber;
@@ -144,6 +147,26 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
         : await _picker.pickImage(source: ImageSource.gallery);
 
     if (media != null) {
+      // 🔹 Validate Video Size if applicable
+      if (type == 'VIDEO') {
+        final File videoFile = File(media.path);
+        final int sizeInBytes = videoFile.lengthSync();
+        final double sizeInMB = sizeInBytes / (1024 * 1024);
+
+        if (sizeInMB > _maxVideoSizeMB) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Video size exceeds ${_maxVideoSizeMB.toInt()}MB. Please pick a shorter video.',
+                style: GoogleFonts.outfit()),
+              backgroundColor: Colors.red[800],
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+      }
+
       setState(() {
         switch (type) {
           case 'RC':
@@ -174,6 +197,23 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
 
     final original = _agentData ?? widget.agentData;
 
+    // 🔹 Final Video Size Validation before Submission
+    if (_videoKyc != null) {
+      final sizeInMB = _videoKyc!.lengthSync() / (1024 * 1024);
+      if (sizeInMB > _maxVideoSizeMB) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Video size exceeds ${_maxVideoSizeMB.toInt()}MB. Please pick a smaller video before submitting.',
+              style: GoogleFonts.outfit()),
+            backgroundColor: Colors.red[800],
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+    }
+
     // Only add to updatedData if the value has actually changed
     final name = _nameController.text.trim();
     if (name.isNotEmpty && name != original.userDetails.name) {
@@ -184,7 +224,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     if (email.isNotEmpty && email != original.userDetails.email) {
       updatedData['email'] = email;
     }
-    
+
     // Bank Details
     final bank = _bankNameController.text.trim();
     if (bank.isNotEmpty && bank != original.bankName) {
@@ -205,7 +245,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     if (upi.isNotEmpty && upi != original.upiId) {
       updatedData['upi_id'] = upi;
     }
-    
+
     // Vehicle Details
     final vType = _vehicleTypeController.text.trim();
     if (vType.isNotEmpty && vType != original.vehicleType) {
@@ -230,9 +270,9 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     print('✏️ Sending update for User ID: ${original.userId}');
     print('✏️ Payload: $updatedData');
 
-    if (updatedData.isEmpty && 
-        _profileImage == null && 
-        _rcDocument == null && 
+    if (updatedData.isEmpty &&
+        _profileImage == null &&
+        _rcDocument == null &&
         _licenseDocument == null &&
         _aadharDoc == null &&
         _panCard == null &&
@@ -273,9 +313,9 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
               borderRadius: BorderRadius.circular(10)),
         ),
       );
-      context.pop(true); 
+      context.pop(true);
     } else {
-      if (result.error?.toLowerCase().contains('authenticated') == true || 
+      if (result.error?.toLowerCase().contains('authenticated') == true ||
           result.error?.toLowerCase().contains('login') == true) {
         context.go('/login');
       } else {
@@ -336,7 +376,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
             ),
         ],
       ),
-      body: _isLoading 
+      body: _isLoading
         ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
         : SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
@@ -346,7 +386,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
           child: Column(
             children: [
               const SizedBox(height: 24),
-              
+
               /// 🔹 Profile Avatar
               Center(
                 child: Stack(
@@ -440,7 +480,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                     const SizedBox(height: 16),
                     Row(
                       children: [
-                        Expanded(child: _editableField("RC Number", _rcNumberController, 
+                        Expanded(child: _editableField("RC Number", _rcNumberController,
                           isVerified: _agentData?.isRcVerified.toUpperCase() != "REJECTED",
                           verificationMessage: "RC Number can only be modified if rejected.")),
                         const SizedBox(width: 12),
@@ -539,6 +579,14 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                           _pickDocument('VIDEO');
                         }
                       },
+                    ),
+                    const SizedBox(height: 4),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 62),
+                      child: Text(
+                        "Note: Max ${_maxVideoSizeMB.toInt()}MB allowed",
+                        style: GoogleFonts.outfit(fontSize: 11, color: Colors.orange[800], fontWeight: FontWeight.w500),
+                      ),
                     ),
                   ],
                 ),
@@ -735,7 +783,8 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
               )
             else
               Container(
-                padding: const EdgeInsets.all(12),
+                width: 50,
+                height: 50,
                 decoration: BoxDecoration(
                   color: (isActuallyVerified ? AppTheme.successColor : AppTheme.primaryColor).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
