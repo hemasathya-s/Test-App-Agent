@@ -335,6 +335,7 @@ class LoginPageState extends State<LoginPage> {
   final _mobileNumberFocusNode = FocusNode();
   bool _isLoading = false;
   bool _isOtpLogin = true;
+  bool _obscurePassword = true;
 
   @override
   void initState() {
@@ -646,8 +647,16 @@ class LoginPageState extends State<LoginPage> {
                       _buildTextFormField(
                         key: const ValueKey('password_field'),
                         controller: _passwordController,
-                        obscureText: true,
+                        obscureText: _obscurePassword,
                         keyboardType: TextInputType.text,
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                            color: Colors.grey[600],
+                            size: 20,
+                          ),
+                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                        ),
                         validator: (value) {
                           if (value == null || value.isEmpty) return 'Please enter your password';
                           return null;
@@ -735,6 +744,7 @@ class LoginPageState extends State<LoginPage> {
     bool obscureText = false,
     int? maxLength,
     TextInputType? keyboardType,
+    Widget? suffixIcon,
     String? Function(String?)? validator,
   }) {
     return TextFormField(
@@ -770,6 +780,7 @@ class LoginPageState extends State<LoginPage> {
         filled: true,
         fillColor: Colors.white,
         counterText: '',
+        suffixIcon: suffixIcon,
         contentPadding: const EdgeInsets.symmetric(
           vertical: 14.0,
           horizontal: 12.0,
