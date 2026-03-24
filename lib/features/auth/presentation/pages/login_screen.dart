@@ -347,6 +347,7 @@ class LoginPageState extends State<LoginPage> {
 
   @override
   void dispose() {
+    ScaffoldMessenger.of(context).clearSnackBars();
     _mobileNumberController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -390,7 +391,8 @@ class LoginPageState extends State<LoginPage> {
       print('❌ [LoginPage] Error: "$error" | isNewUser: $isNewUser');
 
       if (isNewUser) {
-        // ✅ Show snackbar before redirecting
+        // ✅ No account — redirect to registration using GoRouter
+        ScaffoldMessenger.of(pageContext).clearSnackBars();
         ScaffoldMessenger.of(pageContext).showSnackBar(
           SnackBar(
             content: Text('No account found for this mobile number. Please create an account.', style: GoogleFonts.lato()),
@@ -404,6 +406,7 @@ class LoginPageState extends State<LoginPage> {
         // ✅ No account — redirect to registration using GoRouter
        // context.push('/register', extra: phone);
       } else {
+        ScaffoldMessenger.of(pageContext).clearSnackBars();
         ScaffoldMessenger.of(pageContext).showSnackBar(
           SnackBar(
             content: Text(error, style: GoogleFonts.lato()),
@@ -442,9 +445,11 @@ class LoginPageState extends State<LoginPage> {
 
     if (result.isSuccess) {
       print('✅ [LoginPage] Password Login success');
+      ScaffoldMessenger.of(pageContext).clearSnackBars();
       context.go('/home');
     } else {
       final error = result.error ?? 'Login failed. Please check your credentials.';
+      ScaffoldMessenger.of(pageContext).clearSnackBars();
       ScaffoldMessenger.of(pageContext).showSnackBar(
         SnackBar(
           content: Text(error, style: GoogleFonts.lato()),
@@ -471,6 +476,7 @@ class LoginPageState extends State<LoginPage> {
         onClose: () => Navigator.of(pageContext).pop(),
         onVerified: () {
           // Use GoRouter to navigate to home, ensuring stack is cleared
+          ScaffoldMessenger.of(pageContext).clearSnackBars();
           context.go('/home');
         },
       ),
@@ -712,6 +718,7 @@ class LoginPageState extends State<LoginPage> {
                         ),
                         GestureDetector(
                           onTap: () {
+                            ScaffoldMessenger.of(context).clearSnackBars();
                             context.push(
                               '/register',
                               extra: _mobileNumberController.text.trim(),
@@ -887,6 +894,7 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
     if (result.isSuccess) {
       _otpController.clear();
       _startTimer();
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('OTP resent successfully', style: GoogleFonts.lato()),

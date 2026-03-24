@@ -91,8 +91,13 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
             result.error?.toLowerCase().contains('login') == true) {
           context.go('/login');
         } else {
+          ScaffoldMessenger.of(context).clearSnackBars();
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Error fetching profile: ${result.error ?? 'Unknown error'}")),
+            SnackBar(
+              content: Text("Error fetching profile: ${result.error ?? 'Unknown error'}"),
+              backgroundColor: Colors.black87,
+              behavior: SnackBarBehavior.floating,
+            ),
           );
         }
       }
@@ -121,6 +126,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
 
   @override
   void dispose() {
+    ScaffoldMessenger.of(context).clearSnackBars();
     _phoneController.dispose();
     _vehicleTypeController.dispose();
     _bankNameController.dispose();
@@ -155,11 +161,12 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
 
         if (sizeInMB > _maxVideoSizeMB) {
           if (!mounted) return;
+          ScaffoldMessenger.of(context).clearSnackBars();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Video size exceeds ${_maxVideoSizeMB.toInt()}MB. Please pick a shorter video.',
                 style: GoogleFonts.outfit()),
-              backgroundColor: Colors.red[800],
+              backgroundColor: Colors.black87,
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -202,11 +209,12 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
       final sizeInMB = _videoKyc!.lengthSync() / (1024 * 1024);
       if (sizeInMB > _maxVideoSizeMB) {
         setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Video size exceeds ${_maxVideoSizeMB.toInt()}MB. Please pick a smaller video before submitting.',
               style: GoogleFonts.outfit()),
-            backgroundColor: Colors.red[800],
+            backgroundColor: Colors.black87,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -278,10 +286,11 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
         _panCard == null &&
         _videoKyc == null) {
       setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('No changes to update', style: GoogleFonts.outfit()),
-          backgroundColor: Colors.blueGrey,
+          backgroundColor: Colors.black87,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -303,11 +312,12 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     setState(() => _isLoading = false);
 
     if (result.isSuccess) {
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Profile updated successfully',
               style: GoogleFonts.outfit()),
-          backgroundColor: Colors.grey,
+          backgroundColor: Colors.black87,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10)),
@@ -319,11 +329,12 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
           result.error?.toLowerCase().contains('login') == true) {
         context.go('/login');
       } else {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(result.error ?? 'Update failed',
                 style: GoogleFonts.outfit()),
-            backgroundColor: Colors.grey,
+            backgroundColor: Colors.black87,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10)),
@@ -677,10 +688,11 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
   }
 
   void _showVerifiedSnackbar(String message) {
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message, style: GoogleFonts.outfit()),
-        backgroundColor: Colors.orange[800],
+        backgroundColor: Colors.black87,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
