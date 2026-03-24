@@ -37,6 +37,9 @@ dependencies:
   firebase_database: ^10.5.7
   firebase_core: ^2.0.0
   flutter_local_notifications: ^17.2.1
+  video_player: ^2.10.1
+  chewie: ^1.13.0
+  video_compress: ^3.1.4
 
 dev_dependencies:
   flutter_test:

@@ -20,15 +20,24 @@ class AgentProfileData {
   final String userId;
   final String userName;
   final AgentUserDetails userDetails;
+
   final String? aadharDocUrl;
   final String? panCardUrl;
   final String? videoKycUrl;
+  final String? rcDocumentUrl;
+  final String? licenseDocumentUrl;
+  final String? profileImageUrl;
+
+  final String? rcNumber;
+  final String? licenseNumber;
+
   final String isPanVerified;
   final String isAadharVerified;
+  final String isVideoKycVerified;
   final String isRcVerified;
   final String isLicenseVerified;
+
   final String cumulativeRating;
-  final String? profileImageUrl;
   final String? startTime;
   final String? endTime;
   final String? agentType;
@@ -39,10 +48,13 @@ class AgentProfileData {
   final String? upiId;
   final String? vehicleType;
   final String? vehicleNumber;
-  final String? rcNumber;
-  final String? licenseNumber;
-  final String? rcDocumentUrl;
-  final String? licenseDocumentUrl;
+
+  // Raw model IDs — useful if you need to reference them later
+  final String? aadharDocModelId;
+  final String? panCardModelId;
+  final String? videoKycModelId;
+  final String? rcDocModelId;
+  final String? licenseDocModelId;
 
   AgentProfileData({
     required this.id,
@@ -52,12 +64,17 @@ class AgentProfileData {
     this.aadharDocUrl,
     this.panCardUrl,
     this.videoKycUrl,
+    this.rcDocumentUrl,
+    this.licenseDocumentUrl,
+    this.profileImageUrl,
+    this.rcNumber,
+    this.licenseNumber,
     required this.isPanVerified,
     required this.isAadharVerified,
+    required this.isVideoKycVerified,
     required this.isRcVerified,
     required this.isLicenseVerified,
     required this.cumulativeRating,
-    this.profileImageUrl,
     this.startTime,
     this.endTime,
     this.agentType,
@@ -68,62 +85,115 @@ class AgentProfileData {
     this.upiId,
     this.vehicleType,
     this.vehicleNumber,
-    this.rcNumber,
-    this.licenseNumber,
-    this.rcDocumentUrl,
-    this.licenseDocumentUrl,
+    this.aadharDocModelId,
+    this.panCardModelId,
+    this.videoKycModelId,
+    this.rcDocModelId,
+    this.licenseDocModelId,
   });
 
-  factory AgentProfileData.fromJson(Map<String, dynamic> json) {
-    final details = json['agent_details'] as Map<String, dynamic>? ?? {};
-    
-    String? _ensureAbsoluteUrl(dynamic url) {
-      if (url == null) return null;
-      String urlStr = url.toString();
-      if (urlStr.isEmpty) return null;
-      if (urlStr.startsWith('/')) {
-        return 'https://api.itfixer199.com$urlStr';
-      }
-      return urlStr;
-    }
+  static String _parseStatus(dynamic value) {
+    if (value == null) return 'PENDING';
+    if (value is bool) return value ? 'VERIFIED' : 'PENDING';
+    if (value is int) return value == 1 ? 'VERIFIED' : 'PENDING';
+    final s = value.toString().trim().toUpperCase();
+    if (s == 'TRUE') return 'VERIFIED';
+    if (s == 'FALSE') return 'PENDING';
+    return s.isEmpty ? 'PENDING' : s;
+  }
 
-    String? profileUrl = _ensureAbsoluteUrl(details['profile_image_url']);
+  static String? _ensureAbsoluteUrl(dynamic url) {
+    if (url == null) return null;
+    final urlStr = url.toString().trim();
+    if (urlStr.isEmpty || urlStr == 'null') return null;
+    if (urlStr.startsWith('http')) return urlStr;
+    const baseUrl = 'https://api.itfixer199.com';
+    return urlStr.startsWith('/') ? '$baseUrl$urlStr' : '$baseUrl/$urlStr';
+  }
+
+  factory AgentProfileData.fromJson(Map<String, dynamic> json) {
+    // Safely extract agent_details — default to empty map if missing
+    final agentDetails = (json['agent_details'] is Map)
+        ? json['agent_details'] as Map<String, dynamic>
+        : <String, dynamic>{};
 
     return AgentProfileData(
-      id: details['agent_id']?.toString() ?? json['id']?.toString() ?? '',
-      userId: json['id']?.toString() ?? '', 
+      id: json['id']?.toString() ?? '',
+      userId: json['id']?.toString() ?? '',
       userName: json['name']?.toString() ?? '',
       userDetails: AgentUserDetails.fromJson(json),
-      aadharDocUrl: details['aadhar_doc_url'],
-      panCardUrl: details['pan_card_url'],
-      videoKycUrl: details['video_kyc_url'],
-      isPanVerified: details['is_pan_verified']?.toString() ?? 'PENDING',
-      isAadharVerified: details['is_aadhar_verified']?.toString() ?? 'PENDING',
-      isRcVerified: details['is_rc_verified']?.toString() ?? 'PENDING',
-      isLicenseVerified: details['is_license_verified']?.toString() ?? 'PENDING',
-      cumulativeRating: details['cumulative_rating']?.toString() ?? '0.00',
-      profileImageUrl: profileUrl,
-      startTime: details['start_time'],
-      endTime: details['end_time'],
-      agentType: details['agent_type'],
-      isAdminPermissionRequired: details['is_admin_permission_required'] ?? false,
-      bankName: details['bank_name'],
-      accountNumber: details['account_number'],
-      ifscCode: details['ifsc_code'],
-      upiId: details['upi_id'],
-      vehicleType: details['vehicle_type'],
-      vehicleNumber: details['vehicle_number'],
-      rcNumber: details['rc_number'],
-      licenseNumber: details['license_number'],
-      rcDocumentUrl: _ensureAbsoluteUrl(details['rc_doc_url'] ?? details['rc_doc'] ?? details['rc_document_url']),
-      licenseDocumentUrl: _ensureAbsoluteUrl(details['license_doc_url'] ?? details['license_doc'] ?? details['license_document_url']),
+
+      // ── Document URLs ──────────────────────────────────────────────
+      // API uses: aadhar_doc_url, pan_card_url, video_kyc_url,
+      //           rc_doc_url, license_doc_url
+      aadharDocUrl: _ensureAbsoluteUrl(agentDetails['aadhar_doc_url']),
+      panCardUrl: _ensureAbsoluteUrl(agentDetails['pan_card_url']),
+      videoKycUrl: _ensureAbsoluteUrl(agentDetails['video_kyc_url']),
+
+      // rc and license — API sends rc_doc_url / license_doc_url
+      // fallback keys kept for safety
+      rcDocumentUrl: _ensureAbsoluteUrl(
+        agentDetails['rc_doc_url'] ??
+            agentDetails['rc_document_url'] ??
+            agentDetails['rc_doc'] ??
+            json['rc_doc_url'] ??
+            json['rc_document_url'] ??
+            json['rc_doc'],
+      ),
+      licenseDocumentUrl: _ensureAbsoluteUrl(
+        agentDetails['license_doc_url'] ??
+            agentDetails['license_document_url'] ??
+            agentDetails['license_doc'] ??
+            json['license_doc_url'] ??
+            json['license_document_url'] ??
+            json['license_doc'],
+      ),
+
+      // Profile image can be at top level or inside agent_details
+      profileImageUrl: _ensureAbsoluteUrl(
+        json['profile_image_url'] ??
+            agentDetails['profile_image_url'],
+      ),
+
+      // ── Document model IDs ─────────────────────────────────────────
+      aadharDocModelId: agentDetails['aadhar_doc_url_model_id']?.toString(),
+      panCardModelId: agentDetails['pan_card_url_model_id']?.toString(),
+      videoKycModelId: agentDetails['video_kyc_url_model_id']?.toString(),
+      rcDocModelId: agentDetails['rc_doc_url_model_id']?.toString(),
+      licenseDocModelId: agentDetails['license_doc_url_model_id']?.toString(),
+
+      // ── Numbers ────────────────────────────────────────────────────
+      rcNumber: agentDetails['rc_number']?.toString(),
+      licenseNumber: agentDetails['license_number']?.toString(),
+
+      // ── Verification statuses ──────────────────────────────────────
+      // Normalizing statuses to consistent "VERIFIED", "PENDING", or original string
+      isPanVerified: _parseStatus(agentDetails['is_pan_verified']),
+      isAadharVerified: _parseStatus(agentDetails['is_aadhar_verified']),
+      isVideoKycVerified: _parseStatus(agentDetails['is_video_kyc_verified']),
+      isRcVerified: _parseStatus(agentDetails['is_rc_verified']),
+      isLicenseVerified: _parseStatus(agentDetails['is_license_verified']),
+
+      // ── Other agent details ────────────────────────────────────────
+      cumulativeRating:
+      agentDetails['cumulative_rating']?.toString() ?? '0.00',
+      startTime: agentDetails['start_time']?.toString(),
+      endTime: agentDetails['end_time']?.toString(),
+      agentType: agentDetails['agent_type']?.toString(),
+      isAdminPermissionRequired:
+      agentDetails['is_admin_permission_required'] == true,
+      bankName: agentDetails['bank_name']?.toString(),
+      accountNumber: agentDetails['account_number']?.toString(),
+      ifscCode: agentDetails['ifsc_code']?.toString(),
+      upiId: agentDetails['upi_id']?.toString(),
+      vehicleType: agentDetails['vehicle_type']?.toString(),
+      vehicleNumber: agentDetails['vehicle_number']?.toString(),
     );
   }
 }
 
 class AgentUserDetails {
   final String id;
-  final String agentId;
   final String name;
   final String email;
   final String mobileNumber;
@@ -131,13 +201,15 @@ class AgentUserDetails {
   final bool isMobileVerified;
   final bool isEmailVerified;
   final String status;
+  final String? comments;
   final bool isStaff;
   final bool isActive;
   final bool isSuperuser;
+  final String? dateJoined;
+  final String? hubId;
 
   AgentUserDetails({
     required this.id,
-    required this.agentId,
     required this.name,
     required this.email,
     required this.mobileNumber,
@@ -145,27 +217,30 @@ class AgentUserDetails {
     required this.isMobileVerified,
     required this.isEmailVerified,
     required this.status,
+    this.comments,
     required this.isStaff,
     required this.isActive,
     required this.isSuperuser,
+    this.dateJoined,
+    this.hubId,
   });
 
   factory AgentUserDetails.fromJson(Map<String, dynamic> json) {
-    final details = json['agent_details'] as Map<String, dynamic>? ?? {};
-    
     return AgentUserDetails(
       id: json['id']?.toString() ?? '',
-      agentId: details['agent_id']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
       email: json['email']?.toString() ?? '',
       mobileNumber: json['mobile_number']?.toString() ?? '',
       role: json['role']?.toString() ?? 'AGENT',
-      isMobileVerified: json['is_mobile_verified'] ?? false,
-      isEmailVerified: json['is_email_verified'] ?? false,
+      isMobileVerified: json['is_mobile_verified'] == true,
+      isEmailVerified: json['is_email_verified'] == true,
       status: json['status']?.toString() ?? 'PENDING',
-      isStaff: json['is_staff'] ?? false,
-      isActive: json['is_active'] ?? false,
-      isSuperuser: json['is_superuser'] ?? false,
+      comments: json['comments']?.toString(),
+      isStaff: json['is_staff'] == true,
+      isActive: json['is_active'] == true,
+      isSuperuser: json['is_superuser'] == true,
+      dateJoined: json['date_joined']?.toString(),
+      hubId: json['hub_id']?.toString(),
     );
   }
 }
