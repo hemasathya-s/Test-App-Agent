@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import '../../../../core/services/apiservices.dart';
 
 class OrderItem {
   final String id;
@@ -103,12 +104,14 @@ class OrderModificationState {
   final String? note;
   final bool isWaitingForApproval;
   final List<RequestRecord> requestHistory;
+  final double basePrice;
 
   const OrderModificationState({
     this.items = const [],
     this.note,
     this.isWaitingForApproval = false,
     this.requestHistory = const [],
+    this.basePrice = 0.0,
   });
 
   OrderModificationState copyWith({
@@ -116,12 +119,14 @@ class OrderModificationState {
     String? note,
     bool? isWaitingForApproval,
     List<RequestRecord>? requestHistory,
+    double? basePrice,
   }) {
     return OrderModificationState(
       items: items ?? this.items,
       note: note ?? this.note,
       isWaitingForApproval: isWaitingForApproval ?? this.isWaitingForApproval,
       requestHistory: requestHistory ?? this.requestHistory,
+      basePrice: basePrice ?? this.basePrice,
     );
   }
 
@@ -145,12 +150,34 @@ class OrderModificationState {
       items.where((i) => !i.isNew).fold(0, (sum, i) => sum + (i.originalPrice * i.originalQuantity));
 
   // New total reflects the current modifications
-  double get newTotal =>
-      items.where((i) => !i.isRemoved).fold(0, (sum, i) => sum + (i.price * i.quantity));
+  double get newTotal {
+    final activeItems = items.where((i) => !i.isRemoved);
+    final itemsTotal = activeItems.fold(0.0, (sum, i) => sum + (i.price * i.quantity));
+    
+    // Add base price only if ALL items are removed
+    if (activeItems.isEmpty && basePrice > 0) {
+      return basePrice;
+    }
+    return itemsTotal;
+  }
 }
 
 class OrderModificationController extends StateNotifier<OrderModificationState> {
-  OrderModificationController() : super(const OrderModificationState(items: [], requestHistory: []));
+  OrderModificationController() : super(const OrderModificationState(items: [], requestHistory: [])) {
+    fetchBasePrice();
+  }
+
+  Future<void> fetchBasePrice() async {
+    try {
+      final settings = await ApiService.getAppSettings();
+      if (settings != null && settings['base_price'] != null) {
+        final bp = double.tryParse(settings['base_price'].toString()) ?? 0.0;
+        state = state.copyWith(basePrice: bp);
+      }
+    } catch (e) {
+      debugPrint('Error fetching base price: $e');
+    }
+  }
 
   /// Load real items from the API OrderDetails into the modification state
   void loadFromOrderItems(List<OrderItem> items) {

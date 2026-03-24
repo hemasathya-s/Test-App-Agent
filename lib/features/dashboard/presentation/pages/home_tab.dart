@@ -31,7 +31,11 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     // Show permission dialog when missing
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (state.showPermissionDialog) {
+        controller.dismissPermissionDialog(); // CLEAR IT IMMEDIATELY
         _showPermissionDialog(context, ref);
+      }
+      if (state.toggleError != null) {
+        _showToggleErrorDialog(context, ref, state.toggleError!);
       }
     });
 
@@ -347,6 +351,54 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     );
   }
 
+  void _showToggleErrorDialog(
+      BuildContext context, WidgetRef ref, String message) {
+    final controller = ref.read(dashboardProvider.notifier);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Status Update Failed',
+                style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          message,
+          style: GoogleFonts.outfit(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              controller.clearToggleError();
+              Navigator.pop(ctx);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text(
+              'OK',
+              style: GoogleFonts.outfit(
+                  color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHeaderIcon(IconData icon) {
     return Container(
       width: 42,
@@ -376,10 +428,10 @@ class _HomeTabState extends ConsumerState<HomeTab> {
           child: Container(
             width: 8,
             height: 8,
-            decoration: const BoxDecoration(
-              color: Colors.red,
-              shape: BoxShape.circle,
-            ),
+            // decoration: const BoxDecoration(
+            //   color: Colors.red,
+            //   shape: BoxShape.circle,
+            // ),
           ),
         ),
       ],
@@ -393,7 +445,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     WidgetRef ref,
   ) {
     return GestureDetector(
-      onTap: () async {
+      onTap: state.isLoading ? null : () async {
         if (!state.isAvailable) {
           // GOING ONLINE
           await controller.toggleAvailability(true);

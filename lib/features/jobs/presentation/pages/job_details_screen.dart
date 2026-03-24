@@ -258,8 +258,6 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 24),
-
                       _buildSectionHeader('Status Info'),
                       Container(
                         padding: const EdgeInsets.all(16),
@@ -276,6 +274,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                           ],
                         ),
                       ),
+                      const SizedBox(height: 24),
                     ],
                   ),
                 ],
@@ -1067,6 +1066,9 @@ print("Order ttt $orderId");
   }
 
   Widget _buildStatusItem(String label, String value) {
+    // Replace underscores with spaces for cleaner UI
+    final displayValue = value.replaceAll('_', ' ');
+    
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -1083,7 +1085,7 @@ print("Order ttt $orderId");
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              value,
+              displayValue,
               style: GoogleFonts.outfit(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
@@ -1095,6 +1097,7 @@ print("Order ttt $orderId");
       ),
     );
   }
+
 
   Widget _buildLabel(String text) {
     return Text(

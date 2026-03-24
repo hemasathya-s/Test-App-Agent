@@ -616,7 +616,7 @@ print("service Response body ${response.body}");
     }
   }
 
-  static Future<bool?> toggleActiveStatus() async {
+  static Future<ApiResponse<bool?>> toggleActiveStatus() async {
     try {
       String url = '$baseUrl/api/user/toggle-active';
       print("Calling Toggle API: $url");
@@ -634,23 +634,24 @@ print("service Response body ${response.body}");
       print("Status Code: ${response.statusCode}");
       print("Raw Response: ${response.body}");
 
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-
         bool? isActive = data['data']['is_active'];
-
         print("Toggle Success - is_active value: $isActive");
-
-        return isActive;
+        return ApiResponse(isSuccess: true, data: isActive);
       } else {
         print("Toggle Failed with status code: ${response.statusCode}");
+        String message = 'Failed to toggle status';
+        try {
+          final data = jsonDecode(response.body);
+          message = data['message'] ?? data['detail'] ?? message;
+        } catch (_) {}
+        return ApiResponse(isSuccess: false, error: message);
       }
     } catch (e) {
       print("Error toggling active status: $e");
+      return ApiResponse(isSuccess: false, error: e.toString());
     }
-
-    return null;
   }
   static Future<void> addFcmToken() async {
     print("🔔 [addFcmToken] Starting token registration...");
@@ -2247,7 +2248,7 @@ print("service Response body ${response.body}");
       String errorMsg = 'Failed to request movement (${response.statusCode})';
       try {
         final data = jsonDecode(response.body);
-        if (response.statusCode == 422 && data['errors'] != null) {
+        if (response.statusCode == 422 || data['errors'] != null) {
           final errors = data['errors'];
           if (data['errors'] != null) {
             errorMsg = data['errors'];
@@ -2257,6 +2258,7 @@ print("service Response body ${response.body}");
         } else {
           errorMsg = data['message'] ?? data['detail'] ?? errorMsg;
         }
+        print('❌ requestToolMovement error: $data');
       } catch (_) {}
       return ApiResponse(isSuccess: false, error: errorMsg);
     } catch (e) {
@@ -2368,10 +2370,15 @@ print("service Response body ${response.body}");
       try {
         final data = jsonDecode(response.body);
         if (response.statusCode == 422 && data['errors'] != null) {
-          // Flatten validation errors if present
-          // final errors = data['errors'];
-          if (data['errors'] != null) {
-            errorMsg = data['errors'];
+          final errors = data['errors'];
+
+          if (errors['tools_id'] != null) {
+            // Ensure it's a list and join messages
+            if (errors['tools_id'] is List) {
+              errorMsg = (errors['tools_id'] as List).join('\n');
+            } else {
+              errorMsg = errors['tools_id'].toString();
+            }
           } else {
             errorMsg = data['message'] ?? errorMsg;
           }

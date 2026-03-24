@@ -20,6 +20,7 @@ class DashboardState {
   final String? error;
   final bool showPermissionDialog;
   final List<String> missingPermissions;
+  final String? toggleError;
 
   const DashboardState({
     this.currentTabIndex = 0,
@@ -32,6 +33,7 @@ class DashboardState {
     this.error,
     this.showPermissionDialog = false,
     this.missingPermissions = const [],
+    this.toggleError,
   });
 
   DashboardState copyWith({
@@ -45,6 +47,7 @@ class DashboardState {
     Object? error = _sentinel,
     bool? showPermissionDialog,
     List<String>? missingPermissions,
+    Object? toggleError = _sentinel,
   }) {
     return DashboardState(
       currentTabIndex: currentTabIndex ?? this.currentTabIndex,
@@ -59,6 +62,7 @@ class DashboardState {
       error: error == _sentinel ? this.error : error as String?,
       showPermissionDialog: showPermissionDialog ?? this.showPermissionDialog,
       missingPermissions: missingPermissions ?? this.missingPermissions,
+      toggleError: toggleError == _sentinel ? this.toggleError : toggleError as String?,
     );
   }
 }
@@ -155,63 +159,101 @@ class DashboardController extends Notifier<DashboardState> {
   }
 
   Future<void> requestPermissions() async {
-    // 1. Clear current dialog state to prevent rebuild loops
+    // 1. Clear current dialog state
     state = state.copyWith(showPermissionDialog: false);
 
-    // 2. Request basic permissions first
-    await [
-      Permission.location,
-      Permission.notification,
-    ].request();
+    // 2. Check current status
+    final locationStatus = await Permission.location.status;
+    final notificationStatus = await Permission.notification.status;
 
-    // 3. Request background location
+    // 3. Handle Permission Request Logic
+    if (locationStatus.isPermanentlyDenied || notificationStatus.isPermanentlyDenied) {
+      // If permanently denied, must open settings
+      await openAppSettings();
+    } else {
+      // Request permissions
+      await [
+        Permission.location,
+        Permission.notification,
+      ].request();
+    }
+
+    // 4. Request background location if needed
     if (await Permission.location.isGranted) {
       await Permission.locationAlways.request();
     }
 
-    // 4. Request battery optimization exemption
-    await Permission.ignoreBatteryOptimizations.request();
+    // 5. Request battery optimization exemption (Non-blocking)
+    if (!await Permission.ignoreBatteryOptimizations.isGranted) {
+      await Permission.ignoreBatteryOptimizations.request();
+    }
 
-    // 5. Re-check status
+    // 6. Re-check status
     await _checkPermissions();
 
-    // If essential tracking permissions are granted, try to go online
-    final hasLocation = await Permission.location.isGranted;
-    final hasNotification = await Permission.notification.isGranted;
-    if (hasLocation && hasNotification) {
-       // Only start if they aren't already online
-       if (!state.isAvailable) {
-         await toggleAvailability(true);
-       }
+    // If essential tracking permissions are now granted, automatically try to go online
+    final hasLoc = await Permission.location.isGranted;
+    final hasNotif = await Permission.notification.isGranted;
+    if (hasLoc && hasNotif && !state.isAvailable) {
+       await toggleAvailability(true);
     }
   }
 
   Future<void> toggleAvailability(bool value) async {
+    // 1. Check permissions if going online
     if (value) {
       final hasLocation = await Permission.location.isGranted;
       final hasNotification = await Permission.notification.isGranted;
 
-      if (hasLocation && hasNotification) {
-        _startBackgroundService();
-        state = state.copyWith(isAvailable: true, showPermissionDialog: false);
-      } else {
+      if (!hasLocation || !hasNotification) {
         state = state.copyWith(isAvailable: false);
         _checkPermissions();
         return;
       }
-    } else {
-      _stopBackgroundService();
-      state = state.copyWith(isAvailable: false);
     }
 
-    // Call API to sync status with server
-    await ApiService.toggleActiveStatus();
-    
-    // Refresh jobs to reflect new availability
-    await fetchUpcomingJobs();
+    state = state.copyWith(isLoading: true, toggleError: null);
+
+    try {
+      // 2. Call API first to sync status with server
+      final result = await ApiService.toggleActiveStatus();
+
+      if (result.isSuccess) {
+        // Success: Update local state and background service
+        if (value) {
+          _startBackgroundService();
+        } else {
+          _stopBackgroundService();
+        }
+
+        state = state.copyWith(
+          isAvailable: value,
+          showPermissionDialog: false,
+          isLoading: false,
+        );
+
+        // Refresh jobs to reflect new availability
+        await fetchUpcomingJobs();
+      } else {
+        // Failure: Don't update isAvailable, just show error
+        state = state.copyWith(
+          isLoading: false,
+          toggleError: result.error,
+        );
+      }
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        toggleError: e.toString(),
+      );
+    }
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_availabilityKey, state.isAvailable);
+  }
+
+  void clearToggleError() {
+    state = state.copyWith(toggleError: null);
   }
 
   void _startBackgroundService() {

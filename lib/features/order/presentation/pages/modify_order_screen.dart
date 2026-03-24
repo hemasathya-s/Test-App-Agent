@@ -235,7 +235,7 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
     final customerName = widget.order?.customerName ?? 'Unknown Customer';
     final customerEmail = widget.order?.userDetails?.email ?? '';
     final orderId = widget.order?.id ?? 'N/A';
-    final orderStatus = widget.order?.orderStatus ?? 'Active';
+    final orderStatus = (widget.order?.orderStatus ?? 'Active').replaceAll('_', ' ');
     final totalPrice = widget.order?.totalPrice ?? '0.00';
 
     return Scaffold(
@@ -390,25 +390,86 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
                   ),
                   child: Column(
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Original Total',
-                            style: GoogleFonts.outfit(
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                          Text(
-                            '₹$totalPrice',
-                            style: GoogleFonts.outfit(
-                              color: AppTheme.textSecondary,
-                              decoration: TextDecoration.lineThrough,
-                            ),
-                          ),
-                        ],
-                      ),
                       const SizedBox(height: 8),
+                      // Show Base Price only if all items are removed
+                      if (state.items.where((i) => !i.isRemoved).isEmpty && state.basePrice > 0) ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  'Base Price',
+                                  style: GoogleFonts.outfit(color: AppTheme.textSecondary),
+                                ),
+                                const SizedBox(width: 8),
+                                GestureDetector(
+                                  onTap: () {
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                        title: Text('Information', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                                        content: Text(
+                                          'If all services or products are removed, the customer should pay this base fee.',
+                                          style: GoogleFonts.outfit(),
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(context),
+                                            child: Text('OK', style: GoogleFonts.outfit(color: AppTheme.primaryColor, fontWeight: FontWeight.bold)),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.primaryColor.withOpacity(0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      Icons.info_outline,
+                                      size: 14,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              '₹${state.basePrice.toStringAsFixed(2)}',
+                              style: GoogleFonts.outfit(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                      ]
+                      else if (state.originalTotal != state.newTotal) ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Original Total',
+                              style: GoogleFonts.outfit(
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                            Text(
+                              '₹$totalPrice',
+                              style: GoogleFonts.outfit(
+                                color: AppTheme.textSecondary,
+                                decoration: TextDecoration.lineThrough,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -448,7 +509,9 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              '+ ₹${(state.newTotal - state.originalTotal).toStringAsFixed(2)}',
+                                 (state.items.where((i) => !i.isRemoved).isEmpty && state.basePrice > 0)
+                                     ? '₹${state.basePrice.toStringAsFixed(2)}'
+                                     : '+ ₹${(state.newTotal - state.originalTotal).toStringAsFixed(2)}',
                               style: GoogleFonts.outfit(
                                 fontWeight: FontWeight.bold,
                                 color: AppTheme.primaryColor,
@@ -578,6 +641,16 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
                   const SizedBox(height: 12),
                 ],
                 const Divider(),
+                if (state.items.where((i) => !i.isRemoved).isEmpty && state.basePrice > 0) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Base Price:', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
+                      Text('₹${state.basePrice.toStringAsFixed(2)}', style: GoogleFonts.outfit()),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [

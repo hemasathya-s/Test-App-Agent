@@ -21,10 +21,12 @@ class AppSettings {
 class AppSettingsData {
   final int appVersion;
   final String? playStoreUrl;
+  final double? basePrice;
 
   AppSettingsData({
     required this.appVersion,
     this.playStoreUrl,
+    this.basePrice,
   });
 
   factory AppSettingsData.fromJson(Map<String, dynamic> json) {
@@ -32,6 +34,7 @@ class AppSettingsData {
       // Parsing app_version as int. It might be a string in the JSON "0"
       appVersion: int.tryParse(json['partner_app_version'].toString()) ?? 0,
       playStoreUrl: json['partner_app_play_store_url'],
+      basePrice: json['base_price'] != null ? double.tryParse(json['base_price'].toString()) : null,
     );
   }
 }
