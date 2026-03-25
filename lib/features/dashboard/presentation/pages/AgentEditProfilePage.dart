@@ -31,7 +31,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
   late final TextEditingController _rcNumberController;
   late final TextEditingController _licenseNumberController;
 
-  bool _isLoading = true; // Start with loading for fetch
+  bool _isLoading = true;
   AgentProfileData? _agentData;
   File? _profileImage;
   File? _rcDocument;
@@ -41,64 +41,113 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
   File? _videoKyc;
   final ImagePicker _picker = ImagePicker();
 
-  // 🔹 Max allowed video size (e.g. 25 MB)
   static const double _maxVideoSizeMB = 20.0;
+
+  // ── Snapshot of original values to detect changes ────────────────────────
+  String _origName = '';
+  String _origEmail = '';
+  String _origVehicleType = '';
+  String _origVehicleNumber = '';
+  String _origBankName = '';
+  String _origAccountNumber = '';
+  String _origIfsc = '';
+  String _origUpi = '';
+  String _origRcNumber = '';
+  String _origLicenseNumber = '';
+
+  /// Returns true if the user has made any unsaved changes.
+  bool get _hasChanges {
+    if (_profileImage != null) return true;
+    if (_rcDocument != null) return true;
+    if (_licenseDocument != null) return true;
+    if (_aadharDoc != null) return true;
+    if (_panCard != null) return true;
+    if (_videoKyc != null) return true;
+    if (_nameController.text.trim() != _origName) return true;
+    if (_emailController.text.trim() != _origEmail) return true;
+    if (_vehicleTypeController.text.trim() != _origVehicleType) return true;
+    if (_vehicleNumberController.text.trim() != _origVehicleNumber) return true;
+    if (_bankNameController.text.trim() != _origBankName) return true;
+    if (_accountNumberController.text.trim() != _origAccountNumber) return true;
+    if (_ifscController.text.trim() != _origIfsc) return true;
+    if (_upiController.text.trim() != _origUpi) return true;
+    if (_rcNumberController.text.trim() != _origRcNumber) return true;
+    if (_licenseNumberController.text.trim() != _origLicenseNumber) return true;
+    return false;
+  }
 
   @override
   void initState() {
     super.initState();
     _agentData = widget.agentData;
     _initControllers(_agentData!);
-    _fetchProfile(); // Fetch fresh data
+    _fetchProfile();
   }
 
   void _initControllers(AgentProfileData agent) {
     String name = agent.userDetails.name;
-    if (name.isEmpty && agent.userName.isNotEmpty) {
-      name = agent.userName;
-    }
+    if (name.isEmpty && agent.userName.isNotEmpty) name = agent.userName;
+
     _nameController = TextEditingController(text: name);
     _emailController = TextEditingController(text: agent.userDetails.email);
     _phoneController = TextEditingController(text: agent.userDetails.mobileNumber);
-    _vehicleTypeController = TextEditingController(text: agent.vehicleType ?? "");
-    _vehicleNumberController = TextEditingController(text: agent.vehicleNumber ?? "");
-    _bankNameController = TextEditingController(text: agent.bankName ?? "");
-    _accountNumberController = TextEditingController(text: agent.accountNumber ?? "");
-    _ifscController = TextEditingController(text: agent.ifscCode ?? "");
-    _upiController = TextEditingController(text: agent.upiId ?? "");
-    _rcNumberController = TextEditingController(text: agent.rcNumber ?? "");
-    _licenseNumberController = TextEditingController(text: agent.licenseNumber ?? "");
+    _vehicleTypeController = TextEditingController(text: agent.vehicleType ?? '');
+    _vehicleNumberController = TextEditingController(text: agent.vehicleNumber ?? '');
+    _bankNameController = TextEditingController(text: agent.bankName ?? '');
+    _accountNumberController = TextEditingController(text: agent.accountNumber ?? '');
+    _ifscController = TextEditingController(text: agent.ifscCode ?? '');
+    _upiController = TextEditingController(text: agent.upiId ?? '');
+    _rcNumberController = TextEditingController(text: agent.rcNumber ?? '');
+    _licenseNumberController = TextEditingController(text: agent.licenseNumber ?? '');
+
+    _saveOriginalValues(agent);
+  }
+
+  /// Captures the baseline so _hasChanges can diff against it.
+  void _saveOriginalValues(AgentProfileData agent) {
+    String name = agent.userDetails.name;
+    if (name.isEmpty && agent.userName.isNotEmpty) name = agent.userName;
+
+    _origName = name;
+    _origEmail = agent.userDetails.email;
+    _origVehicleType = agent.vehicleType ?? '';
+    _origVehicleNumber = agent.vehicleNumber ?? '';
+    _origBankName = agent.bankName ?? '';
+    _origAccountNumber = agent.accountNumber ?? '';
+    _origIfsc = agent.ifscCode ?? '';
+    _origUpi = agent.upiId ?? '';
+    _origRcNumber = agent.rcNumber ?? '';
+    _origLicenseNumber = agent.licenseNumber ?? '';
   }
 
   Future<void> _fetchProfile() async {
-    print("📡 Fetching fresh profile data...");
+    print('📡 Fetching fresh profile data...');
     final result = await ApiService.getAgentProfile();
     if (result.isSuccess && result.data != null) {
       if (mounted) {
         setState(() {
           _agentData = result.data!.agent;
-          print("✅ Fresh Profile Parsed: UserId='${_agentData?.userId}', Name='${_agentData?.userDetails.name}'");
           _updateControllers(_agentData!);
+          // Reset baseline after fresh fetch so only POST-fetch edits count
+          _saveOriginalValues(_agentData!);
           _isLoading = false;
         });
       }
     } else {
       if (mounted) {
         setState(() => _isLoading = false);
-        print("❌ Failed to fetch fresh profile: ${result.error}");
-
+        print('❌ Failed to fetch fresh profile: ${result.error}');
         if (result.error?.toLowerCase().contains('authenticated') == true ||
             result.error?.toLowerCase().contains('login') == true) {
           context.go('/login');
         } else {
-          ScaffoldMessenger.of(context).clearSnackBars();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text("Error fetching profile: ${result.error ?? 'Unknown error'}"),
+          ScaffoldMessenger.of(context)
+            ..clearSnackBars()
+            ..showSnackBar(SnackBar(
+              content: Text('Error fetching profile: ${result.error ?? 'Unknown error'}'),
               backgroundColor: Colors.black87,
               behavior: SnackBarBehavior.floating,
-            ),
-          );
+            ));
         }
       }
     }
@@ -106,29 +155,29 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
 
   void _updateControllers(AgentProfileData agent) {
     String name = agent.userDetails.name;
-    if (name.isEmpty && agent.userName.isNotEmpty) {
-      name = agent.userName;
-    }
-    print("✏️ Profile Update -> Name: $name, Vehicle: ${agent.vehicleType}/${agent.vehicleNumber}, Bank: ${agent.bankName}/${agent.accountNumber}");
+    if (name.isEmpty && agent.userName.isNotEmpty) name = agent.userName;
 
     _nameController.text = name;
     _emailController.text = agent.userDetails.email;
     _phoneController.text = agent.userDetails.mobileNumber;
-    _vehicleTypeController.text = agent.vehicleType ?? "";
-    _vehicleNumberController.text = agent.vehicleNumber ?? "";
-    _bankNameController.text = agent.bankName ?? "";
-    _accountNumberController.text = agent.accountNumber ?? "";
-    _ifscController.text = agent.ifscCode ?? "";
-    _upiController.text = agent.upiId ?? "";
-    _rcNumberController.text = agent.rcNumber ?? "";
-    _licenseNumberController.text = agent.licenseNumber ?? "";
+    _vehicleTypeController.text = agent.vehicleType ?? '';
+    _vehicleNumberController.text = agent.vehicleNumber ?? '';
+    _bankNameController.text = agent.bankName ?? '';
+    _accountNumberController.text = agent.accountNumber ?? '';
+    _ifscController.text = agent.ifscCode ?? '';
+    _upiController.text = agent.upiId ?? '';
+    _rcNumberController.text = agent.rcNumber ?? '';
+    _licenseNumberController.text = agent.licenseNumber ?? '';
   }
 
   @override
   void dispose() {
     ScaffoldMessenger.of(context).clearSnackBars();
+    _nameController.dispose();
+    _emailController.dispose();
     _phoneController.dispose();
     _vehicleTypeController.dispose();
+    _vehicleNumberController.dispose();
     _bankNameController.dispose();
     _accountNumberController.dispose();
     _ifscController.dispose();
@@ -138,13 +187,79 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     super.dispose();
   }
 
+  // ── Back / discard guard ──────────────────────────────────────────────────
+
+  /// Call this everywhere you want to "go back".
+  /// Shows the discard dialog only when there are unsaved changes.
+  Future<void> _handleBackPress() async {
+    if (!_hasChanges) {
+      Navigator.pop(context);
+      return;
+    }
+    await _showDiscardDialog();
+  }
+
+  Future<void> _showDiscardDialog() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFFFDF2ED),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        title: Text(
+          'Discard Changes?',
+          style: GoogleFonts.outfit(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            color: Colors.black87,
+          ),
+        ),
+        content: Text(
+          'You have unsaved information. Leaving now will discard your changes.',
+          style: GoogleFonts.outfit(
+            fontSize: 14,
+            color: Colors.black54,
+          ),
+        ),
+        actionsPadding:
+        const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(
+              'Stay',
+              style: GoogleFonts.outfit(
+                color: Colors.orange,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);  // close dialog
+              Navigator.pop(context);        // leave page
+            },
+            child: Text(
+              'Discard',
+              style: GoogleFonts.outfit(
+                color: Colors.grey,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── File pickers ──────────────────────────────────────────────────────────
+
   Future<void> _pickImage() async {
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      setState(() {
-        _profileImage = File(image.path);
-      });
-    }
+    if (image != null) setState(() => _profileImage = File(image.path));
   }
 
   Future<void> _pickDocument(String type) async {
@@ -153,23 +268,21 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
         : await _picker.pickImage(source: ImageSource.gallery);
 
     if (media != null) {
-      // 🔹 Validate Video Size if applicable
       if (type == 'VIDEO') {
         final File videoFile = File(media.path);
-        final int sizeInBytes = videoFile.lengthSync();
-        final double sizeInMB = sizeInBytes / (1024 * 1024);
-
+        final double sizeInMB = videoFile.lengthSync() / (1024 * 1024);
         if (sizeInMB > _maxVideoSizeMB) {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).clearSnackBars();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Video size exceeds ${_maxVideoSizeMB.toInt()}MB. Please pick a shorter video.',
-                style: GoogleFonts.outfit()),
+          ScaffoldMessenger.of(context)
+            ..clearSnackBars()
+            ..showSnackBar(SnackBar(
+              content: Text(
+                'Video size exceeds ${_maxVideoSizeMB.toInt()}MB. Please pick a shorter video.',
+                style: GoogleFonts.outfit(),
+              ),
               backgroundColor: Colors.black87,
               behavior: SnackBarBehavior.floating,
-            ),
-          );
+            ));
           return;
         }
       }
@@ -196,87 +309,74 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     }
   }
 
+  // ── Save ──────────────────────────────────────────────────────────────────
+
   Future<void> _saveProfile() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
-    final updatedData = <String, dynamic>{};
 
-    final original = _agentData ?? widget.agentData;
-
-    // 🔹 Final Video Size Validation before Submission
     if (_videoKyc != null) {
       final sizeInMB = _videoKyc!.lengthSync() / (1024 * 1024);
       if (sizeInMB > _maxVideoSizeMB) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Video size exceeds ${_maxVideoSizeMB.toInt()}MB. Please pick a smaller video before submitting.',
-              style: GoogleFonts.outfit()),
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(
+            content: Text(
+              'Video size exceeds ${_maxVideoSizeMB.toInt()}MB. Please pick a smaller video.',
+              style: GoogleFonts.outfit(),
+            ),
             backgroundColor: Colors.black87,
             behavior: SnackBarBehavior.floating,
-          ),
-        );
+          ));
         return;
       }
     }
 
-    // Only add to updatedData if the value has actually changed
+    final updatedData = <String, dynamic>{};
+    final original = _agentData ?? widget.agentData;
+
     final name = _nameController.text.trim();
     if (name.isNotEmpty && name != original.userDetails.name) {
       updatedData['name'] = name;
     }
-
     final email = _emailController.text.trim();
     if (email.isNotEmpty && email != original.userDetails.email) {
       updatedData['email'] = email;
     }
-
-    // Bank Details
     final bank = _bankNameController.text.trim();
     if (bank.isNotEmpty && bank != original.bankName) {
       updatedData['bank_name'] = bank;
     }
-
     final account = _accountNumberController.text.trim();
     if (account.isNotEmpty && account != original.accountNumber) {
       updatedData['account_number'] = account;
     }
-
     final ifsc = _ifscController.text.trim();
     if (ifsc.isNotEmpty && ifsc != original.ifscCode) {
       updatedData['ifsc_code'] = ifsc;
     }
-
     final upi = _upiController.text.trim();
     if (upi.isNotEmpty && upi != original.upiId) {
       updatedData['upi_id'] = upi;
     }
-
-    // Vehicle Details
     final vType = _vehicleTypeController.text.trim();
     if (vType.isNotEmpty && vType != original.vehicleType) {
       updatedData['vehicle_type'] = vType;
     }
-
     final vNum = _vehicleNumberController.text.trim();
     if (vNum.isNotEmpty && vNum != original.vehicleNumber) {
       updatedData['vehicle_number'] = vNum;
     }
-
     final rcNum = _rcNumberController.text.trim();
     if (rcNum.isNotEmpty && rcNum != original.rcNumber) {
       updatedData['rc_number'] = rcNum;
     }
-
     final lNum = _licenseNumberController.text.trim();
     if (lNum.isNotEmpty && lNum != original.licenseNumber) {
       updatedData['license_number'] = lNum;
     }
-
-    print('✏️ Sending update for User ID: ${original.userId}');
-    print('✏️ Payload: $updatedData');
 
     if (updatedData.isEmpty &&
         _profileImage == null &&
@@ -286,14 +386,13 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
         _panCard == null &&
         _videoKyc == null) {
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(
           content: Text('No changes to update', style: GoogleFonts.outfit()),
           backgroundColor: Colors.black87,
           behavior: SnackBarBehavior.floating,
-        ),
-      );
+        ));
       return;
     }
 
@@ -312,351 +411,432 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     setState(() => _isLoading = false);
 
     if (result.isSuccess) {
-      ScaffoldMessenger.of(context).clearSnackBars();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(
           content: Text('Profile updated successfully',
               style: GoogleFonts.outfit()),
           backgroundColor: Colors.black87,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+          shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ));
       context.pop(true);
     } else {
       if (result.error?.toLowerCase().contains('authenticated') == true ||
           result.error?.toLowerCase().contains('login') == true) {
         context.go('/login');
       } else {
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(
             content: Text(result.error ?? 'Update failed',
                 style: GoogleFonts.outfit()),
             backgroundColor: Colors.black87,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10)),
-          ),
-        );
+          ));
       }
     }
   }
 
+  // ── Build ─────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.surfaceColor,
-      appBar: AppBar(
-        scrolledUnderElevation: 0,
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(HugeIcons.strokeRoundedArrowLeft01, color: AppTheme.textPrimary, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          "Edit Profile",
-          style: GoogleFonts.outfit(
-            color: AppTheme.textPrimary,
-            fontWeight: FontWeight.bold,
-            fontSize: 20,
+    // PopScope intercepts the hardware/gesture back button
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await _handleBackPress();
+      },
+      child: Scaffold(
+        backgroundColor: AppTheme.surfaceColor,
+        appBar: AppBar(
+          scrolledUnderElevation: 0,
+          backgroundColor: Colors.white,
+          elevation: 0,
+          centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(HugeIcons.strokeRoundedArrowLeft01,
+                color: AppTheme.textPrimary, size: 20),
+            // ← use _handleBackPress instead of Navigator.pop directly
+            onPressed: _handleBackPress,
           ),
-        ),
-        actions: [
-          if (!_isLoading)
-            IconButton(
-              onPressed: _saveProfile,
-              icon: const Icon(
-                Icons.check_circle_rounded,
-                color: AppTheme.primaryColor,
-                size: 28,
-              ),
+          title: Text(
+            'Edit Profile',
+            style: GoogleFonts.outfit(
+              color: AppTheme.textPrimary,
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
             ),
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: AppTheme.primaryColor),
+          ),
+          actions: [
+            if (!_isLoading)
+              IconButton(
+                onPressed: _saveProfile,
+                icon: const Icon(Icons.check_circle_rounded,
+                    color: AppTheme.primaryColor, size: 28),
               ),
-            ),
-        ],
-      ),
-      body: _isLoading
-        ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
-        : SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.only(bottom: 40),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              const SizedBox(height: 24),
-
-              /// 🔹 Profile Avatar
-              Center(
-                child: Stack(
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 4),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 10,
-                            offset: const Offset(0, 5),
-                          ),
-                        ],
-                      ),
-                      child: CircleAvatar(
-                        radius: 55,
-                        backgroundColor: Colors.grey.shade200,
-                        backgroundImage: _profileImage != null
-                            ? FileImage(_profileImage!)
-                            : (_agentData?.profileImageUrl != null
-                                ? NetworkImage("${_agentData!.profileImageUrl!}?v=${DateTime.now().millisecondsSinceEpoch}")
-                                : null) as ImageProvider?,
-                        child: (_profileImage == null && _agentData?.profileImageUrl == null)
-                            ? const Icon(Icons.person_rounded, color: Colors.black, size: 40)
-                            : null,
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 4,
-                      right: 4,
-                      child: GestureDetector(
-                        onTap: _pickImage,
-                        child: Container(
-                          height: 32,
-                          width: 32,
-                          decoration: const BoxDecoration(
-                            color: AppTheme.primaryColor,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.camera_alt, size: 16, color: Colors.white),
-                        ),
-                      ),
-                    )
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 12),
-              Text(
-                (_agentData?.userDetails.name.isNotEmpty == true)
-                    ? _agentData!.userDetails.name
-                    : (_agentData?.userName.isNotEmpty == true ? _agentData!.userName : "Agent"),
-                style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-              ),
-              Text(
-                "Agent ID: #${(_agentData?.id ?? "N/A").substring(0, (_agentData?.id ?? "").length > 8 ? 8 : (_agentData?.id ?? "").length).toUpperCase()}",
-                style: GoogleFonts.outfit(fontSize: 14, color: AppTheme.textSecondary, fontWeight: FontWeight.w500),
-              ),
-
-              const SizedBox(height: 32),
-
-              _sectionCard(
-                title: "Personal Details",
-                icon: Icons.person_outline,
-                child: Column(
-                  children: [
-                    _editableField("Full Name", _nameController),
-                    _editableField("Phone Number", _phoneController, enabled: false),
-                    _editableField("Email Address", _emailController, enabled: true),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              /// 🔹 Rider Details
-              _sectionCard(
-                title: "Rider Details",
-                icon: Icons.delivery_dining_outlined,
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(child: _editableField("Vehicle Type", _vehicleTypeController)),
-                        const SizedBox(width: 12),
-                        Expanded(child: _editableField("Vehicle Number", _vehicleNumberController)),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(child: _editableField("RC Number", _rcNumberController,
-                          isVerified: _agentData?.isRcVerified.toUpperCase() != "REJECTED",
-                          verificationMessage: "RC Number can only be modified if rejected.")),
-                        const SizedBox(width: 12),
-                        Expanded(child: _editableField("License Number", _licenseNumberController,
-                          isVerified: _agentData?.isLicenseVerified.toUpperCase() != "REJECTED",
-                          verificationMessage: "License Number can only be modified if rejected.")),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              /// 🔹 Documents
-              _sectionCard(
-                title: "Legal Documents",
-                icon: Icons.folder_copy_outlined,
-                child: Column(
-                  children: [
-                    // Aadhar
-                    _documentTile(
-                      label: "Aadhar Card",
-                      file: _aadharDoc,
-                      remoteUrl: _agentData?.aadharDocUrl,
-                      isVerified: _agentData?.isAadharVerified.toUpperCase() != "REJECTED",
-                      status: _agentData?.isAadharVerified,
-                      onTap: () {
-                        if (_agentData?.isAadharVerified.toUpperCase() != "REJECTED") {
-                          _showVerifiedSnackbar("Aadhar can only be modified if rejected.");
-                        } else {
-                          _pickDocument('AADHAR');
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    // PAN
-                    _documentTile(
-                      label: "PAN Card",
-                      file: _panCard,
-                      remoteUrl: _agentData?.panCardUrl,
-                      isVerified: _agentData?.isPanVerified.toUpperCase() != "REJECTED",
-                      status: _agentData?.isPanVerified,
-                      onTap: () {
-                        if (_agentData?.isPanVerified.toUpperCase() != "REJECTED") {
-                          _showVerifiedSnackbar("PAN Card can only be modified if rejected.");
-                        } else {
-                          _pickDocument('PAN');
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    // RC
-                    _documentTile(
-                      label: "RC Document",
-                      file: _rcDocument,
-                      remoteUrl: _agentData?.rcDocumentUrl,
-                      isVerified: _agentData?.isRcVerified.toUpperCase() != "REJECTED",
-                      status: _agentData?.isRcVerified,
-                      onTap: () {
-                        if (_agentData?.isRcVerified.toUpperCase() != "REJECTED") {
-                          _showVerifiedSnackbar("RC Document can only be modified if rejected.");
-                        } else {
-                          _pickDocument('RC');
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    // License
-                    _documentTile(
-                      label: "Driving License",
-                      file: _licenseDocument,
-                      remoteUrl: _agentData?.licenseDocumentUrl,
-                      isVerified: _agentData?.isLicenseVerified.toUpperCase() != "REJECTED",
-                      status: _agentData?.isLicenseVerified,
-                      onTap: () {
-                        if (_agentData?.isLicenseVerified.toUpperCase() != "REJECTED") {
-                          _showVerifiedSnackbar("License can only be modified if rejected.");
-                        } else {
-                          _pickDocument('LICENSE');
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    // Video KYC
-                    _documentTile(
-                      label: "Video KYC",
-                      file: _videoKyc,
-                      remoteUrl: _agentData?.videoKycUrl,
-                      isVerified: _agentData?.isVideoKycVerified.toUpperCase() != "REJECTED",
-                      status: _agentData?.isVideoKycVerified,
-                      onTap: () {
-                        if (_agentData?.isVideoKycVerified.toUpperCase() != "REJECTED") {
-                          _showVerifiedSnackbar("Video KYC can only be modified if rejected.");
-                        } else {
-                          _pickDocument('VIDEO');
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 4),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 62),
-                      child: Text(
-                        "Note: Max ${_maxVideoSizeMB.toInt()}MB allowed",
-                        style: GoogleFonts.outfit(fontSize: 11, color: Colors.orange[800], fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              /// 🔹 Bank Details
-              _sectionCard(
-                title: "Bank Details",
-                icon: Icons.account_balance_outlined,
-                child: Column(
-                  children: [
-                    _editableField("Bank Name", _bankNameController),
-                    _editableField("Account Number", _accountNumberController, keyboardType: TextInputType.number),
-                    _editableField("IFSC Code", _ifscController),
-                    _editableField("UPI ID", _upiController),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 32),
-
-              /// 🔹 Submit Button
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+            if (_isLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
                 child: SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _saveProfile,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryColor,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                    child: _isLoading 
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                        )
-                      : Text(
-                          "Submit Changes",
-                          style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold),
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppTheme.primaryColor),
+                ),
+              ),
+          ],
+        ),
+        body: _isLoading
+            ? const Center(
+            child: CircularProgressIndicator(
+                color: AppTheme.primaryColor))
+            : SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.only(bottom: 40),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                const SizedBox(height: 24),
+
+                // ── Profile Avatar ──────────────────────────
+                Center(
+                  child: Stack(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                              color: Colors.white, width: 4),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
                         ),
+                        child: CircleAvatar(
+                          radius: 55,
+                          backgroundColor: Colors.grey.shade200,
+                          backgroundImage: _profileImage != null
+                              ? FileImage(_profileImage!)
+                              : (_agentData?.profileImageUrl != null
+                              ? NetworkImage(
+                              '${_agentData!.profileImageUrl!}?v=${DateTime.now().millisecondsSinceEpoch}')
+                              : null)
+                          as ImageProvider?,
+                          child: (_profileImage == null &&
+                              _agentData?.profileImageUrl == null)
+                              ? const Icon(Icons.person_rounded,
+                              color: Colors.black, size: 40)
+                              : null,
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 4,
+                        right: 4,
+                        child: GestureDetector(
+                          onTap: _pickImage,
+                          child: Container(
+                            height: 32,
+                            width: 32,
+                            decoration: const BoxDecoration(
+                              color: AppTheme.primaryColor,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.camera_alt,
+                                size: 16, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-              const SizedBox(height: 20),
-            ],
+
+                const SizedBox(height: 12),
+                Text(
+                  (_agentData?.userDetails.name.isNotEmpty == true)
+                      ? _agentData!.userDetails.name
+                      : (_agentData?.userName.isNotEmpty == true
+                      ? _agentData!.userName
+                      : 'Agent'),
+                  style: GoogleFonts.outfit(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary),
+                ),
+                Text(
+                  'Agent ID: #${(_agentData?.id ?? 'N/A').substring(0, (_agentData?.id ?? '').length > 8 ? 8 : (_agentData?.id ?? '').length).toUpperCase()}',
+                  style: GoogleFonts.outfit(
+                      fontSize: 14,
+                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.w500),
+                ),
+
+                const SizedBox(height: 32),
+
+                // ── Personal Details ────────────────────────
+                _sectionCard(
+                  title: 'Personal Details',
+                  icon: Icons.person_outline,
+                  child: Column(
+                    children: [
+                      _editableField('Full Name', _nameController),
+                      _editableField('Phone Number', _phoneController,
+                          enabled: false),
+                      _editableField('Email Address', _emailController),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // ── Rider Details ───────────────────────────
+                _sectionCard(
+                  title: 'Rider Details',
+                  icon: Icons.delivery_dining_outlined,
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                              child: _editableField('Vehicle Type',
+                                  _vehicleTypeController)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                              child: _editableField('Vehicle Number',
+                                  _vehicleNumberController)),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                              child: _editableField(
+                                'RC Number',
+                                _rcNumberController,
+                                isVerified: _agentData?.isRcVerified
+                                    .toUpperCase() !=
+                                    'REJECTED',
+                                verificationMessage:
+                                'RC Number can only be modified if rejected.',
+                              )),
+                          const SizedBox(width: 12),
+                          Expanded(
+                              child: _editableField(
+                                'License Number',
+                                _licenseNumberController,
+                                isVerified: _agentData?.isLicenseVerified
+                                    .toUpperCase() !=
+                                    'REJECTED',
+                                verificationMessage:
+                                'License Number can only be modified if rejected.',
+                              )),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // ── Documents ───────────────────────────────
+                _sectionCard(
+                  title: 'Legal Documents',
+                  icon: Icons.folder_copy_outlined,
+                  child: Column(
+                    children: [
+                      _documentTile(
+                        label: 'Aadhar Card',
+                        file: _aadharDoc,
+                        remoteUrl: _agentData?.aadharDocUrl,
+                        isVerified: _agentData?.isAadharVerified
+                            .toUpperCase() !=
+                            'REJECTED',
+                        status: _agentData?.isAadharVerified,
+                        onTap: () {
+                          if (_agentData?.isAadharVerified
+                              .toUpperCase() !=
+                              'REJECTED') {
+                            _showVerifiedSnackbar(
+                                'Aadhar can only be modified if rejected.');
+                          } else {
+                            _pickDocument('AADHAR');
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _documentTile(
+                        label: 'PAN Card',
+                        file: _panCard,
+                        remoteUrl: _agentData?.panCardUrl,
+                        isVerified:
+                        _agentData?.isPanVerified.toUpperCase() !=
+                            'REJECTED',
+                        status: _agentData?.isPanVerified,
+                        onTap: () {
+                          if (_agentData?.isPanVerified.toUpperCase() !=
+                              'REJECTED') {
+                            _showVerifiedSnackbar(
+                                'PAN Card can only be modified if rejected.');
+                          } else {
+                            _pickDocument('PAN');
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _documentTile(
+                        label: 'RC Document',
+                        file: _rcDocument,
+                        remoteUrl: _agentData?.rcDocumentUrl,
+                        isVerified:
+                        _agentData?.isRcVerified.toUpperCase() !=
+                            'REJECTED',
+                        status: _agentData?.isRcVerified,
+                        onTap: () {
+                          if (_agentData?.isRcVerified.toUpperCase() !=
+                              'REJECTED') {
+                            _showVerifiedSnackbar(
+                                'RC Document can only be modified if rejected.');
+                          } else {
+                            _pickDocument('RC');
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _documentTile(
+                        label: 'Driving License',
+                        file: _licenseDocument,
+                        remoteUrl: _agentData?.licenseDocumentUrl,
+                        isVerified: _agentData?.isLicenseVerified
+                            .toUpperCase() !=
+                            'REJECTED',
+                        status: _agentData?.isLicenseVerified,
+                        onTap: () {
+                          if (_agentData?.isLicenseVerified
+                              .toUpperCase() !=
+                              'REJECTED') {
+                            _showVerifiedSnackbar(
+                                'License can only be modified if rejected.');
+                          } else {
+                            _pickDocument('LICENSE');
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _documentTile(
+                        label: 'Video KYC',
+                        file: _videoKyc,
+                        remoteUrl: _agentData?.videoKycUrl,
+                        isVerified: _agentData?.isVideoKycVerified
+                            .toUpperCase() !=
+                            'REJECTED',
+                        status: _agentData?.isVideoKycVerified,
+                        onTap: () {
+                          if (_agentData?.isVideoKycVerified
+                              .toUpperCase() !=
+                              'REJECTED') {
+                            _showVerifiedSnackbar(
+                                'Video KYC can only be modified if rejected.');
+                          } else {
+                            _pickDocument('VIDEO');
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 4),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 62),
+                        child: Text(
+                          'Note: Max ${_maxVideoSizeMB.toInt()}MB allowed',
+                          style: GoogleFonts.outfit(
+                              fontSize: 11,
+                              color: Colors.orange[800],
+                              fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // ── Bank Details ────────────────────────────
+                _sectionCard(
+                  title: 'Bank Details',
+                  icon: Icons.account_balance_outlined,
+                  child: Column(
+                    children: [
+                      _editableField(
+                          'Bank Name', _bankNameController),
+                      _editableField('Account Number',
+                          _accountNumberController,
+                          keyboardType: TextInputType.number),
+                      _editableField('IFSC Code', _ifscController),
+                      _editableField('UPI ID', _upiController),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 32),
+
+                // ── Submit Button ───────────────────────────
+                Padding(
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _saveProfile,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                            borderRadius:
+                            BorderRadius.circular(16)),
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2),
+                      )
+                          : Text(
+                        'Submit Changes',
+                        style: GoogleFonts.outfit(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _sectionCard({required String title, required IconData icon, required Widget child, Widget? trailing}) {
+  // ── Widget helpers (unchanged) ────────────────────────────────────────────
+
+  Widget _sectionCard({
+    required String title,
+    required IconData icon,
+    required Widget child,
+    Widget? trailing,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -668,7 +848,12 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
               children: [
                 Icon(icon, size: 20, color: AppTheme.primaryColor),
                 const SizedBox(width: 8),
-                Expanded(child: Text(title, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textPrimary))),
+                Expanded(
+                    child: Text(title,
+                        style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: AppTheme.textPrimary))),
                 if (trailing != null) trailing,
               ],
             ),
@@ -678,7 +863,12 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15, offset: const Offset(0, 5))],
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5))
+              ],
             ),
             child: child,
           ),
@@ -688,31 +878,45 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
   }
 
   void _showVerifiedSnackbar(String message) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(
         content: Text(message, style: GoogleFonts.outfit()),
         backgroundColor: Colors.black87,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+        shape:
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ));
   }
 
-  Widget _editableField(String label, TextEditingController controller, {bool enabled = true, bool isRating = false, TextInputType? keyboardType, bool isVerified = false, String? verificationMessage}) {
+  Widget _editableField(
+      String label,
+      TextEditingController controller, {
+        bool enabled = true,
+        bool isRating = false,
+        TextInputType? keyboardType,
+        bool isVerified = false,
+        String? verificationMessage,
+      }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w500, color: AppTheme.textSecondary)),
+          Text(label,
+              style: GoogleFonts.outfit(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.textSecondary)),
           const SizedBox(height: 6),
           TextField(
-            onTap: isVerified ? () {
+            onTap: isVerified
+                ? () {
               if (verificationMessage != null) {
                 _showVerifiedSnackbar(verificationMessage);
               }
-            } : null,
+            }
+                : null,
             enableInteractiveSelection: true,
             selectionControls: EmptyTextSelectionControls(),
             readOnly: isVerified,
@@ -722,19 +926,40 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
             style: GoogleFonts.outfit(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: enabled ? AppTheme.textPrimary : AppTheme.textSecondary.withOpacity(0.7),
+              color: enabled
+                  ? AppTheme.textPrimary
+                  : AppTheme.textSecondary.withOpacity(0.7),
             ),
             decoration: InputDecoration(
               filled: true,
-              fillColor: enabled ? AppTheme.surfaceColor.withOpacity(0.5) : Colors.grey.shade50,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              suffixIcon: isVerified 
-                ? const Icon(Icons.verified_user_rounded, color: AppTheme.successColor, size: 18)
-                : (isRating ? const Icon(Icons.star, color: Colors.amber, size: 18) : null),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
-              disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade100)),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5)),
+              fillColor: enabled
+                  ? AppTheme.surfaceColor.withOpacity(0.5)
+                  : Colors.grey.shade50,
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 14),
+              suffixIcon: isVerified
+                  ? const Icon(Icons.verified_user_rounded,
+                  color: AppTheme.successColor, size: 18)
+                  : (isRating
+                  ? const Icon(Icons.star,
+                  color: Colors.amber, size: 18)
+                  : null),
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                  BorderSide(color: Colors.grey.shade200)),
+              enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                  BorderSide(color: Colors.grey.shade200)),
+              disabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                  BorderSide(color: Colors.grey.shade100)),
+              focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                      color: AppTheme.primaryColor, width: 1.5)),
             ),
           ),
         ],
@@ -742,10 +967,19 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     );
   }
 
-  Widget _documentTile({required String label, File? file, String? remoteUrl, required VoidCallback onTap, bool isVerified = false, String? status}) {
-    bool hasImage = file != null || (remoteUrl != null && remoteUrl.isNotEmpty);
-    bool isActuallyVerified = status?.toUpperCase() == "VERIFIED";
-    bool isVideo = label.toLowerCase().contains("video");
+  Widget _documentTile({
+    required String label,
+    File? file,
+    String? remoteUrl,
+    required VoidCallback onTap,
+    bool isVerified = false,
+    String? status,
+  }) {
+    final bool hasImage =
+        file != null || (remoteUrl != null && remoteUrl.isNotEmpty);
+    final bool isActuallyVerified =
+        status?.toUpperCase() == 'VERIFIED';
+    final bool isVideo = label.toLowerCase().contains('video');
 
     return GestureDetector(
       onTap: onTap,
@@ -754,7 +988,10 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
         decoration: BoxDecoration(
           color: AppTheme.surfaceColor.withOpacity(0.5),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isActuallyVerified ? AppTheme.successColor.withOpacity(0.3) : Colors.grey.shade200),
+          border: Border.all(
+              color: isActuallyVerified
+                  ? AppTheme.successColor.withOpacity(0.3)
+                  : Colors.grey.shade200),
         ),
         child: Row(
           children: [
@@ -769,28 +1006,29 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                     border: Border.all(color: Colors.grey.shade300),
                   ),
                   child: file != null
-                      ? Image.file(
-                          file,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Icon(Icons.broken_image_outlined, size: 20, color: Colors.grey),
-                        )
-                      : Image.network(
-                          remoteUrl!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Icon(Icons.broken_image_outlined, size: 20, color: Colors.grey),
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return const Center(
-                              child: SizedBox(
+                      ? Image.file(file,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(
+                          Icons.broken_image_outlined,
+                          size: 20,
+                          color: Colors.grey))
+                      : Image.network(remoteUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(
+                          Icons.broken_image_outlined,
+                          size: 20,
+                          color: Colors.grey),
+                      loadingBuilder: (_, child, progress) {
+                        if (progress == null) return child;
+                        return const Center(
+                            child: SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryColor),
-                              ),
-                            );
-                          },
-                        ),
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color:
+                                    AppTheme.primaryColor)));
+                      }),
                 ),
               )
             else
@@ -798,14 +1036,21 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                 width: 50,
                 height: 50,
                 decoration: BoxDecoration(
-                  color: (isActuallyVerified ? AppTheme.successColor : AppTheme.primaryColor).withOpacity(0.1),
+                  color: (isActuallyVerified
+                      ? AppTheme.successColor
+                      : AppTheme.primaryColor)
+                      .withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
-                  isActuallyVerified 
-                    ? Icons.verified_user_outlined 
-                    : (isVideo ? Icons.videocam_rounded : Icons.description_outlined),
-                  color: isActuallyVerified ? AppTheme.successColor : AppTheme.primaryColor,
+                  isActuallyVerified
+                      ? Icons.verified_user_outlined
+                      : (isVideo
+                      ? Icons.videocam_rounded
+                      : Icons.description_outlined),
+                  color: isActuallyVerified
+                      ? AppTheme.successColor
+                      : AppTheme.primaryColor,
                   size: 24,
                 ),
               ),
@@ -814,19 +1059,36 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                  Text(label,
+                      style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary)),
                   const SizedBox(height: 2),
-                  Text(isActuallyVerified ? "Verified Document" : (file != null ? "New file selected" : (remoteUrl != null ? "Document uploaded" : "No document uploaded")),
-                    style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary)),
+                  Text(
+                    isActuallyVerified
+                        ? 'Verified Document'
+                        : (file != null
+                        ? 'New file selected'
+                        : (remoteUrl != null
+                        ? 'Document uploaded'
+                        : 'No document uploaded')),
+                    style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary),
+                  ),
                 ],
               ),
             ),
             if (isActuallyVerified)
-              const Icon(Icons.check_circle_rounded, size: 18, color: AppTheme.successColor)
+              const Icon(Icons.check_circle_rounded,
+                  size: 18, color: AppTheme.successColor)
             else if (isVerified)
-              const Icon(Icons.lock_outline_rounded, size: 18, color: Colors.blueGrey)
+              const Icon(Icons.lock_outline_rounded,
+                  size: 18, color: Colors.blueGrey)
             else
-              const Icon(Icons.edit_outlined, size: 18, color: AppTheme.textSecondary),
+              const Icon(Icons.edit_outlined,
+                  size: 18, color: AppTheme.textSecondary),
           ],
         ),
       ),
