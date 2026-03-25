@@ -1,3 +1,4 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -95,7 +96,7 @@ class DashboardController extends Notifier<DashboardState> {
         _checkPermissions();
       }
     }
-    
+
     Future.microtask(() => fetchUpcomingJobs());
   }
 
@@ -293,13 +294,15 @@ class DashboardController extends Notifier<DashboardState> {
       reason: reason,
     );
     if (success) {
+      // Immediately remove the rejected order from the list
+      state = state.copyWith(
+        upcomingOrders: state.upcomingOrders.where((o) => o.id != orderId).toList(),
+        isLoading: false,
+      );
+      // Still fetch to be safe, but the UI will update immediately
       await fetchUpcomingJobs();
     } else {
       state = state.copyWith(isLoading: false, error: "Failed to reject job");
-      state = state.copyWith(
-        isLoading: false,
-        error: "Failed to reject job",
-      );
     }
     return success;
   }

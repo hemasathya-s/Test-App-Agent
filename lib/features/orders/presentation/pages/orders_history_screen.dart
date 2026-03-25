@@ -216,10 +216,16 @@ class _OrdersHistoryScreenState extends State<OrdersHistoryScreen>
       }
 
       final status = order.orderStatus?.toUpperCase() ?? '';
+      final approvalStatus = order.agentApproval?.toUpperCase() ?? '';
       if (isUpcoming) {
-        return status != 'COMPLETED' && status != 'CANCELLED' && status != 'DELIVERED';
+        return status != 'COMPLETED' &&
+            status != 'CANCELLED' &&
+            status != 'DELIVERED' &&
+            approvalStatus != 'REJECTED';
       } else {
-        return status == 'COMPLETED' || status == 'CANCELLED' || status == 'DELIVERED';
+        return status == 'COMPLETED' ||
+            status == 'CANCELLED' ||
+            status == 'DELIVERED';
       }
     }).toList();
 

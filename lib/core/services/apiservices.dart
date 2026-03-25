@@ -28,6 +28,7 @@ import '../../Model/ProductStock.dart';
 import '../../Model/ToolStock.dart';
 import '../../Model/Tool.dart';
 import '../model/slot_availability.dart';
+import '../model/category.dart' as cat;
 import '../../config/router.dart' as app_router;
 
 class ApiService {
@@ -391,6 +392,56 @@ print("Response Code pn ${response.statusCode}");
     }
   }
 
+  static Future<ApiResponse<List<cat.Category>>> listServiceCategories({
+    String? lat,
+    String? lng,
+  }) async {
+    try {
+
+      final prefs = await SharedPreferences.getInstance();
+      final effectiveLat = lat ?? prefs.getDouble('user_latitude')?.toString();
+      final effectiveLng = lng ?? prefs.getDouble('user_longitude')?.toString();
+
+      String url = '$baseUrl/api/category';
+      if (effectiveLat != null && effectiveLat.isNotEmpty &&
+          effectiveLng != null && effectiveLng.isNotEmpty) {
+        url += '?lat=$effectiveLat&lng=$effectiveLng';
+      }
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 7));
+
+      if (response.statusCode == 200) {
+        final jsonData = jsonDecode(response.body);
+        final List<dynamic> dataList = jsonData['data'] is List ? jsonData['data'] : [];
+        final categories = dataList
+            .map((item) => cat.Category.fromJson(item))
+            .toList();
+        return ApiResponse(isSuccess: true, data: categories);
+      } else {
+        return ApiResponse(isSuccess: false, error: _extractError(response, 'Status ${response.statusCode}'));
+      }
+    } on SocketException {
+      return ApiResponse(isSuccess: false, error: 'No internet connection');
+    } on TimeoutException {
+      return ApiResponse(isSuccess: false, error: 'Request timed out');
+    } catch (e) {
+      return ApiResponse(isSuccess: false, error: 'Unexpected error: $e');
+    }
+  }
+
+  static String _extractError(http.Response response, String defaultMsg) {
+    try {
+      final jsonData = jsonDecode(response.body);
+      return jsonData['message'] ?? jsonData['detail'] ?? jsonData['error'] ?? (jsonData['msg'] ?? defaultMsg);
+    } catch (_) {
+      return defaultMsg;
+    }
+  }
   //Agent Approval for Order Assignment
   static Future<bool> agentApprovalOrder(String orderID, String status,
       {String? reason}) async {
@@ -428,16 +479,25 @@ print("Response Code pn ${response.statusCode}");
     int? size,
     String? lat,
     String? lng,
+    String? categoryId,
   }) async {
     try {
-      String url =
-          '$baseUrl/api/services/?include_categories=true&include_media=true&include_pricing=true&include_zones=true&page=$page&size=$size';
-      if (lat != null && lat.isNotEmpty) url += '&lat=$lat';
-      if (lng != null && lng.isNotEmpty) url += '&lng=$lng';
+      final queryParams = {
+        'include_categories': 'true',
+        'include_media': 'true',
+        'include_pricing': 'true',
+        'include_zones': 'true',
+        if (page != null) 'page': page.toString(),
+        if (size != null) 'size': size.toString(),
+        if (lat != null && lat.isNotEmpty) 'lat': lat,
+        if (lng != null && lng.isNotEmpty) 'lng': lng,
+        if (categoryId != null && categoryId.isNotEmpty) 'category_id': categoryId,
+      };
 
+      final uri = Uri.parse('$baseUrl/api/services/').replace(queryParameters: queryParams);
       final response = await _authorizedRequest(
         (accessToken) => http.get(
-          Uri.parse(url),
+          uri,
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $accessToken',
@@ -2193,6 +2253,7 @@ print("service Response body ${response.body}");
     int? size,
     String? lat,
     String? lng,
+    String? categoryId,
   }) async {
     try {
       final queryParams = {
@@ -2206,6 +2267,7 @@ print("service Response body ${response.body}");
         if (size != null) 'size': '$size',
         if (lat != null && lat.isNotEmpty) 'lat': lat,
         if (lng != null && lng.isNotEmpty) 'lng': lng,
+        if (categoryId != null && categoryId.isNotEmpty) 'category_id': categoryId,
       };
 
       final uri = Uri.parse('$baseUrl/api/product').replace(

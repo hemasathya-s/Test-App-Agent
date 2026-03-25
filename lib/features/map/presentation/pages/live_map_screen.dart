@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -193,10 +194,6 @@ class _MyZonePageState extends State<MyZonePage> {
         elevation: 0,
         backgroundColor: Colors.white,
         centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: AppTheme.primaryColor),

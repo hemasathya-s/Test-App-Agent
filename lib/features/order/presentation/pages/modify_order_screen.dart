@@ -6,6 +6,7 @@ import 'package:hugeicons/hugeicons.dart';
 import '../../../../core/model/order_details.dart' as api;
 import '../../../../core/model/ServiceModal.dart';
 import '../../../../Model/Product.dart';
+import '../../../../core/model/category.dart' as cat;
 import '../../../../core/services/apiservices.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../providers/order_modification_provider.dart';
@@ -28,6 +29,9 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
   bool _hasMoreServices = true;
   int _servicesPage = 1;
   bool _isSubmitting = false;
+
+  List<cat.Category> _categories = [];
+  bool _isLoadingCategories = false;
 
   /// Tracks how many distinct modifications the agent has made (max 3).
   /// Computed dynamically from provider state:
@@ -57,14 +61,16 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Load order items into modification state
       final apiItems = widget.order?.items ?? [];
-      final modItems = apiItems.map((item) {
+      final modItems = apiItems.asMap().entries.map((entry) {
+        final index = entry.key;
+        final item = entry.value;
         final imageUrl = (item.media != null && item.media!.isNotEmpty)
             ? item.media!.first.url
             : null;
         final price = double.tryParse(item.price ?? '0') ?? 0.0;
         final qty = item.quantity ?? 1;
         return OrderItem(
-          id: item.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+          id: item.id ?? '${DateTime.now().millisecondsSinceEpoch}_init_$index',
           name: item.itemDetails?.name ?? 'Unknown Item',
           price: price,
           quantity: qty,
@@ -83,9 +89,29 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
       // Load all services and products using the order's location
       final lat = widget.order?.latitude?.toString();
       final lng = widget.order?.longitude?.toString();
+      _loadCategories(lat: lat, lng: lng);
       _loadServices(lat: lat, lng: lng);
       _loadProducts(lat: lat, lng: lng);
     });
+  }
+
+  Future<void> _loadCategories({String? lat, String? lng}) async {
+    if (_isLoadingCategories) return;
+    setState(() => _isLoadingCategories = true);
+    try {
+      final result = await ApiService.listServiceCategories(lat: lat, lng: lng);
+      if (mounted && result.isSuccess && result.data != null) {
+        setState(() {
+          _categories = result.data!.cast<cat.Category>();
+          _isLoadingCategories = false;
+          print('Categories loaded: ${_categories.length}');
+        });
+      } else {
+        if (mounted) setState(() => _isLoadingCategories = false);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingCategories = false);
+    }
   }
 
   Future<void> _loadServices({String? lat, String? lng}) async {
@@ -183,15 +209,26 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
       builder: (_) => SafeArea(
         child: _ServicePickerSheet(
           initialServices: _services,
+          allCategories: _categories,
           hasMoreInitially: _hasMoreServices,
           nextPage: _servicesPage,
           replaceId: replaceId,
           initialSelectedServiceId: _selectedServiceByItem[itemKey],
-          onServiceSelected: (service) {
+          onServicesSelected: (services) {
+            if (services.isEmpty) return;
+            
             setState(() {
-              _selectedServiceByItem[itemKey] = service.serviceId;
+              if (replaceId != null) {
+                _selectedServiceByItem[itemKey] = services.first.serviceId;
+              } else {
+                // For "Add", we don't necessarily need to track the "last selected" in the map if it's multiple,
+                // but we can store the first one or just ignore for the map.
+                _selectedServiceByItem[itemKey] = services.last.serviceId;
+              }
             });
+
             if (replaceId != null) {
+              final service = services.first;
               controller.replaceItem(
                 replaceId,
                 service.title,
@@ -199,16 +236,21 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
                 newEntityId: service.serviceId,
               );
             } else {
-              final added = controller.addItem(
-                service.title,
-                service.price,
-                type: 'service',
-                newEntityId: service.serviceId,
-              );
-              if (!added && mounted) {
+              int addedCount = 0;
+              for (final service in services) {
+                final added = controller.addItem(
+                  service.title,
+                  service.price,
+                  type: 'service',
+                  newEntityId: service.serviceId,
+                );
+                if (added) addedCount++;
+              }
+              
+              if (addedCount < services.length && mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('${service.title} is already in the list', style: GoogleFonts.outfit()),
+                    content: Text('Some items were already in the list', style: GoogleFonts.outfit()),
                     backgroundColor: Colors.orange,
                   ),
                 );
@@ -994,6 +1036,8 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
     // if (!await _checkModCount()) return;
     if (!mounted) return;
     String query = '';
+    String? _selectedCategoryId; // Local state for product picker
+    final Set<Product> _selectedProducts = {}; // Multiple product selection
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1001,7 +1045,11 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
       builder: (bsCtx) => SafeArea(
         child: StatefulBuilder(
           builder: (bsCtx, setSheetState) {
-            final filtered = _products.where((p) => p.name.toLowerCase().contains(query)).toList();
+            final filtered = _products.where((p) {
+              final matchesQuery = p.name.toLowerCase().contains(query);
+              if (_selectedCategoryId == null) return matchesQuery;
+              return matchesQuery && p.categories.any((c) => c.id == _selectedCategoryId);
+            }).toList();
             return DraggableScrollableSheet(
               initialChildSize: 0.6,
               minChildSize: 0.4,
@@ -1038,6 +1086,55 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
+                    // Product Category Filter
+                    if (_categories.isNotEmpty)
+                      Container(
+                        height: 40,
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          children: [
+                            FilterChip(
+                              label: const Text('All'),
+                              selected: _selectedCategoryId == null,
+                              onSelected: (_) => setSheetState(() => _selectedCategoryId = null),
+                              backgroundColor: Colors.grey.shade100,
+                              selectedColor: AppTheme.primaryColor.withOpacity(0.1),
+                              checkmarkColor: AppTheme.primaryColor,
+                              labelStyle: GoogleFonts.outfit(
+                                fontSize: 13,
+                                color: _selectedCategoryId == null ? AppTheme.primaryColor : Colors.grey.shade700,
+                                fontWeight: _selectedCategoryId == null ? FontWeight.bold : FontWeight.normal,
+                              ),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20),side: BorderSide.none),
+                            ),
+                            const SizedBox(width: 8),
+                            ..._categories
+                                .where((c) => c.type.toLowerCase() == 'product')
+                                .map((cat) {
+                              final isSelected = _selectedCategoryId == cat.id;
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: FilterChip(
+                                  label: Text(cat.name),
+                                  selected: isSelected,
+                                  onSelected: (_) => setSheetState(() => _selectedCategoryId = cat.id),
+                                  backgroundColor: Colors.grey.shade100,
+                                  selectedColor: AppTheme.primaryColor.withOpacity(0.1),
+                                  checkmarkColor: AppTheme.primaryColor,
+                                  labelStyle: GoogleFonts.outfit(
+                                    fontSize: 13,
+                                    color: isSelected ? AppTheme.primaryColor : Colors.grey.shade700,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  ),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20),side: BorderSide.none),
+                                ),
+                              );
+                            }).toList(),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 12),
                     Expanded(
                       child: _isLoadingProducts
                           ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
@@ -1050,14 +1147,23 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
                                   itemBuilder: (_, i) {
                                     final p = filtered[i];
                                     final double price = p.price.toDouble();
+                                    final isSelected = _selectedProducts.any((sp) => sp.id == p.id);
                                     return ListTile(
                                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                      tileColor: isSelected ? AppTheme.primaryColor.withOpacity(0.04) : null,
                                       leading: Container(
                                         width: 44, height: 44,
-                                        decoration: BoxDecoration(color: Colors.orangeAccent.withOpacity(0.08), borderRadius: BorderRadius.circular(10)),
-                                        child: Icon(Icons.inventory_2_outlined, color: AppTheme.primaryColor, size: 22),
+                                        decoration: BoxDecoration(
+                                          color: isSelected ? AppTheme.primaryColor.withOpacity(0.1) : Colors.orangeAccent.withOpacity(0.08),
+                                          borderRadius: BorderRadius.circular(10)
+                                        ),
+                                        child: Icon(
+                                          isSelected ? Icons.check : Icons.inventory_2_outlined,
+                                          color: AppTheme.primaryColor,
+                                          size: 22
+                                        ),
                                       ),
-                                      title: Text(p.name, style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
+                                      title: Text(p.name, style: GoogleFonts.outfit(fontWeight: isSelected ? FontWeight.bold : FontWeight.w600)),
                                       subtitle: p.brand != null ? Text(p.brand!, style: GoogleFonts.outfit(color: AppTheme.textSecondary, fontSize: 12)) : null,
                                       trailing: Text(
                                         '₹${price.toStringAsFixed(2)}',
@@ -1068,35 +1174,102 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
                                         ),
                                       ),
                                       onTap: () {
-                                        if (replaceId != null) {
-                                          controller.replaceItem(
-                                            replaceId,
-                                            p.name,
-                                            price,
-                                            newEntityId: p.id,
-                                          );
-                                        } else {
-                                          final added = controller.addItem(
-                                            p.name,
-                                            price,
-                                            type: 'product',
-                                            newEntityId: p.id,
-                                          );
-                                          if (!added && mounted) {
-                                            ScaffoldMessenger.of(bsCtx).showSnackBar(
-                                              SnackBar(
-                                                content: Text('${p.name} is already in the list', style: GoogleFonts.outfit()),
-                                                backgroundColor: Colors.black87,
-                                              ),
-                                            );
+                                        setSheetState(() {
+                                          if (isSelected) {
+                                            _selectedProducts.removeWhere((sp) => sp.id == p.id);
+                                          } else {
+                                            if (replaceId != null) _selectedProducts.clear();
+                                            _selectedProducts.add(p);
                                           }
-                                        }
-                                        Navigator.pop(bsCtx);
+                                        });
                                       },
                                     );
                                   },
                                 ),
                     ),
+
+                    // Confirm Selection Bar
+                    if (_selectedProducts.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          boxShadow: [
+                            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5)),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              height: 44,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: _selectedProducts.length,
+                                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                                itemBuilder: (context, index) {
+                                  final p = _selectedProducts.elementAt(index);
+                                  return Chip(
+                                    label: Text(p.name, style: GoogleFonts.outfit(fontSize: 12)),
+                                    onDeleted: () => setSheetState(() => _selectedProducts.removeWhere((sp) => sp.id == p.id)),
+                                    backgroundColor: AppTheme.primaryColor.withOpacity(0.05),
+                                    deleteIcon: const Icon(Icons.close, size: 14),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 50,
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  if (replaceId != null) {
+                                    final p = _selectedProducts.first;
+                                    controller.replaceItem(
+                                      replaceId,
+                                      p.name,
+                                      p.price.toDouble(),
+                                      newEntityId: p.id,
+                                    );
+                                  } else {
+                                    int addedCount = 0;
+                                    for (final p in _selectedProducts) {
+                                      final added = controller.addItem(
+                                        p.name,
+                                        p.price.toDouble(),
+                                        type: 'product',
+                                        newEntityId: p.id,
+                                      );
+                                      if (added) addedCount++;
+                                    }
+                                    if (addedCount < _selectedProducts.length && mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Some products were already in the list', style: GoogleFonts.outfit()),
+                                          backgroundColor: Colors.orange,
+                                        ),
+                                      );
+                                    }
+                                  }
+                                  Navigator.of(context).pop();
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.primaryColor,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  elevation: 0,
+                                ),
+                                child: Text(
+                                  replaceId != null ? 'Replace Product' : 'Confirm Selection (${_selectedProducts.length})',
+                                  style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (_selectedProducts.isEmpty) const SizedBox(height: 20),
                   ],
                 ),
               ),
@@ -1212,21 +1385,23 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
 
 class _ServicePickerSheet extends StatefulWidget {
   final List<ServiceModal> initialServices;
+  final List<cat.Category> allCategories;
   final bool hasMoreInitially;
   final int nextPage;
   final String? replaceId;
   final String? initialSelectedServiceId; // pre-select previously chosen service
-  final void Function(ServiceModal service) onServiceSelected;
+  final void Function(List<ServiceModal> services) onServicesSelected;
   final void Function(List<ServiceModal> updatedList, bool hasMore, int nextPage)
       onServicesUpdated;
 
   const _ServicePickerSheet({
     required this.initialServices,
+    required this.allCategories,
     required this.hasMoreInitially,
     required this.nextPage,
     required this.replaceId,
     this.initialSelectedServiceId,
-    required this.onServiceSelected,
+    required this.onServicesSelected,
     required this.onServicesUpdated,
   });
 
@@ -1241,7 +1416,8 @@ class _ServicePickerSheetState extends State<_ServicePickerSheet> {
   bool _isLoading = false;
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
-  String? _selectedServiceId;
+  final Set<ServiceModal> _selectedServices = {}; // Tracks all selected items
+  String? _selectedCategoryId; // Added category filter
 
   @override
   void initState() {
@@ -1250,7 +1426,14 @@ class _ServicePickerSheetState extends State<_ServicePickerSheet> {
     _hasMore = widget.hasMoreInitially;
     _nextPage = widget.nextPage;
     // Restore previously selected service
-    _selectedServiceId = widget.initialSelectedServiceId;
+    // Pre-select if initial service is provided (single selection mode/replace)
+    if (widget.initialSelectedServiceId != null) {
+      final initial = _services.firstWhere(
+        (s) => s.serviceId == widget.initialSelectedServiceId,
+        orElse: () => _services.isNotEmpty ? _services.first : widget.initialServices.first // fallback if found in initial
+      );
+      if (initial != null) _selectedServices.add(initial);
+    }
 
     _searchController.addListener(() {
       setState(() => _query = _searchController.text.toLowerCase());
@@ -1283,7 +1466,10 @@ class _ServicePickerSheetState extends State<_ServicePickerSheet> {
     if(!mounted)return;
     setState(() => _isLoading = true);
     try {
-      final result = await ApiService.listService(page: _nextPage);
+      final result = await ApiService.listService(
+        page: _nextPage,
+        categoryId: _selectedCategoryId,
+      );
       final fetched = result['services'] as List<ServiceModal>;
       final hasMore = result['hasMore'] as bool;
       if (mounted) {
@@ -1308,15 +1494,27 @@ class _ServicePickerSheetState extends State<_ServicePickerSheet> {
         .toList();
   }
 
+  void _onCategorySelected(String? categoryId) {
+    if (_selectedCategoryId == categoryId) return;
+    setState(() {
+      _selectedCategoryId = categoryId;
+      _services = [];
+      _hasMore = true;
+      _nextPage = 1;
+      _isLoading = false;
+    });
+    _fetchMore();
+  }
+
   @override
   Widget build(BuildContext context) {
     final filtered = _filtered;
     final isReplace = widget.replaceId != null;
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      minChildSize: 0.4,
-      maxChildSize: 0.62,
+      initialChildSize: 0.7,
+      minChildSize: 0.7,
+      maxChildSize: 0.72,
       expand: false,
       builder: (_, scrollController) => Container(
         decoration: const BoxDecoration(
@@ -1397,6 +1595,57 @@ class _ServicePickerSheetState extends State<_ServicePickerSheet> {
             ),
 
             const SizedBox(height: 16),
+
+            // Category filter
+            if (widget.allCategories.isNotEmpty)
+              Container(
+                height: 40,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    FilterChip(
+                      label: const Text('All'),
+                      selected: _selectedCategoryId == null,
+                      onSelected: (_) => _onCategorySelected(null),
+                      backgroundColor: Colors.grey.shade100,
+                      selectedColor: AppTheme.primaryColor.withOpacity(0.1),
+                      checkmarkColor: AppTheme.primaryColor,
+                      labelStyle: GoogleFonts.outfit(
+                        fontSize: 13,
+                        color: _selectedCategoryId == null ? AppTheme.primaryColor : Colors.grey.shade700,
+                        fontWeight: _selectedCategoryId == null ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20),side: BorderSide.none),
+                    ),
+                    const SizedBox(width: 8),
+                    ...widget.allCategories
+                        .where((c) => c.type.toLowerCase() == 'service')
+                        .map((cat) {
+                      final isSelected = _selectedCategoryId == cat.id;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: FilterChip(
+                          label: Text(cat.name),
+                          selected: isSelected,
+                          onSelected: (_) => _onCategorySelected(cat.id),
+                          backgroundColor: Colors.grey.shade100,
+                          selectedColor: AppTheme.primaryColor.withOpacity(0.1),
+                          checkmarkColor: AppTheme.primaryColor,
+                          labelStyle: GoogleFonts.outfit(
+                            fontSize: 13,
+                            color: isSelected ? AppTheme.primaryColor : Colors.grey.shade700,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          ),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20),side: BorderSide.none),
+                        ),
+                      );
+                    }).toList(),
+                  ],
+                ),
+              ),
+
+            const SizedBox(height: 16),
             Divider(height: 1, color: Colors.grey.shade100),
 
             // Service list
@@ -1446,7 +1695,7 @@ class _ServicePickerSheetState extends State<_ServicePickerSheet> {
 
                         final service = filtered[index];
                         final isSelected =
-                            _selectedServiceId == service.serviceId;
+                            _selectedServices.any((s) => s.serviceId == service.serviceId);
                         return AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
                           color: isSelected
@@ -1491,12 +1740,17 @@ class _ServicePickerSheetState extends State<_ServicePickerSheet> {
                                   )
                                 : null,
                             onTap: () {
-                              setState(() =>
-                                  _selectedServiceId = service.serviceId);
-                              widget.onServiceSelected(service);
-                              Future.delayed(
-                                  const Duration(milliseconds: 180),
-                                  () => Navigator.of(context).pop());
+                              setState(() {
+                                if (isSelected) {
+                                  _selectedServices.removeWhere((s) => s.serviceId == service.serviceId);
+                                } else {
+                                  if (widget.replaceId != null) {
+                                    // Replace mode: only 1 selection allowed
+                                    _selectedServices.clear();
+                                  }
+                                  _selectedServices.add(service);
+                                }
+                              });
                             },
                           ),
                         );
@@ -1504,11 +1758,11 @@ class _ServicePickerSheetState extends State<_ServicePickerSheet> {
                     ),
             ),
             ),
-            // Footer
+            // Footer (End of list)
             if(!_hasMore && _services.isNotEmpty)
               Padding(
                 padding:
-                    const EdgeInsets.only(top: 8, bottom: 20, left: 16, right: 16),
+                    const EdgeInsets.only(top: 8, bottom: 8, left: 16, right: 16),
                 child: Text(
                   'End of list • ${_services.length} services loaded',
                   textAlign: TextAlign.center,
@@ -1519,6 +1773,71 @@ class _ServicePickerSheetState extends State<_ServicePickerSheet> {
                   ),
                 ),
               ),
+
+            // Confirm Selection Bar
+            if (_selectedServices.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, -5),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Show selected items summary
+                    SizedBox(
+                      height: 44,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _selectedServices.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (context, index) {
+                          final s = _selectedServices.elementAt(index);
+                          return Chip(
+                            label: Text(s.title, style: GoogleFonts.outfit(fontSize: 12)),
+                            onDeleted: () => setState(() => _selectedServices.remove(s)),
+                            backgroundColor: AppTheme.primaryColor.withOpacity(0.05),
+                            deleteIcon: const Icon(Icons.close, size: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          widget.onServicesSelected(_selectedServices.toList());
+                          Navigator.of(context).pop();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                        child: Text(
+                          widget.replaceId != null ? 'Replace Service' : 'Confirm Selection (${_selectedServices.length})',
+                          style: GoogleFonts.outfit(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (_selectedServices.isEmpty) const SizedBox(height: 20),
           ],
         ),
       ),

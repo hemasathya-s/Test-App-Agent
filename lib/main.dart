@@ -3,12 +3,14 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/services/background_tracking.dart';
 import 'package:go_router/go_router.dart';
 import 'package:urban_agent_app/config/router.dart' as app_router;
 import 'package:urban_agent_app/core/services/apiservices.dart';
+import 'package:urban_agent_app/features/dashboard/presentation/providers/dashboard_provider.dart';
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
 
@@ -16,6 +18,7 @@ import 'firebase_options.dart';
 FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+const MethodChannel _alarmChannel = MethodChannel('in.itfixer199.agent/alarm');
 
 Future<void> initializeNotifications() async {
   print("🔔 [main] Initializing Local Notifications...");
@@ -40,8 +43,18 @@ Future<void> initializeNotifications() async {
 
   await flutterLocalNotificationsPlugin.initialize(
     initializationSettings,
-    onDidReceiveNotificationResponse: (details) {
+    onDidReceiveNotificationResponse: (details) async {
       print("🔔 [main] Notification tapped. Payload: ${details.payload}");
+      try {
+        await _alarmChannel.invokeMethod('stopAlarm');
+        print("🔔 [main] stopAlarm called via MethodChannel");
+        
+        // 🔔 Refresh Data: Trigger a refresh when a notification is tapped
+        _container.read(dashboardProvider.notifier).fetchUpcomingJobs();
+        print('🔔 [main] Auto-refresh triggered via onDidReceiveNotificationResponse');
+      } catch (e) {
+        print("❌ [main] Error in onDidReceiveNotificationResponse: $e");
+      }
     },
   );
 }
@@ -134,6 +147,15 @@ void main()async{
       print('🔔 [main] Notification Body: ${message.notification?.body}');
     }
 
+    // 🔔 Refresh Data: Trigger a refresh when ANY message arrives in the foreground
+    // Use the global provider container (created below in main)
+    try {
+      _container.read(dashboardProvider.notifier).fetchUpcomingJobs();
+      print('🔔 [main] Auto-refresh triggered for dashboardProvider');
+    } catch (e) {
+      print('❌ [main] Error triggering refresh: $e');
+    }
+
     // 🔔 Reliability Fix: Skip Flutter local notification if Native AlarmService is triggered
     if (_isAlarmNotification(message)) {
       print("🔔 [main] Native AlarmService will handle this. Skipping Flutter local notification.");
@@ -170,14 +192,42 @@ void main()async{
       print('⚠️ [main] Foreground message received but has no title. Notification not shown.');
     }
   });
+  
+  // 🔔 Handle notification clicks when the app is in background
+  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+    print('🔔 [main] Notification tapped while in background: ${message.messageId}');
+    try {
+      _container.read(dashboardProvider.notifier).fetchUpcomingJobs();
+      print('🔔 [main] Auto-refresh triggered via onMessageOpenedApp');
+    } catch (e) {
+      print('❌ [main] Error in onMessageOpenedApp refresh: $e');
+    }
+  });
 
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+  // 🔔 Handle the app being opened from a terminated state via a notification
+  FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
+    if (message != null) {
+      print('🔔 [main] App opened from TERMINATED state via notification: ${message.messageId}');
+      try {
+        _container.read(dashboardProvider.notifier).fetchUpcomingJobs();
+        print('🔔 [main] Auto-refresh triggered via getInitialMessage');
+      } catch (e) {
+        print('❌ [main] Error in getInitialMessage refresh: $e');
+      }
+    }
+  });
+
   runApp(
-    const ProviderScope(
-      child: MyApp(),
+    UncontrolledProviderScope(
+      container: _container,
+      child: const MyApp(),
     ),
   );
 }
+
+final _container = ProviderContainer();
 
 
 class MyApp extends StatefulWidget {

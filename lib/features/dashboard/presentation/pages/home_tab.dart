@@ -246,7 +246,11 @@ class _HomeTabState extends ConsumerState<HomeTab> {
               ),
             )
           else
-              ...state.upcomingOrders.map((order) => _buildJobCard(order, context, ref, state.isAvailable)),
+            ...state.upcomingOrders
+                .where((order) =>
+                    order.agentApproval?.toUpperCase() != 'REJECTED')
+                .map((order) =>
+                    _buildJobCard(order, context, ref, state.isAvailable)),
         ],
       ),
     ),
@@ -558,8 +562,8 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     final time = order.createdAt ?? '';
     final address = order.address ?? 'No Address Provided';
     final statusLabel = order.agentApproval?.toUpperCase() ?? 'PENDING';
-
-    final isUrgent = order.orderStatus?.toUpperCase() == 'URGENT';
+print("Agent Status ${order.agentApproval?.toLowerCase()}");
+    String? isUrgent = order.orderStatus?.toUpperCase();
     final isPending = statusLabel == 'PENDING';
     final isRejected = statusLabel == 'REJECTED';
     final isConfirmed = statusLabel == 'CONFIRMED';
@@ -596,7 +600,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  statusLabel,
+                  isUrgent ?? '',
                   style: GoogleFonts.outfit(
                     color: isRejected
                         ? Colors.red
@@ -608,23 +612,23 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                   ),
                 ),
               ),
-              if (isUrgent)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    'URGENT',
-                    style: GoogleFonts.outfit(
-                      color: Colors.red,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 8,
-                    ),
-                  ),
-                ),
+              // if (isUrgent)
+              //   Container(
+              //     padding:
+              //         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              //     decoration: BoxDecoration(
+              //       color: Colors.red.withOpacity(0.1),
+              //       borderRadius: BorderRadius.circular(6),
+              //     ),
+              //     child: Text(
+              //       'URGENT',
+              //       style: GoogleFonts.outfit(
+              //         color: Colors.red,
+              //         fontWeight: FontWeight.bold,
+              //         fontSize: 8,
+              //       ),
+              //     ),
+              //   ),
             ],
           ),
           const SizedBox(height: 16),
@@ -673,8 +677,19 @@ class _HomeTabState extends ConsumerState<HomeTab> {
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: isAgentOnline ? () =>
-                        _showAcceptBottomSheet(context, ref, order) : null,
+                    onPressed: isAgentOnline ? () async {
+                      if (order.id != null) {
+                        final success = await ref
+                            .read(dashboardProvider.notifier)
+                            .acceptJob(order.id!);
+                        if (success && context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Job accepted successfully')),
+                          );
+                        }
+                      }
+                    } : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryColor,
                       disabledBackgroundColor: Colors.grey.shade300,
@@ -714,21 +729,34 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                   ),
                 ),
               ],
-            )
-          else if (isRejected)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
+            ) else if (isRejected)
+            Expanded(
+              child: ElevatedButton(
+                onPressed: isAgentOnline ? () async {
+                  if (order.id != null) {
+                    final success = await ref
+                        .read(dashboardProvider.notifier)
+                        .acceptJob(order.id!);
+                    if (success && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Job accepted successfully')),
+                      );
+                    }
+                  }
+                } : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  disabledBackgroundColor: Colors.grey.shade300,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
                 child: Text(
-                  'This order has been rejected',
+                  'Accept',
                   style: GoogleFonts.outfit(
-                    color: Colors.red,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.bold,
+                    color: isAgentOnline ? Colors.white : Colors.grey.shade500,
                   ),
                 ),
               ),
@@ -996,7 +1024,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     final isReasonValid = ValueNotifier<bool>(false);
 
     controller.addListener(() {
-      isReasonValid.value = controller.text.trim().length >= 50;
+      isReasonValid.value = controller.text.trim().length >= 20;
     });
 
     showModalBottomSheet(
@@ -1040,7 +1068,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Please provide a reason (min 50 characters) for rejecting this job.',
+                    'Please provide a reason (min 20 characters) for rejecting this job.',
                     style: GoogleFonts.outfit(color: AppTheme.textSecondary),
                   ),
                   const SizedBox(height: 20),
@@ -1050,6 +1078,19 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                     decoration: InputDecoration(
                       hintText: 'Enter rejection reason...',
                       hintStyle: GoogleFonts.outfit(color: Colors.grey),
+                      suffix: ValueListenableBuilder<bool>(
+                        valueListenable: isReasonValid,
+                        builder: (context, isValid, child) {
+                          final count = controller.text.trim().length;
+                          return Text(
+                            '$count/20 chars',
+                            style: GoogleFonts.outfit(
+                              fontSize: 12,
+                              color: isValid ? Colors.green : Colors.red,
+                            ),
+                          );
+                        },
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: Colors.grey.shade300),
@@ -1065,8 +1106,8 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                       ),
                     ),
                     validator: (value) {
-                      if (value == null || value.trim().length < 50) {
-                        return 'Reason must be at least 50 characters';
+                      if (value == null || value.trim().length < 20) {
+                        return 'Reason must be at least 20 characters';
                       }
                       return null;
                     },

@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:hugeicons/hugeicons.dart';
+
 import '../../../../core/services/apiservices.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -258,6 +260,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                           ],
                         ),
                       ),
+                      const SizedBox(height: 15),
                       _buildSectionHeader('Status Info'),
                       Container(
                         padding: const EdgeInsets.all(16),
@@ -268,20 +271,26 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildStatusItem('Order Status', effectiveOrder?.orderStatus ?? 'N/A'),
+                            _buildStatusItem('Order ID', '#${effectiveOrder?.id?.substring(0, 8).toUpperCase() ?? 'N/A'}'),
+                            _buildStatusItem('Order Status', effectiveOrder?.orderStatus ?? 'N/A', isStatus: true),
+                            _buildStatusItem('Order Date', DateFormat('MMM d, yyyy').format(DateTime.parse(effectiveOrder?.createdAt ?? DateTime.now().toString()))),
                             _buildStatusItem('Payment Status', effectiveOrder?.paymentStatus ?? 'N/A'),
                             _buildStatusItem('Approval', effectiveOrder?.agentApproval ?? 'N/A'),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 35),
                     ],
                   ),
                 ],
               ),
             ),
           ),
+          const SizedBox(height: 35),
           // Action Bar
+          if (effectiveOrder?.orderStatus?.toUpperCase() != 'COMPLETED' &&
+              effectiveOrder?.orderStatus?.toUpperCase() != 'CANCELLED' &&
+              effectiveOrder?.orderStatus?.toUpperCase() != 'DELIVERED')
           Container(
             padding: const EdgeInsets.all(24),
             decoration: const BoxDecoration(
@@ -292,48 +301,45 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Get Directions button — only visible if NOT completed/cancelled
+                  if (effectiveOrder?.orderStatus?.toUpperCase() != 'COMPLETED' && 
+                      effectiveOrder?.orderStatus?.toUpperCase() != 'CANCELLED')
                   ElevatedButton.icon(
-                    onPressed: () {
+                    onPressed: () async {
                       debugPrint('DEBUG: Get Directions button pressed');
-                      debugPrint('DEBUG: order is null? ${effectiveOrder == null}');
-                      debugPrint('DEBUG: slot is null? ${effectiveOrder == null}');
-
                       controller.startNavigation();
 
                       if (effectiveOrder != null) {
-                        debugPrint('DEBUG: Pushing /navigation with OrderDetails. ID: ${effectiveOrder?.id}');
-                        context.push('/navigation', extra: effectiveOrder);
+                        await context.push('/navigation', extra: effectiveOrder);
+                        _loadFullDetails();
                       } else if (widget.slot != null) {
-                        debugPrint('DEBUG: Pushing /navigation with SlotAvailability. OrderID: ${widget.slot?.orderId ?? ''}');
-                        context.push('/navigation', extra: widget.slot);
-                      } else {
-                        debugPrint('DEBUG: ERROR - Both order and slot are NULL');
+                        await context.push('/navigation', extra: widget.slot);
+                        _loadFullDetails();
                       }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryColor,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       minimumSize: const Size(double.infinity, 56),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
                     icon: const Icon(Icons.navigation, color: Colors.white),
                     label: Text(
                       'Get Directions',
-                      style: GoogleFonts.outfit(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+                      style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
                   ),
                   const SizedBox(height: 12),
                   // Modify Order button — driven by real API serviceModifications
-                  if (latestOrderItemMod == null)
-                  // No modification exists ? show Modify Order button
+                  // if (latestOrderItemMod == null &&
+                  //     effectiveOrder?.orderStatus?.toUpperCase() != 'COMPLETED' &&
+                  //     effectiveOrder?.orderStatus?.toUpperCase() != 'CANCELLED' &&
+                  //     effectiveOrder?.orderStatus?.toUpperCase() != 'CONFIRMED')
                     TextButton.icon(
-                      onPressed: () => context.push('/modify-order', extra: effectiveOrder),
+                      onPressed: () async {
+                        await context.push('/modify-order', extra: effectiveOrder);
+                        _loadFullDetails();
+                      },
                       icon: const Icon(Icons.edit_note, color: AppTheme.primaryColor),
                       label: Text(
                         'Modify Order',
@@ -343,29 +349,29 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                         ),
                       ),
                     )
-                  else if ((latestOrderItemMod.status ?? '').toUpperCase() == 'PENDING')
-                  // Modification pending → show waiting label, no tap
-                    Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.hourglass_empty,
-                              size: 16, color: Colors.orange),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Waiting for Request Approval',
-                            style: GoogleFonts.outfit(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.orange,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  // APPROVED / APPLIED / REJECTED ? show nothing
-                  else
-                    const SizedBox.shrink(),
+                  // else if ((latestOrderItemMod?.status ?? '').toUpperCase() == 'PENDING')
+                  // // Modification pending → show waiting label, no tap
+                  //   Container(
+                  //     padding: const EdgeInsets.symmetric(vertical: 8),
+                  //     child: Row(
+                  //       mainAxisAlignment: MainAxisAlignment.center,
+                  //       children: [
+                  //         const Icon(Icons.hourglass_empty,
+                  //             size: 16, color: Colors.orange),
+                  //         const SizedBox(width: 8),
+                  //         Text(
+                  //           'Waiting for Request Approval',
+                  //           style: GoogleFonts.outfit(
+                  //             fontWeight: FontWeight.bold,
+                  //             color: Colors.orange,
+                  //           ),
+                  //         ),
+                  //       ],
+                  //     ),
+                  //   )
+                  // // APPROVED / APPLIED / REJECTED ? show nothing
+                  // else
+                  //   const SizedBox.shrink(),
                 ],
               ),
             ),
@@ -394,6 +400,8 @@ print("Order ttt $orderId");
           style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
         ),
         actions: [
+          if (effectiveOrder?.orderStatus?.toUpperCase() != 'COMPLETED' && 
+              effectiveOrder?.orderStatus?.toUpperCase() != 'CANCELLED')
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, color: Colors.black),
             color: Colors.white,
@@ -495,7 +503,7 @@ print("Order ttt $orderId");
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(HugeIcons.strokeRoundedArrowLeft01, color: Colors.black),
           onPressed: () {
             if (context.canPop()) {
               context.pop();
@@ -815,7 +823,10 @@ print("Order ttt $orderId");
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(
-                onPressed: () => context.push('/approval-waiting'),
+                onPressed: () async {
+                  await context.push('/approval-waiting');
+                  _loadFullDetails();
+                },
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Colors.orange),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -1065,9 +1076,10 @@ print("Order ttt $orderId");
     );
   }
 
-  Widget _buildStatusItem(String label, String value) {
+  Widget _buildStatusItem(String label, String value, {bool isStatus = false}) {
     // Replace underscores with spaces for cleaner UI
     final displayValue = value.replaceAll('_', ' ');
+    final statusColor = isStatus ? _getStatusColor(value) : AppTheme.primaryColor;
     
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -1081,7 +1093,7 @@ print("Order ttt $orderId");
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withOpacity(0.05),
+              color: statusColor.withOpacity(0.05),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
@@ -1089,13 +1101,35 @@ print("Order ttt $orderId");
               style: GoogleFonts.outfit(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
-                color: AppTheme.primaryColor,
+                color: statusColor,
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  Color _getStatusColor(String status) {
+    status = status.toUpperCase();
+    switch (status) {
+      case 'CONFIRMED':
+      case 'ACCEPTED':
+        return Colors.blue;
+      case 'PENDING':
+        return Colors.orange;
+      case 'COMPLETED':
+      case 'DELIVERED':
+        return Colors.green;
+      case 'CANCELLED':
+        return Colors.red;
+      case 'ARRIVED':
+      case 'STARTED':
+      case 'IN_PROGRESS':
+        return Colors.indigo;
+      default:
+        return Colors.grey;
+    }
   }
 
 

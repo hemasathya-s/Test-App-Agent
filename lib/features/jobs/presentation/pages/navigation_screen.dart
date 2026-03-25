@@ -141,6 +141,44 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
     }
   }
 
+
+  Future<void> _launchExternalMap() async {
+    final String? destinationParam = (widget.order.address != null && widget.order.address!.isNotEmpty)
+        ? Uri.encodeComponent(widget.order.address!)
+        : (destination != null ? "${destination!.latitude},${destination!.longitude}" : null);
+
+    if (destinationParam == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Destination not available", style: TextStyle(color: Colors.white)), backgroundColor: Colors.black87),
+      );
+      return;
+    }
+
+    // google.navigation:q= triggers the Navigation mode directly in Google Maps on Android
+    final googleNavUrl = 'google.navigation:q=$destinationParam';
+    // Fallback for iOS or if the above scheme is not supported
+    final appleMapsUrl = 'http://maps.apple.com/?daddr=$destinationParam';
+    final fallbackUrl = 'https://www.google.com/maps/dir/?api=1&destination=$destinationParam&travelmode=driving';
+
+    try {
+      if (await canLaunchUrl(Uri.parse(googleNavUrl))) {
+        await launchUrl(Uri.parse(googleNavUrl), mode: LaunchMode.externalApplication);
+      } else if (await canLaunchUrl(Uri.parse(appleMapsUrl))) {
+        await launchUrl(Uri.parse(appleMapsUrl), mode: LaunchMode.externalApplication);
+      } else if (await canLaunchUrl(Uri.parse(fallbackUrl))) {
+        await launchUrl(Uri.parse(fallbackUrl), mode: LaunchMode.externalApplication);
+      } else {
+        throw 'Could not launch maps';
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Could not launch maps", style: TextStyle(color: Colors.white)), backgroundColor: Colors.black87),
+        );
+      }
+    }
+  }
+
   Future<void> _createNavigationIcon() async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
@@ -183,7 +221,6 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
     try {
       final response = await http.get(Uri.parse(url));
       final data = json.decode(response.body);
-
       if (data["status"] == "OK" && data["routes"].isNotEmpty) {
         final route = data["routes"][0];
         final legs = route["legs"][0];
@@ -191,7 +228,16 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
         if (mounted) {
           setState(() {
             eta = legs["duration"]["text"];
-            distanceText = legs["distance"]["text"];
+            // Use direct radius distance for distance text if desired, but here we keep route distance for ETA context
+            // distanceText = legs["distance"]["text"];
+
+            // Calculating direct distance for more accuracy on arrival
+            double directDist = _calculateDistance(riderPosition!, destination!);
+            if (directDist < 1000) {
+              distanceText = "${directDist.toStringAsFixed(0)} m";
+            } else {
+              distanceText = "${(directDist / 1000).toStringAsFixed(1)} km";
+            }
 
             final encoded = route["overview_polyline"]["points"];
             PolylinePoints polylinePoints = PolylinePoints();
@@ -319,7 +365,17 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
 
       if (destination != null) {
         distanceToDestination = _calculateDistance(newPos, destination!);
-      }
+
+        // Update distance text dynamically
+        if (distanceToDestination != null) {
+          setState(() {
+            if (distanceToDestination! < 1000) {
+              distanceText = "${distanceToDestination!.toStringAsFixed(0)} m";
+            } else {
+              distanceText = "${(distanceToDestination! / 1000).toStringAsFixed(1)} km";
+            }
+          });
+        }
 
       if (remainingPoints.isNotEmpty) {
         double dist = _calculateDistance(newPos, remainingPoints.first);
@@ -350,7 +406,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
           ),
         ),
       );
-    });
+    }});
   }
 
   void _updateRemainingPoints(LatLng pos) {
@@ -407,8 +463,8 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
   @override
   Widget build(BuildContext context) {
     final jobController = ref.read(jobProvider.notifier);
-    bool isNearDestination = distanceToDestination != null && distanceToDestination! <= 40;
-
+    bool isNearDestination = distanceToDestination != null && distanceToDestination! <= 50;
+    bool isCompleted = currentStatus == 'COMPLETED' || currentStatus == 'DELIVERED';
     return Scaffold(
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -553,6 +609,12 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
                           ),
                           const SizedBox(width: 15),
                           _buildCircleButton(
+                            icon: Icons.directions_outlined,
+                            color: Colors.blue,
+                            onTap: _launchExternalMap,
+                          ),
+                          const SizedBox(width: 15),
+                          _buildCircleButton(
                             icon: Icons.my_location,
                             color: AppTheme.primaryColor,
                             onTap: _recenterPosition,
@@ -564,18 +626,18 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
                   const SizedBox(height: 25),
 
                   // DYNAMIC BUTTON LOGIC BASED ON STATUS
-                  if (currentStatus != 'IN_TRANSIT' && currentStatus != 'IN_PROGRESS')
+                  if (isCompleted)
                     SizedBox(
                       width: double.infinity,
                       height: 55,
                       child: ElevatedButton(
-                        onPressed: _startTracking,
+                        onPressed: null,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryColor,
+                          backgroundColor: Colors.grey,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                         ),
                         child: Text(
-                          "START NAVIGATION",
+                          "ORDER COMPLETED",
                           style: GoogleFonts.poppins(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -584,7 +646,7 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
                         ),
                       ),
                     )
-                  else if (currentStatus == 'IN_TRANSIT')
+                  else if (currentStatus != 'IN_TRANSIT' && currentStatus != 'IN_PROGRESS')
                     SizedBox(
                       width: double.infinity,
                       height: 55,

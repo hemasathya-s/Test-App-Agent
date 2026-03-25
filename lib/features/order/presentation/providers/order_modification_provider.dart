@@ -202,7 +202,7 @@ class OrderModificationController extends StateNotifier<OrderModificationState> 
 
     final itemTypeUpper = (type ?? '').toUpperCase();
     final newItem = OrderItem(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: '${DateTime.now().millisecondsSinceEpoch}_${state.items.length}',
       name: name,
       price: price,
       isNew: true,

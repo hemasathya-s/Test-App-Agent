@@ -9,7 +9,7 @@ import com.google.firebase.messaging.RemoteMessage
 
 class MyFirebaseMessagingService : FlutterFirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
-
+        super.onMessageReceived(message)
         Log.d("FCM_DEBUG", "============== MESSAGE RECEIVED ==============")
         Log.d("FCM_DEBUG", "Data: ${message.data}")
 
