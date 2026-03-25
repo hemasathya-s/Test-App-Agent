@@ -1583,6 +1583,8 @@ class ApiService {
     try {
       final deviceInfo = await _getDeviceInfo();
 
+      final ipAddress = await _getPublicIp();
+
       final LoginRequestModel finalRequest;
 
       if (request.loginType == 'PASSWORD') {
@@ -1593,7 +1595,7 @@ class ApiService {
           deviceType: Platform.isAndroid ? 'ANDROID' : 'IOS',
           deviceId: deviceInfo['device_id'] ?? 'unknown',
           deviceName: deviceInfo['device_name'] ?? 'unknown',
-          ipAddress: '0.0.0.0',
+          ipAddress: ipAddress,
         );
       } else {
         finalRequest = LoginRequestModel.otp(
@@ -1602,7 +1604,7 @@ class ApiService {
           deviceType: Platform.isAndroid ? 'ANDROID' : 'IOS',
           deviceId: deviceInfo['device_id'] ?? 'unknown',
           deviceName: deviceInfo['device_name'] ?? 'unknown',
-          ipAddress: '0.0.0.0',
+          ipAddress: ipAddress,
         );
       }
 
@@ -1707,6 +1709,7 @@ class ApiService {
   }) async {
     try {
       final deviceInfo = await _getDeviceInfo();
+      final ipAddress = await _getPublicIp();
 
       final body = {
         'mobile_number': mobileNumber,
@@ -1716,7 +1719,7 @@ class ApiService {
         'device_type': Platform.isAndroid ? 'ANDROID' : 'IOS',
         'device_id': deviceInfo['device_id'] ?? 'unknown',
         'device_name': deviceInfo['device_name'] ?? 'unknown',
-        'ip_address': '0.0.0.0',
+        'ip_address': ipAddress,
       };
 
       print('📲 [VerifyOtp] Request body : $body');
@@ -1863,6 +1866,24 @@ class ApiService {
       print('⚠️ Device info error: $e');
     }
     return {'device_id': 'unknown', 'device_name': 'unknown'};
+  }
+
+  Future<String> _getPublicIp() async {
+    try {
+      final response = await http
+          .get(Uri.parse('https://api.ipify.org?format=json'))
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final ip = data['ip']?.toString() ?? '0.0.0.0';
+        print('🌐 [IP Fetch] Public IP: $ip');
+        return ip;
+      }
+    } catch (e) {
+      print('⚠️ [IP Fetch] Error: $e');
+    }
+    return '0.0.0.0';
   }
 
 //   Future<AgentApiResult<AgentRegistrationResponse>> registerAgent({
