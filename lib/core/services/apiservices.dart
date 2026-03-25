@@ -1627,8 +1627,8 @@ class ApiService {
       if (response.statusCode == 200) {
         final authResponse = AuthResponse.fromJson(json);
         await authResponse.saveTokens();
-        print('✅ [UnifiedLogin] Success — user: ${authResponse.user?.name}');
-        return ApiResponse(isSuccess: true, data: authResponse);
+        print('✅ [UnifiedLogin] Success — user: ${authResponse.user?.name}, OTP: ${authResponse.otp}');
+        return ApiResponse(isSuccess: true, data: authResponse, otp: authResponse.otp);
       }
 
       final errors = json['errors'] as List<dynamic>?;
@@ -1676,8 +1676,9 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final msg = json['message']?.toString() ?? 'OTP sent successfully';
-        print('✅ [SendOtp] Success — $msg');
-        return ApiResponse(isSuccess: true, data: msg);
+        final receivedOtp = (json['data']?['otp'] ?? json['otp'])?.toString(); // Capture OTP
+        print('✅ [SendOtp] Success — $msg, OTP: $receivedOtp');
+        return ApiResponse(isSuccess: true, data: msg, otp: receivedOtp);
       }
 
       final errors = json['errors'] as List<dynamic>?;

@@ -380,8 +380,8 @@ class LoginPageState extends State<LoginPage> {
 
     if (result.isSuccess) {
       // ✅ Account exists + OTP dispatched — open OTP sheet
-      print('✅ [LoginPage] OTP dispatched, opening OTP sheet');
-      _showOtpBottomSheet(pageContext);
+      print('✅ [LoginPage] Initial OTP received: ${result.otp}');
+      _showOtpBottomSheet(pageContext, initialOtp: result.otp);
     } else {
       final error     = result.error ?? '';
       final isNewUser = error.toLowerCase().contains('no account') ||
@@ -461,7 +461,7 @@ class LoginPageState extends State<LoginPage> {
     }
   }
 
-  void _showOtpBottomSheet(BuildContext pageContext) {
+  void _showOtpBottomSheet(BuildContext pageContext, {String? initialOtp}) {
     showModalBottomSheet(
       context: pageContext,
       isScrollControlled: true,
@@ -473,6 +473,7 @@ class LoginPageState extends State<LoginPage> {
       ),
       builder: (_) => _OtpBottomSheet(
         phoneNumber: _mobileNumberController.text.trim(),
+        initialOtp: initialOtp, // ✅ Pass to sheet
         onClose: () => Navigator.of(pageContext).pop(),
         onVerified: () {
           // Use GoRouter to navigate to home, ensuring stack is cleared
@@ -803,11 +804,13 @@ class LoginPageState extends State<LoginPage> {
 
 class _OtpBottomSheet extends StatefulWidget {
   final String phoneNumber;
+  final String? initialOtp; // ✅ New field
   final VoidCallback onVerified;
   final VoidCallback onClose;
 
   const _OtpBottomSheet({
     required this.phoneNumber,
+    this.initialOtp, // ✅ Optional initial value
     required this.onVerified,
     required this.onClose,
   });
@@ -828,6 +831,10 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
   void initState() {
     super.initState();
     _startTimer();
+    // ✅ Auto-fill if initialOtp is provided
+    if (widget.initialOtp != null) {
+      _otpController.text = widget.initialOtp!;
+    }
   }
 
   @override
@@ -892,7 +899,7 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
     setState(() => _isResending = false);
 
     if (result.isSuccess) {
-      _otpController.clear();
+      _otpController.text = result.otp ?? ''; // ✅ Auto-fill resent OTP
       _startTimer();
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'OtpUser.dart';
@@ -9,6 +9,7 @@ class AuthResponse {
   final OtpUser? user;
   final String? accessToken;
   final String? refreshToken;
+  final String? otp; // ✅ Capture OTP if returned by API
 
   const AuthResponse({
     required this.success,
@@ -16,6 +17,7 @@ class AuthResponse {
     this.user,
     this.accessToken,
     this.refreshToken,
+    this.otp,
   });
 
   factory AuthResponse.fromJson(Map<String, dynamic> json) {
@@ -38,6 +40,7 @@ class AuthResponse {
           : null,
       accessToken: tokensJson['access']?.toString(),
       refreshToken: tokensJson['refresh']?.toString(),
+      otp: data['otp']?.toString() ?? json['otp']?.toString(), // ✅ Extract OTP
     );
   }
 
@@ -106,11 +109,13 @@ class ApiResponse<T> {
   final bool isSuccess;
   final T? data;
   final String? error;
+  final String? otp; // ✅ Store OTP for auto-fill
 
   const ApiResponse({
     required this.isSuccess,
     this.data,
     this.error,
+    this.otp,
   });
 
   factory ApiResponse.fromJson(Map<String, dynamic> json, T Function(Map<String, dynamic>) fromJson) {
