@@ -649,9 +649,10 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                             onPressed: () => setState(
                                     () => _obscurePassword = !_obscurePassword),
                           ),
+                          inputFormatters: [LengthLimitingTextInputFormatter(10)],
                           validator: (v) {
-                            if (v!.isEmpty) return 'Password is required';
-                            if (v.length < 6) return 'Minimum 6 characters';
+                            if (v == null || v.isEmpty) return 'Password is required';
+                            if (v.length != 10) return 'Password must be 10 characters';
                             return null;
                           },
                         ),
@@ -673,8 +674,10 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                             onPressed: () => setState(
                                     () => _obscureConfirm = !_obscureConfirm),
                           ),
+                          inputFormatters: [LengthLimitingTextInputFormatter(10)],
                           validator: (v) {
-                            if (v!.isEmpty) return 'Please confirm password';
+                            if (v == null || v.isEmpty) return 'Please confirm password';
+                            if (v.length != 10) return 'Password must be 10 characters';
                             if (v != _passwordController.text)
                               return 'Passwords do not match';
                             return null;
@@ -722,8 +725,14 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                             _UpperCaseTextFormatter(),
                             LengthLimitingTextInputFormatter(12),
                           ],
-                          validator: (v) =>
-                          v!.isEmpty ? 'Vehicle number is required' : null,
+                          validator: (v) {
+                            if (v == null || v.isEmpty) return 'Vehicle number is required';
+                            final reg = RegExp(r'^[A-Z]{2}\s?[0-9]{2}\s?[A-Z]{1,2}\s?[0-9]{4}$');
+                            if (!reg.hasMatch(v.trim())) {
+                              return 'Format: TN 01 AB 1234';
+                            }
+                            return null;
+                          },
                         ),
                         const SizedBox(height: 16),
                         _field(
@@ -735,8 +744,14 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                             _UpperCaseTextFormatter(),
                             LengthLimitingTextInputFormatter(20),
                           ],
-                          validator: (v) =>
-                              v == null || v.isEmpty ? 'RC Book number is required' : null,
+                          validator: (v) {
+                            if (v == null || v.isEmpty) return 'RC Book number is required';
+                            final reg = RegExp(r'^[A-Z]{2}[0-9]{2}[A-Z0-9]{4,12}$');
+                            if (!reg.hasMatch(v.trim())) {
+                              return 'Enter valid RC format (e.g. TN0120230001234)';
+                            }
+                            return null;
+                          },
                         ),
                         const SizedBox(height: 16),
                         _field(
@@ -748,8 +763,15 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                             _UpperCaseTextFormatter(),
                             LengthLimitingTextInputFormatter(20),
                           ],
-                          validator: (v) =>
-                              v == null || v.isEmpty ? 'License number is required' : null,
+                          validator: (v) {
+                            if (v == null || v.isEmpty) return 'License number is required';
+                            // Format: State(2) + RTO(2) + Year(4) + Number(7) = 15 chars
+                            final reg = RegExp(r'^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$');
+                            if (!reg.hasMatch(v.trim())) {
+                              return 'Format: TN0120190001234';
+                            }
+                            return null;
+                          },
                         ),
                         const SizedBox(height: 20),
                         /* const SizedBox(height: 16),
@@ -800,8 +822,8 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                           ],
                           validator: (v) {
                             if (v == null || v.isEmpty) return 'Enter account number';
-                            if (!RegExp(r'^\d{9,18}$').hasMatch(v)) {
-                              return 'Enter a valid 9-18 digit account number';
+                            if (!RegExp(r'^[0-9]{9,18}$').hasMatch(v.trim())) {
+                              return 'Enter 9 to 18 numeric digits';
                             }
                             return null;
                           },
@@ -822,8 +844,9 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                           ],
                           validator: (v) {
                             if (v == null || v.isEmpty) return 'Enter IFSC code';
-                            if (!RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$').hasMatch(v.toUpperCase().trim())) {
-                              return 'Enter a valid 11-character IFSC code (e.g. HDFC0001234)';
+                            final reg = RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$');
+                            if (!reg.hasMatch(v.toUpperCase().trim())) {
+                              return 'Format: SBIN0001234';
                             }
                             return null;
                           },
@@ -838,10 +861,10 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                           icon: Icons.account_balance_wallet_rounded,
                           keyboardType: TextInputType.emailAddress,
                           validator: (v) {
-                            if (v != null && v.isNotEmpty) {
-                              if (!RegExp(r'^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$').hasMatch(v.trim())) {
-                                return 'Enter a valid UPI ID (e.g. user.name@okhdfcbank)';
-                              }
+                            if (v == null || v.isEmpty) return 'Enter UPI ID';
+                            final reg = RegExp(r'^[\w\.\-]{2,256}@[a-zA-Z]{2,64}$');
+                            if (!reg.hasMatch(v.trim())) {
+                              return 'Format: username@bankname';
                             }
                             return null;
                           },

@@ -7,6 +7,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/apiservices.dart';
 import '../../../../Model/AgentProfileResponse.dart';
 import 'package:hugeicons/hugeicons.dart';
+import 'package:flutter/gestures.dart';
 
 class AgentEditProfilePage extends StatefulWidget {
   final AgentProfileData agentData;
@@ -257,10 +258,10 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
 
   // ── File pickers ──────────────────────────────────────────────────────────
 
-  Future<void> _pickImage() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-    if (image != null) setState(() => _profileImage = File(image.path));
-  }
+//   Future<void> _pickImage() async {
+//     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+//     if (image != null) setState(() => _profileImage = File(image.path));
+//   }
 
   Future<void> _pickDocument(String type) async {
     final XFile? media = (type == 'VIDEO')
@@ -474,7 +475,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
             ),
           ),
           actions: [
-            if (!_isLoading)
+           /* if (!_isLoading)
               IconButton(
                 onPressed: _saveProfile,
                 icon: const Icon(Icons.check_circle_rounded,
@@ -489,7 +490,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                   child: CircularProgressIndicator(
                       strokeWidth: 2, color: AppTheme.primaryColor),
                 ),
-              ),
+              ),*/
           ],
         ),
         body: _isLoading
@@ -539,7 +540,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                               : null,
                         ),
                       ),
-                      Positioned(
+/*                      Positioned(
                         bottom: 4,
                         right: 4,
                         child: GestureDetector(
@@ -555,7 +556,7 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                                 size: 16, color: Colors.white),
                           ),
                         ),
-                      ),
+                      ),*/
                     ],
                   ),
                 ),
@@ -588,10 +589,10 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                   icon: Icons.person_outline,
                   child: Column(
                     children: [
-                      _editableField('Full Name', _nameController),
+                      _editableField('Full Name', _nameController, enabled: false), // Default non-editable
                       _editableField('Phone Number', _phoneController,
                           enabled: false),
-                      _editableField('Email Address', _emailController),
+                      _editableField('Email Address', _emailController, enabled: false), // Default non-editable
                     ],
                   ),
                 ),
@@ -607,12 +608,18 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                       Row(
                         children: [
                           Expanded(
-                              child: _editableField('Vehicle Type',
-                                  _vehicleTypeController)),
+                              child: _editableField(
+                            'Vehicle Type',
+                            _vehicleTypeController,
+                            enabled: _agentData?.isRcVerified.toUpperCase() == 'PENDING' || _agentData?.isRcVerified.toUpperCase() == 'REJECTED',
+                          )),
                           const SizedBox(width: 12),
                           Expanded(
-                              child: _editableField('Vehicle Number',
-                                  _vehicleNumberController)),
+                              child: _editableField(
+                            'Vehicle Number',
+                            _vehicleNumberController,
+                            enabled: _agentData?.isRcVerified.toUpperCase() == 'PENDING' || _agentData?.isRcVerified.toUpperCase() == 'REJECTED',
+                          )),
                         ],
                       ),
                       const SizedBox(height: 16),
@@ -620,25 +627,21 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                         children: [
                           Expanded(
                               child: _editableField(
-                                'RC Number',
-                                _rcNumberController,
-                                isVerified: _agentData?.isRcVerified
-                                    .toUpperCase() !=
-                                    'REJECTED',
-                                verificationMessage:
-                                'RC Number can only be modified if rejected.',
-                              )),
+                            'RC Number',
+                            _rcNumberController,
+                            isVerified: _agentData?.isRcVerified.toUpperCase() == 'VERIFIED',
+                            enabled: _agentData?.isRcVerified.toUpperCase() == 'PENDING' || _agentData?.isRcVerified.toUpperCase() == 'REJECTED',
+                            verificationMessage: 'RC Number can only be modified if Pending or Rejected.',
+                          )),
                           const SizedBox(width: 12),
                           Expanded(
                               child: _editableField(
-                                'License Number',
-                                _licenseNumberController,
-                                isVerified: _agentData?.isLicenseVerified
-                                    .toUpperCase() !=
-                                    'REJECTED',
-                                verificationMessage:
-                                'License Number can only be modified if rejected.',
-                              )),
+                            'License Number',
+                            _licenseNumberController,
+                            isVerified: _agentData?.isLicenseVerified.toUpperCase() == 'VERIFIED',
+                            enabled: _agentData?.isLicenseVerified.toUpperCase() == 'PENDING' || _agentData?.isLicenseVerified.toUpperCase() == 'REJECTED',
+                            verificationMessage: 'License Number can only be modified if Pending or Rejected.',
+                          )),
                         ],
                       ),
                     ],
@@ -657,16 +660,11 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                         label: 'Aadhar Card',
                         file: _aadharDoc,
                         remoteUrl: _agentData?.aadharDocUrl,
-                        isVerified: _agentData?.isAadharVerified
-                            .toUpperCase() !=
-                            'REJECTED',
+                        isVerified: _agentData?.isAadharVerified.toUpperCase() == 'VERIFIED',
                         status: _agentData?.isAadharVerified,
                         onTap: () {
-                          if (_agentData?.isAadharVerified
-                              .toUpperCase() !=
-                              'REJECTED') {
-                            _showVerifiedSnackbar(
-                                'Aadhar can only be modified if rejected.');
+                          if (_agentData?.isAadharVerified.toUpperCase() == 'VERIFIED') {
+                            _showVerifiedSnackbar('Aadhar is verified and cannot be modified.');
                           } else {
                             _pickDocument('AADHAR');
                           }
@@ -677,15 +675,11 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                         label: 'PAN Card',
                         file: _panCard,
                         remoteUrl: _agentData?.panCardUrl,
-                        isVerified:
-                        _agentData?.isPanVerified.toUpperCase() !=
-                            'REJECTED',
+                        isVerified: _agentData?.isPanVerified.toUpperCase() == 'VERIFIED',
                         status: _agentData?.isPanVerified,
                         onTap: () {
-                          if (_agentData?.isPanVerified.toUpperCase() !=
-                              'REJECTED') {
-                            _showVerifiedSnackbar(
-                                'PAN Card can only be modified if rejected.');
+                          if (_agentData?.isPanVerified.toUpperCase() == 'VERIFIED') {
+                            _showVerifiedSnackbar('PAN Card is verified and cannot be modified.');
                           } else {
                             _pickDocument('PAN');
                           }
@@ -696,15 +690,11 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                         label: 'RC Document',
                         file: _rcDocument,
                         remoteUrl: _agentData?.rcDocumentUrl,
-                        isVerified:
-                        _agentData?.isRcVerified.toUpperCase() !=
-                            'REJECTED',
+                        isVerified: _agentData?.isRcVerified.toUpperCase() == 'VERIFIED',
                         status: _agentData?.isRcVerified,
                         onTap: () {
-                          if (_agentData?.isRcVerified.toUpperCase() !=
-                              'REJECTED') {
-                            _showVerifiedSnackbar(
-                                'RC Document can only be modified if rejected.');
+                          if (_agentData?.isRcVerified.toUpperCase() == 'VERIFIED') {
+                            _showVerifiedSnackbar('RC Document is verified and cannot be modified.');
                           } else {
                             _pickDocument('RC');
                           }
@@ -715,16 +705,11 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                         label: 'Driving License',
                         file: _licenseDocument,
                         remoteUrl: _agentData?.licenseDocumentUrl,
-                        isVerified: _agentData?.isLicenseVerified
-                            .toUpperCase() !=
-                            'REJECTED',
+                        isVerified: _agentData?.isLicenseVerified.toUpperCase() == 'VERIFIED',
                         status: _agentData?.isLicenseVerified,
                         onTap: () {
-                          if (_agentData?.isLicenseVerified
-                              .toUpperCase() !=
-                              'REJECTED') {
-                            _showVerifiedSnackbar(
-                                'License can only be modified if rejected.');
+                          if (_agentData?.isLicenseVerified.toUpperCase() == 'VERIFIED') {
+                            _showVerifiedSnackbar('License is verified and cannot be modified.');
                           } else {
                             _pickDocument('LICENSE');
                           }
@@ -735,16 +720,11 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                         label: 'Video KYC',
                         file: _videoKyc,
                         remoteUrl: _agentData?.videoKycUrl,
-                        isVerified: _agentData?.isVideoKycVerified
-                            .toUpperCase() !=
-                            'REJECTED',
+                        isVerified: _agentData?.isVideoKycVerified.toUpperCase() == 'VERIFIED',
                         status: _agentData?.isVideoKycVerified,
                         onTap: () {
-                          if (_agentData?.isVideoKycVerified
-                              .toUpperCase() !=
-                              'REJECTED') {
-                            _showVerifiedSnackbar(
-                                'Video KYC can only be modified if rejected.');
+                          if (_agentData?.isVideoKycVerified.toUpperCase() == 'VERIFIED') {
+                            _showVerifiedSnackbar('Video KYC is verified and cannot be modified.');
                           } else {
                             _pickDocument('VIDEO');
                           }
@@ -774,12 +754,12 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                   child: Column(
                     children: [
                       _editableField(
-                          'Bank Name', _bankNameController),
+                          'Bank Name', _bankNameController, enabled: false), // Default non-editable
                       _editableField('Account Number',
                           _accountNumberController,
-                          keyboardType: TextInputType.number),
-                      _editableField('IFSC Code', _ifscController),
-                      _editableField('UPI ID', _upiController),
+                          keyboardType: TextInputType.number, enabled: false), // Default non-editable
+                      _editableField('IFSC Code', _ifscController, enabled: false), // Default non-editable
+                      _editableField('UPI ID', _upiController, enabled: false), // Default non-editable
                     ],
                   ),
                 ),
@@ -817,6 +797,39 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                             fontSize: 18,
                             fontWeight: FontWeight.bold),
                       ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Center(
+                    child: Text.rich(
+                      TextSpan(
+                        text: 'To make changes to your profile, please ',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13,
+                          color: Colors.black87,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: 'contact support.',
+                            style: const TextStyle(
+                              color: Colors.orange,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            recognizer: TapGestureRecognizer()
+                              ..onTap = () {
+                                // Add logic to contact support (e.g. open email, chat, or phone)
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Contacting support...'))
+                                );
+                              },
+                          ),
+                        ],
+                      ),
+                      textAlign: TextAlign.center,
                     ),
                   ),
                 ),

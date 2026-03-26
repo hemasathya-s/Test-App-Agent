@@ -201,8 +201,20 @@ class _InventoryScreenState extends State<InventoryScreen>
 
   Future<void> _fetchCatalog() async {
     setState(() => _isBrowseLoading = true);
-
     final catId = _selectedCategoryId == 'all' ? null : _selectedCategoryId;
+
+    // ── Pre-fetch all category names to resolve "Other" UUIDs ────────────────
+    final Map<String, String> masterCategories = {};
+    try {
+      final catRes = await ApiService.listServiceCategories();
+      if (catRes.isSuccess && catRes.data != null) {
+        for (var c in catRes.data!) {
+          masterCategories[c.id] = c.name;
+        }
+      }
+    } catch (e) {
+      print('⚠️ [Inventory] Could not pre-fetch master categories: $e');
+    }
 
     if (_activeTab == 'Tools') {
       final res = await ApiService.listTools(
@@ -212,8 +224,11 @@ class _InventoryScreenState extends State<InventoryScreen>
       );
       if (!mounted) return;
       final items = <Map<String, dynamic>>[];
-      final catSet = <String, Map<String, dynamic>>{};
+      final catMap = <String, Map<String, dynamic>>{};
+      
       if (res.isSuccess && res.data != null) {
+        print('📦 [Inventory] Total tools fetched: ${res.data!.length}');
+        
         for (final t in res.data!) {
           items.add({
             'id': t.id,
@@ -223,20 +238,30 @@ class _InventoryScreenState extends State<InventoryScreen>
             'categoryName': t.categoryName,
             'isTool': true,
           });
+          
           if (t.categoryId != null) {
-            catSet[t.categoryId!] = {
+            // Priority: categoryName > category (legacy) > Master List Lookup > 'Other'
+            final catName = t.categoryName ?? t.category ?? masterCategories[t.categoryId!] ?? 'Other';
+            catMap[t.categoryId!] = {
               'id': t.categoryId,
-              'name': t.categoryName ?? 'Other'
+              'name': catName
             };
           }
         }
+      } else {
+        print('❌ [Inventory] Failed to fetch tools: ${res.error}');
       }
+
+      print('📊 [Inventory] Number of Tool Categories: ${catMap.length}');
+      catMap.forEach((id, cat) {
+        final count = items.where((i) => i['categoryId'] == id).length;
+        print('   🔹 Category: ${cat['name']} (ID: $id) - Count: $count');
+      });
+
       setState(() {
         _catalogItems = items;
-        // ✅ Only update categories if we don't have them yet, or if we are showing "All"
-        if (_catalogCategories.isEmpty ||
-            (_searchQuery.isEmpty && _selectedCategoryId == 'all')) {
-          _catalogCategories = catSet.values.toList();
+        if (_catalogCategories.isEmpty || (_searchQuery.isEmpty && _selectedCategoryId == 'all')) {
+          _catalogCategories = catMap.values.toList();
         }
         _isBrowseLoading = false;
       });
@@ -244,28 +269,24 @@ class _InventoryScreenState extends State<InventoryScreen>
       final res = await ApiService.listProduct(size: 100);
       if (!mounted) return;
       final items = <Map<String, dynamic>>[];
-      final catSet = <String, Map<String, dynamic>>{};
+      final catMap = <String, Map<String, dynamic>>{};
+      
       if (res.isSuccess && res.data != null) {
+        print('📦 [Inventory] Total products fetched: ${res.data!.products.length}');
         final q = _searchQuery.toLowerCase();
+        
         for (final p in res.data!.products) {
-          if (q.isNotEmpty &&
-              !p['name'].toString().toLowerCase().contains(q)) {
+          if (q.isNotEmpty && !p['name'].toString().toLowerCase().contains(q)) {
             continue;
           }
-          // Extract pricing
-          final pricing =
-              (p['pricing'] is List && (p['pricing'] as List).isNotEmpty)
-                  ? (p['pricing'] as List).first
-                  : null;
+          final pricing = (p['pricing'] is List && (p['pricing'] as List).isNotEmpty)
+                   ? (p['pricing'] as List).first
+                   : null;
           final price = pricing?['price'];
-
-          // Extract categories
           final cats = (p['categories'] is List) ? p['categories'] as List : [];
 
-          // Check if matches selected category
           if (catId != null) {
-            final matchesCat =
-                cats.any((c) => c is Map && c['id']?.toString() == catId);
+            final matchesCat = cats.any((c) => c is Map && c['id']?.toString() == catId);
             if (!matchesCat) continue;
           }
 
@@ -279,20 +300,30 @@ class _InventoryScreenState extends State<InventoryScreen>
 
           for (final cat in cats) {
             if (cat is Map && cat['id'] != null) {
-              catSet[cat['id'].toString()] = {
+              final idStr = cat['id'].toString();
+              // Priority: name > Master List Lookup > 'Other'
+              final catName = cat['name'] ?? masterCategories[idStr] ?? 'Other';
+              catMap[idStr] = {
                 'id': cat['id'],
-                'name': cat['name'] ?? 'Other'
+                'name': catName
               };
             }
           }
         }
       }
+
+      print('📊 [Inventory] Number of Product Categories: ${catMap.length}');
+      catMap.forEach((id, cat) {
+        final count = items.where((i) => 
+          (i['categories'] as List).any((c) => c['id'].toString() == id)
+        ).length;
+        print('   🔹 Category: ${cat['name']} (ID: $id) - Count: $count');
+      });
+
       setState(() {
         _catalogItems = items;
-        // ✅ Only update categories if we don't have them yet, or if we are showing "All"
-        if (_catalogCategories.isEmpty ||
-            (_searchQuery.isEmpty && _selectedCategoryId == 'all')) {
-          _catalogCategories = catSet.values.toList();
+        if (_catalogCategories.isEmpty || (_searchQuery.isEmpty && _selectedCategoryId == 'all')) {
+          _catalogCategories = catMap.values.toList();
         }
         _isBrowseLoading = false;
       });
