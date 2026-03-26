@@ -2570,7 +2570,7 @@ print("service Response body ${response.body}");
             raw = decoded['tools'] ?? decoded['results'] ?? decoded['items'] ?? [];
           }
         }
-
+        print('📡 [listTools] Status Response: ${response.body}');
         final items = raw.map((e) => Tool.fromJson(e)).toList();
         print('✅ [listTools] Fetched ${items.length} tools');
         return ApiResponse(isSuccess: true, data: items);
