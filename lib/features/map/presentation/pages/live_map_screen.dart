@@ -336,7 +336,7 @@ class _MyZonePageState extends State<MyZonePage> {
 
                 // Map Controls
                 Positioned(
-                  right: 16,
+                  right: 19,
                   bottom: 410,
                   child: Column(
                     children: [
@@ -352,11 +352,11 @@ class _MyZonePageState extends State<MyZonePage> {
                            );
                         },
                       ),
-                      const SizedBox(height: 12),
-                      _buildMapActionBtn(
-                        icon: Icons.layers_rounded,
-                        onTap: moveCameraToAllZones,
-                      ),
+                      const SizedBox(height: 50),
+                      // _buildMapActionBtn(
+                      //   icon: Icons.layers_rounded,
+                      //   onTap: moveCameraToAllZones,
+                      // ),
                     ],
                   ),
                 ),

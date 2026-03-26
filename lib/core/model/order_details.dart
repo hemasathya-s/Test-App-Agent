@@ -39,6 +39,7 @@ class OrderDetails {
   final String? googleAddress;
   final String? customerName;
   final String? customerNumber;
+  final String? customerEmail;
   final String? slotId;
   final dynamic slotTime;
   final String? assignedAgentId;
@@ -80,12 +81,13 @@ class OrderDetails {
     this.serviceModifications,
     this.orderItemModifications,
     this.isActive,
-    this.isInstantSlot,
+    this.isInstantSlot, this.customerEmail,
   });
 
   factory OrderDetails.fromJson(Map<String, dynamic> json) {
     return OrderDetails(
       id: json['id'],
+      customerEmail: json[''],
       items: _safeList(json['items'])
           ?.map((i) => OrderItem.fromJson(i))
           .toList(),

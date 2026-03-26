@@ -19,12 +19,16 @@ class AlarmService : Service() {
 
         val title = intent?.getStringExtra("title") ?: "New Order"
         val body = intent?.getStringExtra("body") ?: "You received a new order"
-        val soundName = intent?.getStringExtra("sound") ?: "notification"
         val modificationId = intent?.getStringExtra("modification_id") ?: ""
         val orderId = intent?.getStringExtra("order_id") ?: ""
         val type = intent?.getStringExtra("type") ?: ""
 
-        Log.d("ALARM_SERVICE_DEBUG", "🔔 Received Data - Title: $title, Body: $body, Sound: $soundName, ModID: $modificationId, OrderID: $orderId, Type: $type")
+        // 🎵 Determine sound based on keyword "new order assigned"
+        val isNewOrder = title.contains("new order assigned", ignoreCase = true) ||
+                body.contains("new order assigned", ignoreCase = true)
+        val soundToPlay = if (isNewOrder) "notification" else "notification1"
+
+        Log.d("ALARM_SERVICE_DEBUG", "🔔 Received Data - Title: $title, Body: $body, Selected Sound: $soundToPlay (Keyword Match: $isNewOrder), ModID: $modificationId, OrderID: $orderId, Type: $type")
 
         try {
             createNotificationChannel()
@@ -68,9 +72,9 @@ class AlarmService : Service() {
             // 🎵 Sound Logic: Release existing player and start fresh for every notification
             stopAndReleaseMediaPlayer()
 
-            var resId = resources.getIdentifier(soundName, "raw", packageName)
+            var resId = resources.getIdentifier(soundToPlay, "raw", packageName)
             if (resId == 0) {
-                Log.w("ALARM_SERVICE_DEBUG", "⚠️ Sound '$soundName' not found. Falling back to 'notification'.")
+                Log.w("ALARM_SERVICE_DEBUG", "⚠️ Sound '$soundToPlay' not found. Falling back to 'notification'.")
                 resId = resources.getIdentifier("notification", "raw", packageName)
             }
 

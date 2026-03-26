@@ -9,13 +9,14 @@ class AuthResponse {
   final OtpUser? user;
   final String? accessToken;
   final String? refreshToken;
+  final String? otp;
 
   const AuthResponse({
     required this.success,
     required this.message,
     this.user,
     this.accessToken,
-    this.refreshToken,
+    this.refreshToken, this.otp,
   });
 
   factory AuthResponse.fromJson(Map<String, dynamic> json) {
@@ -24,6 +25,7 @@ class AuthResponse {
     final tokensJson = data['tokens'] ?? json['tokens'] ?? json;
 
     return AuthResponse(
+      otp: data['otp']?.toString() ?? json['otp']?.toString(),
       success: json['success'] == true ||
           data['success'] == true ||
           // ✅ OTP verify success: has user + tokens.access
@@ -106,11 +108,12 @@ class ApiResponse<T> {
   final bool isSuccess;
   final T? data;
   final String? error;
+  final String? otp;
 
   const ApiResponse({
     required this.isSuccess,
     this.data,
-    this.error,
+    this.error, this.otp,
   });
 
   factory ApiResponse.fromJson(Map<String, dynamic> json, T Function(Map<String, dynamic>) fromJson) {

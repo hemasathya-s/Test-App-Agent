@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/apiservices.dart';
 import '../providers/dashboard_provider.dart';
@@ -264,93 +265,101 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          'Permissions Needed',
-          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'To receive new jobs and track your location properly, please enable:',
-              style: GoogleFonts.outfit(color: AppTheme.textSecondary),
-            ),
-            const SizedBox(height: 16),
-            ...state.missingPermissions.map((p) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryColor.withOpacity(0.1),
-                          shape: BoxShape.circle,
+      builder: (ctx) => PopScope(
+        canPop: false, // Prevent back button from closing mandatory dialog
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(
+            'Action Required',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+          'We collect and use your location data (including background location) to:\n\n'
+          '• Track your live location during service trips\n'
+          '• Assign nearby jobs based on your location\n'
+          '• Provide accurate navigation and delivery updates\n'
+          'This data is used only while you are on duty and is required for core app functionality.\n'
+          'Your location data is not shared with third parties.\n'
+              'Please enable the following permissions:',
+                style: GoogleFonts.outfit(color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              ...state.missingPermissions.map((p) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor.withOpacity(0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            p == 'Location'
+                              ? Icons.location_on
+                              : p == 'Notification'
+                                ? Icons.notifications_active
+                                : Icons.battery_saver,
+                            size: 18,
+                            color: AppTheme.primaryColor,
+                          ),
                         ),
-                        child: Icon(
-                          p == 'Location'
-                            ? Icons.location_on
-                            : p == 'Notification'
-                              ? Icons.notifications_active
-                              : Icons.battery_saver,
-                          size: 18,
-                          color: AppTheme.primaryColor,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              p,
-                              style: GoogleFonts.outfit(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                              ),
-                            ),
-                            if (p == 'Battery Optimization')
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Text(
-                                'Allows the app to run smoothly when the screen is off.',
-                                style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey),
+                                p,
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                ),
                               ),
-                          ],
+                              if (p == 'Location')
+                                Text(
+                                  'Enable GPS to track your job progress.',
+                                  style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey),
+                                ),
+                              if (p == 'Battery Optimization')
+                                Text(
+                                  'Allows the app to run smoothly when the screen is off.',
+                                  style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey),
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                )),
+                      ],
+                    ),
+                  )),
+            ],
+          ),
+          actions: [
+            // Removed 'Later' button to make it mandatory
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  controller.requestPermissions();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+                child: Text(
+                  'Allow Now',
+                  style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              controller.dismissPermissionDialog();
-              Navigator.pop(ctx);
-            },
-            child: Text(
-              'Later',
-              style: GoogleFonts.outfit(color: AppTheme.textSecondary),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              controller.requestPermissions();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            ),
-            child: Text(
-              'Allow Now',
-              style: GoogleFonts.outfit(color: Colors.white, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -559,7 +568,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     final title = (order.items != null && order.items!.isNotEmpty)
         ? (order.items!.first.itemDetails?.name ?? 'Unnamed Order')
         : 'Unnamed Order';
-    final time = order.createdAt ?? '';
+    final time = DateFormat('MMM d, yyyy, hh:mm a').format(DateTime.parse(order.createdAt ?? ''));
     final address = order.address ?? 'No Address Provided';
     final statusLabel = order.agentApproval?.toUpperCase() ?? 'PENDING';
 print("Agent Status ${order.agentApproval?.toLowerCase()}");
@@ -677,19 +686,7 @@ print("Agent Status ${order.agentApproval?.toLowerCase()}");
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: isAgentOnline ? () async {
-                      if (order.id != null) {
-                        final success = await ref
-                            .read(dashboardProvider.notifier)
-                            .acceptJob(order.id!);
-                        if (success && context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Job accepted successfully')),
-                          );
-                        }
-                      }
-                    } : null,
+                    onPressed: isAgentOnline ? () => _showAcceptBottomSheet(context, ref, order) : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryColor,
                       disabledBackgroundColor: Colors.grey.shade300,
@@ -732,19 +729,7 @@ print("Agent Status ${order.agentApproval?.toLowerCase()}");
             ) else if (isRejected)
             Expanded(
               child: ElevatedButton(
-                onPressed: isAgentOnline ? () async {
-                  if (order.id != null) {
-                    final success = await ref
-                        .read(dashboardProvider.notifier)
-                        .acceptJob(order.id!);
-                    if (success && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('Job accepted successfully')),
-                      );
-                    }
-                  }
-                } : null,
+                onPressed: isAgentOnline ? () => _showAcceptBottomSheet(context, ref, order) : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primaryColor,
                   disabledBackgroundColor: Colors.grey.shade300,
@@ -874,7 +859,7 @@ print("Agent Status ${order.agentApproval?.toLowerCase()}");
               _buildDetailItem(
                   Icons.work_outline, 'Order ID', order.id ?? 'N/A'),
               _buildDetailItem(Icons.calendar_today_outlined, 'Created At',
-                  order.createdAt ?? 'N/A'),
+                  DateFormat('MMM d, yyyy, hh:mm a').format(DateTime.parse(order.createdAt ?? 'N/A'))),
               _buildDetailItem(Icons.location_on_outlined, 'Address',
                   order.address ?? 'N/A'),
               const SizedBox(height: 24),

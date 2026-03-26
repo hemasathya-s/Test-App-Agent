@@ -2,6 +2,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/model/slot_availability.dart';
@@ -21,6 +22,7 @@ class DashboardState {
   final String? error;
   final bool showPermissionDialog;
   final List<String> missingPermissions;
+  final bool isLocationServiceEnabled;
   final String? toggleError;
 
   const DashboardState({
@@ -34,6 +36,7 @@ class DashboardState {
     this.error,
     this.showPermissionDialog = false,
     this.missingPermissions = const [],
+    this.isLocationServiceEnabled = true,
     this.toggleError,
   });
 
@@ -48,6 +51,7 @@ class DashboardState {
     Object? error = _sentinel,
     bool? showPermissionDialog,
     List<String>? missingPermissions,
+    bool? isLocationServiceEnabled,
     Object? toggleError = _sentinel,
   }) {
     return DashboardState(
@@ -63,6 +67,7 @@ class DashboardState {
       error: error == _sentinel ? this.error : error as String?,
       showPermissionDialog: showPermissionDialog ?? this.showPermissionDialog,
       missingPermissions: missingPermissions ?? this.missingPermissions,
+      isLocationServiceEnabled: isLocationServiceEnabled ?? this.isLocationServiceEnabled,
       toggleError: toggleError == _sentinel ? this.toggleError : toggleError as String?,
     );
   }
@@ -85,24 +90,29 @@ class DashboardController extends Notifier<DashboardState> {
     
     if (persistedStatus) {
       final hasLocation = await Permission.location.isGranted;
+      final isServiceEnabled = await Geolocator.isLocationServiceEnabled();
       final hasNotification = await Permission.notification.isGranted;
       
-      if (hasLocation && hasNotification) {
+      if (hasLocation && isServiceEnabled && hasNotification) {
         _startBackgroundService();
       } else {
         await prefs.setBool(_availabilityKey, false);
         state = state.copyWith(isAvailable: false);
-        // Initial check on app startup
-        _checkPermissions();
       }
     }
+
+    // Always check permissions on startup to ensure location is mandatory
+    await _checkPermissions();
 
     Future.microtask(() => fetchUpcomingJobs());
   }
 
   Future<void> _checkPermissions() async {
     List<String> missing = [];
-    if (!await Permission.location.isGranted) missing.add("Location");
+    final locationGranted = await Permission.location.isGranted;
+    final isServiceEnabled = await Geolocator.isLocationServiceEnabled();
+
+    if (!locationGranted) missing.add("Location");
     if (!await Permission.notification.isGranted) missing.add("Notification");
     // Check battery optimization status
     if (!await Permission.ignoreBatteryOptimizations.isGranted) missing.add("Battery Optimization");
@@ -111,9 +121,14 @@ class DashboardController extends Notifier<DashboardState> {
       state = state.copyWith(
         showPermissionDialog: true,
         missingPermissions: missing,
+        isLocationServiceEnabled: isServiceEnabled,
       );
     } else {
-      state = state.copyWith(showPermissionDialog: false, missingPermissions: []);
+      state = state.copyWith(
+        showPermissionDialog: false, 
+        missingPermissions: [],
+        isLocationServiceEnabled: true,
+      );
     }
   }
 
@@ -168,6 +183,11 @@ class DashboardController extends Notifier<DashboardState> {
     final notificationStatus = await Permission.notification.status;
 
     // 3. Handle Permission Request Logic
+    if (state.missingPermissions.contains("Location Service")) {
+      // If service is disabled, we need to open location settings
+      await Geolocator.openLocationSettings();
+    }
+
     if (locationStatus.isPermanentlyDenied || notificationStatus.isPermanentlyDenied) {
       // If permanently denied, must open settings
       await openAppSettings();
@@ -204,9 +224,10 @@ class DashboardController extends Notifier<DashboardState> {
     // 1. Check permissions if going online
     if (value) {
       final hasLocation = await Permission.location.isGranted;
+      final isServiceEnabled = await Geolocator.isLocationServiceEnabled();
       final hasNotification = await Permission.notification.isGranted;
 
-      if (!hasLocation || !hasNotification) {
+      if (!hasLocation || !isServiceEnabled || !hasNotification) {
         state = state.copyWith(isAvailable: false);
         _checkPermissions();
         return;

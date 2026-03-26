@@ -17,6 +17,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/services/apiservices.dart';
 import '../../../../core/theme/app_theme.dart';
 import 'package:dropdown_button2/dropdown_button2.dart';
+import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../providers/job_provider.dart';
 import '../../../order/presentation/providers/order_modification_provider.dart' hide OrderItem;
 
@@ -72,7 +73,10 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = ref.read(jobProvider.notifier);
-    final effectiveOrder = _fetchedOrder ?? widget.order ?? widget.slot?.orderDetails;
+    final dashboardState = ref.watch(dashboardProvider);
+    final isAgentActive = dashboardState.isAvailable;
+   // final effectiveOrder = _fetchedOrder;
+     final effectiveOrder = _fetchedOrder ?? widget.order ?? widget.slot?.orderDetails;
     final customerName = effectiveOrder?.customerName ?? 'Unknown Customer';
     final customerEmail = effectiveOrder?.userDetails?.email ?? '';
     final customerMobile = effectiveOrder?.customerNumber ?? '';
@@ -273,7 +277,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                           children: [
                             _buildStatusItem('Order ID', '#${effectiveOrder?.id?.substring(0, 8).toUpperCase() ?? 'N/A'}'),
                             _buildStatusItem('Order Status', effectiveOrder?.orderStatus ?? 'N/A', isStatus: true),
-                            _buildStatusItem('Order Date', DateFormat('MMM d, yyyy').format(DateTime.parse(effectiveOrder?.createdAt ?? DateTime.now().toString()))),
+                            _buildStatusItem('Order Date', DateFormat('MMM d, yyyy, hh:mm a').format(DateTime.parse(effectiveOrder?.createdAt ?? DateTime.now().toString()))),
                             _buildStatusItem('Payment Status', effectiveOrder?.paymentStatus ?? 'N/A'),
                             _buildStatusItem('Approval', effectiveOrder?.agentApproval ?? 'N/A'),
                           ],
@@ -306,6 +310,15 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                       effectiveOrder?.orderStatus?.toUpperCase() != 'CANCELLED')
                   ElevatedButton.icon(
                     onPressed: () async {
+                      if (!isAgentActive) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Your status is currently inactive. Please go online to proceed."),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                        return;
+                      }
                       debugPrint('DEBUG: Get Directions button pressed');
                       controller.startNavigation();
 
@@ -318,7 +331,7 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                       }
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryColor,
+                      backgroundColor: isAgentActive ? AppTheme.primaryColor : Colors.grey,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       minimumSize: const Size(double.infinity, 56),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -337,15 +350,24 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                   //     effectiveOrder?.orderStatus?.toUpperCase() != 'CONFIRMED')
                     TextButton.icon(
                       onPressed: () async {
+                        if (!isAgentActive) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Your status is currently inactive. Please go online to proceed."),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                          return;
+                        }
                         await context.push('/modify-order', extra: effectiveOrder);
                         _loadFullDetails();
                       },
-                      icon: const Icon(Icons.edit_note, color: AppTheme.primaryColor),
+                      icon: Icon(Icons.edit_note, color: isAgentActive ? AppTheme.primaryColor : Colors.grey),
                       label: Text(
                         'Modify Order',
                         style: GoogleFonts.outfit(
                           fontWeight: FontWeight.bold,
-                          color: AppTheme.primaryColor,
+                          color: isAgentActive ? AppTheme.primaryColor : Colors.grey,
                         ),
                       ),
                     )
@@ -408,6 +430,15 @@ print("Order ttt $orderId");
             offset: const Offset(0, 56),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             onSelected: (value) {
+              if (!isAgentActive) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Your status is currently inactive. Please go online to proceed."),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+                return;
+              }
               print('🎯 Menu Selected: $value');
               final modifications = effectiveOrder?.serviceModifications ?? [];
               print('📦 Total Modifications: ${modifications.length}');

@@ -347,6 +347,7 @@ class LoginPageState extends State<LoginPage> {
 
   @override
   void dispose() {
+    ScaffoldMessenger.of(context).clearSnackBars();
     _mobileNumberController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -379,8 +380,8 @@ class LoginPageState extends State<LoginPage> {
 
     if (result.isSuccess) {
       // ✅ Account exists + OTP dispatched — open OTP sheet
-      print('✅ [LoginPage] OTP dispatched, opening OTP sheet');
-      _showOtpBottomSheet(pageContext);
+      print('✅ [LoginPage] Initial OTP received: ${result.otp}');
+      _showOtpBottomSheet(pageContext, initialOtp: result.otp);
     } else {
       final error     = result.error ?? '';
       final isNewUser = error.toLowerCase().contains('no account') ||
@@ -390,7 +391,8 @@ class LoginPageState extends State<LoginPage> {
       print('❌ [LoginPage] Error: "$error" | isNewUser: $isNewUser');
 
       if (isNewUser) {
-        // ✅ Show snackbar before redirecting
+        // ✅ No account — redirect to registration using GoRouter
+        ScaffoldMessenger.of(pageContext).clearSnackBars();
         ScaffoldMessenger.of(pageContext).showSnackBar(
           SnackBar(
             content: Text('No account found for this mobile number. Please create an account.', style: GoogleFonts.lato()),
@@ -404,6 +406,7 @@ class LoginPageState extends State<LoginPage> {
         // ✅ No account — redirect to registration using GoRouter
        // context.push('/register', extra: phone);
       } else {
+        ScaffoldMessenger.of(pageContext).clearSnackBars();
         ScaffoldMessenger.of(pageContext).showSnackBar(
           SnackBar(
             content: Text(error, style: GoogleFonts.lato()),
@@ -442,9 +445,11 @@ class LoginPageState extends State<LoginPage> {
 
     if (result.isSuccess) {
       print('✅ [LoginPage] Password Login success');
+      ScaffoldMessenger.of(pageContext).clearSnackBars();
       context.go('/home');
     } else {
       final error = result.error ?? 'Login failed. Please check your credentials.';
+      ScaffoldMessenger.of(pageContext).clearSnackBars();
       ScaffoldMessenger.of(pageContext).showSnackBar(
         SnackBar(
           content: Text(error, style: GoogleFonts.lato()),
@@ -456,7 +461,7 @@ class LoginPageState extends State<LoginPage> {
     }
   }
 
-  void _showOtpBottomSheet(BuildContext pageContext) {
+  void _showOtpBottomSheet(BuildContext pageContext, {String? initialOtp}) {
     showModalBottomSheet(
       context: pageContext,
       isScrollControlled: true,
@@ -469,8 +474,10 @@ class LoginPageState extends State<LoginPage> {
       builder: (_) => _OtpBottomSheet(
         phoneNumber: _mobileNumberController.text.trim(),
         onClose: () => Navigator.of(pageContext).pop(),
+        initialOtp: initialOtp,
         onVerified: () {
           // Use GoRouter to navigate to home, ensuring stack is cleared
+          ScaffoldMessenger.of(pageContext).clearSnackBars();
           context.go('/home');
         },
       ),
@@ -712,6 +719,7 @@ class LoginPageState extends State<LoginPage> {
                         ),
                         GestureDetector(
                           onTap: () {
+                            ScaffoldMessenger.of(context).clearSnackBars();
                             context.push(
                               '/register',
                               extra: _mobileNumberController.text.trim(),
@@ -797,12 +805,13 @@ class LoginPageState extends State<LoginPage> {
 class _OtpBottomSheet extends StatefulWidget {
   final String phoneNumber;
   final VoidCallback onVerified;
+  final String? initialOtp;
   final VoidCallback onClose;
 
   const _OtpBottomSheet({
     required this.phoneNumber,
     required this.onVerified,
-    required this.onClose,
+    required this.onClose, this.initialOtp,
   });
 
   @override
@@ -821,6 +830,9 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
   void initState() {
     super.initState();
     _startTimer();
+    if (widget.initialOtp != null) {
+      _otpController.text = widget.initialOtp!;
+    }
   }
 
   @override
@@ -885,8 +897,9 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
     setState(() => _isResending = false);
 
     if (result.isSuccess) {
-      _otpController.clear();
+      _otpController.text = result.otp ?? ''; // ✅ Auto-fill resent OTP
       _startTimer();
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('OTP resent successfully', style: GoogleFonts.lato()),

@@ -90,8 +90,14 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
   static const _surface = Color(0xFFF7F7F8);
   static const _cardBg = Colors.white;
 
+  // 🔹 Shared TextStyles to avoid GoogleFonts overhead during large builds (reduces lag)
+  static final _labelStyle = GoogleFonts.outfit(fontSize: 13, color: Colors.grey[600]);
+  static final _inputStyle = GoogleFonts.outfit(fontSize: 15, color: Colors.black87);
+  static final _sectionTitleStyle = GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: 0.3);
+
   @override
   void dispose() {
+    ScaffoldMessenger.of(context).clearSnackBars();
     _scrollController.dispose();
     _nameController.dispose();
     _emailController.dispose();
@@ -110,6 +116,31 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
     _licenseNumberController.dispose();
    // _dlExpiryController.dispose();
     super.dispose();
+  }
+
+  Future<bool> _onWillPop() async {
+    final shouldPop = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Discard Changes?', 
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+        content: Text('You have unsaved information. Leaving now will discard your changes.',
+          style: GoogleFonts.outfit()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Stay', style: GoogleFonts.outfit(color: _orange, fontWeight: FontWeight.bold)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('Discard', style: GoogleFonts.outfit(color: Colors.grey, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    return shouldPop ?? false;
   }
 
   // ── File Picker ───────────────────────────────────────────────────────────
@@ -170,7 +201,12 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
     if (source == null) return;
 
     final XFile? picked = isImage
-        ? await _picker.pickImage(source: source, imageQuality: 85)
+        ? await _picker.pickImage(
+            source: source,
+            imageQuality: 80,
+            maxWidth: 1024,
+            maxHeight: 1024,
+          )
         : await _picker.pickVideo(source: source);
 
     if (picked != null) onPicked(File(picked.path));
@@ -412,10 +448,11 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
   }
 
   void _showSnack(String msg) {
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg, style: GoogleFonts.outfit()),
-        backgroundColor: Colors.black87,
+        content: Text(msg, style: _labelStyle.copyWith(color: Colors.white)),
+        backgroundColor: _orangeDark,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
@@ -426,13 +463,27 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _surface,
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(HugeIcons.strokeRoundedArrowLeft01, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) async {
+        if (didPop) return;
+        final bool shouldPop = await _onWillPop();
+        if (shouldPop && context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: _surface,
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(HugeIcons.strokeRoundedArrowLeft01, color: Colors.white),
+            onPressed: () async {
+              final bool shouldPop = await _onWillPop();
+              if (shouldPop && context.mounted) {
+                Navigator.of(context).pop();
+              }
+            },
+          ),
         title: Text(
           'Agent Registration',
           style: GoogleFonts.outfit(
@@ -882,6 +933,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -930,11 +982,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                 ),
                 const SizedBox(width: 12),
                 Text(title,
-                    style: GoogleFonts.outfit(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: color,
-                        letterSpacing: 0.3)),
+                    style: _sectionTitleStyle.copyWith(color: color)),
               ],
             ),
           ),
@@ -981,10 +1029,10 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
       maxLines: maxLines,
       validator: validator,
       cursorColor: _orange,
-      style: GoogleFonts.outfit(fontSize: 15, color: Colors.black87),
+      style: _inputStyle,
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: GoogleFonts.outfit(fontSize: 13, color: Colors.grey[600]),
+        labelStyle: _labelStyle,
         prefixIcon: Icon(icon, size: 20, color: Colors.grey[500]),
         suffixIcon: suffixIcon,
         filled: true,

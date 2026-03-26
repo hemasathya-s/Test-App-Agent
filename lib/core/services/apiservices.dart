@@ -23,13 +23,17 @@ import '../../Model/AgentProfileResponse.dart';
 import '../../Model/LoginRequestModel.dart';
 import '../../Model/MovementRequest.dart';
 import '../../Model/OtpUser.dart';
-import '../../Model/Product.dart';
+import '../../Model/Product.dart' hide PaginatedProductResponse;
 import '../../Model/ProductStock.dart';
 import '../../Model/ToolStock.dart';
 import '../../Model/Tool.dart';
 import '../model/slot_availability.dart';
 import '../model/category.dart' as cat;
 import '../../config/router.dart' as app_router;
+import '../../Model/ServiceCategory.dart';
+import '../../Model/PaginatedProductResponse.dart';
+import 'package:http_parser/http_parser.dart' as http;
+import 'package:http_parser/http_parser.dart'; // To avoid errors with MediaType
 
 class ApiService {
   static const String baseUrl = 'https://api.itfixer199.com';
@@ -447,7 +451,7 @@ print("Response Code pn ${response.statusCode}");
       {String? reason}) async {
     try {
       String url = '$baseUrl/api/order/orders/$orderID/agent-approval/';
-
+      print("Status of agent $status , reason $reason");
       final response = await _authorizedRequest(
         (accessToken) => http.post(
           Uri.parse(url),
@@ -962,6 +966,122 @@ print("service Response body ${response.body}");
 //     return 'jpeg'; // default
 //   }
 
+
+
+  static Future<ApiResponse<PaginatedProductResponse>> listProduct({
+    String? lat,
+    String? lng,
+    String? categoryId,
+    int page = 1,
+    int size = 12,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final effectiveLat = lat ?? prefs.getDouble('user_latitude')?.toString();
+      final effectiveLng = lng ?? prefs.getDouble('user_longitude')?.toString();
+
+      String url = "$baseUrl/api/product?include_attribute=true&include_brand=true&include_category=true&include_media=true&include_pricing=true&page=$page&size=$size";
+      if (effectiveLat != null && effectiveLng != null) {
+        url += "&lat=$effectiveLat&lng=$effectiveLng";
+      }
+      if (categoryId != null && categoryId.isNotEmpty) {
+        url += "&category_id=$categoryId";
+      }
+
+      final response = await http.get(Uri.parse(url));
+      print("📦 Product List Status Code: ${response.statusCode}");
+      print("📦 Product Url: $url");
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> jsonData = jsonDecode(response.body);
+        print("📦 Product Raw Response Keys: ${jsonData.keys}");
+
+        // Handle various possible keys for product list
+        final List<dynamic> dataList = jsonData['products'] ?? jsonData['data'] ?? jsonData['results'] ?? [];
+        final List<Map<String, dynamic>> products = dataList
+            .whereType<Map<String, dynamic>>()
+            .toList();
+
+        final pagination = jsonData['pagination'] ?? jsonData['meta'];
+        print("📦 Product Pagination Data: $pagination");
+
+        final total = pagination != null ? (pagination['total_elements'] ?? pagination['total'] ?? products.length) : products.length;
+        final totalPages = pagination != null ? (pagination['total_pages'] ?? pagination['last_page'] ?? 1) : 1;
+        final currentPageNum = pagination != null ? (pagination['page'] ?? pagination['current_page'] ?? page) : page;
+
+        // Robust hasMore check
+        bool hasMore = false;
+        if (pagination != null) {
+          hasMore = pagination['next'] != null ||
+                    pagination['has_next'] == true ||
+                    (pagination['total_pages'] != null && (pagination['page'] ?? page) < pagination['total_pages']);
+        } else {
+          hasMore = products.length >= size;
+        }
+
+        print("📦 Product hasMore: $hasMore (current: $currentPageNum, totalPages: $totalPages, count: ${products.length})");
+
+        return ApiResponse(
+          isSuccess: true,
+          data:PaginatedProductResponse(
+            products: products,
+            total: total is int ? total : int.tryParse(total.toString()) ?? products.length,
+            totalPages: totalPages is int ? totalPages : int.tryParse(totalPages.toString()) ?? 1,
+            currentPage: currentPageNum is int ? currentPageNum : int.tryParse(currentPageNum.toString()) ?? page,
+            hasMore: hasMore,
+          ),
+        );
+      } else {
+        return ApiResponse(isSuccess: false, error: 'Failed to fetch products: ${response.statusCode}');
+      }
+    } catch (e) {
+      print("❌ Error on list Product: $e");
+      return ApiResponse(isSuccess: false, error: 'Network error: $e');
+    }
+  }
+
+  // static Future<ApiResponse<List<ServiceCategory>>> listServiceCategories({
+  //   String? lat,
+  //   String? lng,
+  // }) async {
+  //   try {
+  //
+  //     final prefs = await SharedPreferences.getInstance();
+  //     final effectiveLat = lat ?? prefs.getDouble('user_latitude')?.toString();
+  //     final effectiveLng = lng ?? prefs.getDouble('user_longitude')?.toString();
+  //
+  //     String url = '$baseUrl/api/category';
+  //     if (effectiveLat != null && effectiveLat.isNotEmpty &&
+  //         effectiveLng != null && effectiveLng.isNotEmpty) {
+  //       url += '?lat=$effectiveLat&lng=$effectiveLng';
+  //     }
+  //
+  //     print("📦 Category List Url: $url");
+  //     final response = await http.get(
+  //       Uri.parse(url),
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //       },
+  //     ).timeout(const Duration(seconds: 10));
+  //
+  //     if (response.statusCode == 200) {
+  //       final jsonData = jsonDecode(response.body);
+  //       final List<dynamic> dataList = jsonData['data'] is List ? jsonData['data'] : [];
+  //       final categories = dataList
+  //           .map((item) => ServiceCategory.fromJson(item))
+  //           .toList();
+  //       return ApiResponse(isSuccess: true, data: categories);
+  //     } else {
+  //       return ApiResponse(isSuccess: false, error: 'Status ${response.statusCode}');
+  //     }
+  //   } on SocketException {
+  //     return ApiResponse(isSuccess: false, error: 'No internet connection');
+  //   } on TimeoutException {
+  //     return ApiResponse(isSuccess: false, error: 'Request timed out');
+  //   } catch (e) {
+  //     return ApiResponse(isSuccess: false, error: 'Unexpected error: $e');
+  //   }
+  // }
 
   /// PUT /api/user/agent/{userId}
    Future<AgentApiResult<bool>> updateAgentProfile(
@@ -1644,8 +1764,8 @@ print("service Response body ${response.body}");
       if (response.statusCode == 200) {
         final authResponse = AuthResponse.fromJson(json);
         await authResponse.saveTokens();
-        print('✅ [UnifiedLogin] Success — user: ${authResponse.user?.name}');
-        return ApiResponse(isSuccess: true, data: authResponse);
+        print('✅ [UnifiedLogin] Success — user: ${authResponse.user?.name}, OTP: ${authResponse.otp}');
+        return ApiResponse(isSuccess: true, data: authResponse, otp: authResponse.otp);
       }
 
       final errors = json['errors'] as List<dynamic>?;
@@ -1698,7 +1818,9 @@ print("service Response body ${response.body}");
       if (response.statusCode == 200) {
         final msg = json['message']?.toString() ?? 'OTP sent successfully';
         print('✅ [SendOtp] Success — $msg');
-        return ApiResponse(isSuccess: true, data: msg);
+        final receivedOtp = (json['data']?['otp'] ?? json['otp'])?.toString(); // Capture OTP
+        print('✅ [SendOtp] Success — $msg, OTP: $receivedOtp');
+        return ApiResponse(isSuccess: true, data: msg, otp: receivedOtp);
       }
 
       final errors = json['errors'] as List<dynamic>?;
@@ -2381,6 +2503,63 @@ print("service Response body ${response.body}");
   }
 
   // ── Get All Tools ────────────────────────────────────────────────────────
+  static Future<ApiResponse<List<Tool>>> listTools({
+    String? search,
+    String? categoryId,
+    int page = 1,
+    int size = 50,
+    String? status,
+  }) async {
+    try {
+      final queryParams = <String, String>{
+        'page': '$page',
+        'size': '$size',
+        if (search != null && search.isNotEmpty) 'search': search,
+        if (categoryId != null && categoryId.isNotEmpty) 'category_id': categoryId,
+        if (status != null && status.isNotEmpty) 'status': status,
+      };
+
+      final url = Uri.parse('$baseUrl/api/tools/').replace(queryParameters: queryParams);
+      print('📡 [listTools] GET: $url');
+
+      final accessToken = await getAccessToken();
+      final response = await http.get(url, headers: {
+        'Authorization': 'Bearer $accessToken',
+        'Accept': 'application/json',
+      }).timeout(const Duration(seconds: 15));
+
+      print('📡 [listTools] Status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        List<dynamic> raw = [];
+
+        if (decoded is List) {
+          raw = decoded;
+        } else if (decoded is Map) {
+          final data = decoded['data'];
+          if (data is List) {
+            raw = data;
+          } else if (data is Map) {
+            final inner = data['tools'] ?? data['items'] ?? data['results'];
+            if (inner is List) raw = inner;
+          } else {
+            raw = decoded['tools'] ?? decoded['results'] ?? decoded['items'] ?? [];
+          }
+        }
+
+        final items = raw.map((e) => Tool.fromJson(e)).toList();
+        print('✅ [listTools] Fetched ${items.length} tools');
+        return ApiResponse(isSuccess: true, data: items);
+      }
+
+      return ApiResponse(isSuccess: false, error: 'Failed to fetch tools (${response.statusCode})');
+    } catch (e) {
+      print('❌ [listTools] error: $e');
+      return ApiResponse(isSuccess: false, error: e.toString());
+    }
+  }
+
   Future<ApiResponse<List<Tool>>> getTools({
     int? page,
     int? size,
