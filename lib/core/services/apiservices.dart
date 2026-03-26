@@ -1865,21 +1865,24 @@ class ApiService {
     } catch (e) {
       print('⚠️ Device info error: $e');
     }
-    return {'device_id': 'unknown', 'device_name': 'unknown'};
+      return {'device_id': 'unknown', 'device_name': 'unknown'};
   }
 
   Future<String> _getPublicIp() async {
     try {
-      final response = await http
-          .get(Uri.parse('https://api.ipify.org?format=json'))
+      final response = await http.get(Uri.parse('$baseUrl/api/third-party/get-ip/'))
           .timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final ip = data['ip']?.toString() ?? '0.0.0.0';
-        print('🌐 [IP Fetch] Public IP: $ip');
-        return ip;
+        final jsonData = jsonDecode(response.body);
+        print("ip address:${response.body}");
+        if (jsonData['success'] == true && jsonData['data'] != null) {
+          final ip = jsonData['data']['ip']?.toString() ?? '0.0.0.0';
+          print("📡 Public IP: $ip");
+          return ip;
+        }
       }
+      return '0.0.0.0';
     } catch (e) {
       print('⚠️ [IP Fetch] Error: $e');
     }
