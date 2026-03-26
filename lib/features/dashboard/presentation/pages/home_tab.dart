@@ -248,10 +248,9 @@ class _HomeTabState extends ConsumerState<HomeTab> {
             )
           else
             ...state.upcomingOrders
-                .where((order) =>
-                    order.agentApproval?.toUpperCase() != 'REJECTED')
                 .map((order) =>
-                    _buildJobCard(order, context, ref, state.isAvailable)),
+    _buildJobCard(order, context, ref, state.isAvailable))
+        .toList(),
         ],
       ),
     ),
@@ -609,7 +608,7 @@ print("Agent Status ${order.agentApproval?.toLowerCase()}");
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  isUrgent ?? '',
+                  isUrgent?.replaceAll('_', ' ') ?? '',
                   style: GoogleFonts.outfit(
                     color: isRejected
                         ? Colors.red
@@ -727,7 +726,8 @@ print("Agent Status ${order.agentApproval?.toLowerCase()}");
                 ),
               ],
             ) else if (isRejected)
-            Expanded(
+            SizedBox(
+              width: double.infinity,
               child: ElevatedButton(
                 onPressed: isAgentOnline ? () => _showAcceptBottomSheet(context, ref, order) : null,
                 style: ElevatedButton.styleFrom(

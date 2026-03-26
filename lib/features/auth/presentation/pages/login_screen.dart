@@ -396,7 +396,7 @@ class LoginPageState extends State<LoginPage> {
         ScaffoldMessenger.of(pageContext).showSnackBar(
           SnackBar(
             content: Text('No account found for this mobile number. Please create an account.', style: GoogleFonts.lato()),
-            backgroundColor: Colors.black87,
+            backgroundColor: Colors.orange[400],
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -410,7 +410,7 @@ class LoginPageState extends State<LoginPage> {
         ScaffoldMessenger.of(pageContext).showSnackBar(
           SnackBar(
             content: Text(error, style: GoogleFonts.lato()),
-            backgroundColor: Colors.black87,
+            backgroundColor: Colors.red[400],
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -453,7 +453,7 @@ class LoginPageState extends State<LoginPage> {
       ScaffoldMessenger.of(pageContext).showSnackBar(
         SnackBar(
           content: Text(error, style: GoogleFonts.lato()),
-          backgroundColor: Colors.black87,
+          backgroundColor: Colors.red[400],
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
@@ -473,8 +473,8 @@ class LoginPageState extends State<LoginPage> {
       ),
       builder: (_) => _OtpBottomSheet(
         phoneNumber: _mobileNumberController.text.trim(),
+        initialOtp: initialOtp, // ✅ Pass to sheet
         onClose: () => Navigator.of(pageContext).pop(),
-        initialOtp: initialOtp,
         onVerified: () {
           // Use GoRouter to navigate to home, ensuring stack is cleared
           ScaffoldMessenger.of(pageContext).clearSnackBars();
@@ -804,14 +804,15 @@ class LoginPageState extends State<LoginPage> {
 
 class _OtpBottomSheet extends StatefulWidget {
   final String phoneNumber;
+  final String? initialOtp; // ✅ New field
   final VoidCallback onVerified;
-  final String? initialOtp;
   final VoidCallback onClose;
 
   const _OtpBottomSheet({
     required this.phoneNumber,
+    this.initialOtp, // ✅ Optional initial value
     required this.onVerified,
-    required this.onClose, this.initialOtp,
+    required this.onClose,
   });
 
   @override
@@ -830,6 +831,7 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
   void initState() {
     super.initState();
     _startTimer();
+    // ✅ Auto-fill if initialOtp is provided
     if (widget.initialOtp != null) {
       _otpController.text = widget.initialOtp!;
     }
@@ -903,7 +905,7 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('OTP resent successfully', style: GoogleFonts.lato()),
-          backgroundColor: Colors.black87,
+          backgroundColor: Colors.green[600],
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),

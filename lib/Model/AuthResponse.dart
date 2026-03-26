@@ -9,14 +9,15 @@ class AuthResponse {
   final OtpUser? user;
   final String? accessToken;
   final String? refreshToken;
-  final String? otp;
+  final String? otp; // ✅ Capture OTP if returned by API
 
   const AuthResponse({
     required this.success,
     required this.message,
     this.user,
     this.accessToken,
-    this.refreshToken, this.otp,
+    this.refreshToken,
+    this.otp,
   });
 
   factory AuthResponse.fromJson(Map<String, dynamic> json) {
@@ -25,7 +26,6 @@ class AuthResponse {
     final tokensJson = data['tokens'] ?? json['tokens'] ?? json;
 
     return AuthResponse(
-      otp: data['otp']?.toString() ?? json['otp']?.toString(),
       success: json['success'] == true ||
           data['success'] == true ||
           // ✅ OTP verify success: has user + tokens.access
@@ -40,6 +40,7 @@ class AuthResponse {
           : null,
       accessToken: tokensJson['access']?.toString(),
       refreshToken: tokensJson['refresh']?.toString(),
+      otp: data['otp']?.toString() ?? json['otp']?.toString(), // ✅ Extract OTP
     );
   }
 
@@ -108,12 +109,13 @@ class ApiResponse<T> {
   final bool isSuccess;
   final T? data;
   final String? error;
-  final String? otp;
+  final String? otp; // ✅ Store OTP for auto-fill
 
   const ApiResponse({
     required this.isSuccess,
     this.data,
-    this.error, this.otp,
+    this.error,
+    this.otp,
   });
 
   factory ApiResponse.fromJson(Map<String, dynamic> json, T Function(Map<String, dynamic>) fromJson) {

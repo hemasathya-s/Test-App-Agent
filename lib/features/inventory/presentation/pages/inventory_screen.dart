@@ -224,13 +224,20 @@ class _InventoryScreenState extends State<InventoryScreen>
             'isTool': true,
           });
           if (t.categoryId != null) {
-            catSet[t.categoryId!] = {'id': t.categoryId, 'name': t.categoryName ?? 'Other'};
+            catSet[t.categoryId!] = {
+              'id': t.categoryId,
+              'name': t.categoryName ?? 'Other'
+            };
           }
         }
       }
       setState(() {
         _catalogItems = items;
-        _catalogCategories = catSet.values.toList();
+        // ✅ Only update categories if we don't have them yet, or if we are showing "All"
+        if (_catalogCategories.isEmpty ||
+            (_searchQuery.isEmpty && _selectedCategoryId == 'all')) {
+          _catalogCategories = catSet.values.toList();
+        }
         _isBrowseLoading = false;
       });
     } else {
@@ -241,11 +248,15 @@ class _InventoryScreenState extends State<InventoryScreen>
       if (res.isSuccess && res.data != null) {
         final q = _searchQuery.toLowerCase();
         for (final p in res.data!.products) {
-          if (q.isNotEmpty && !p['name'].toString().toLowerCase().contains(q)) continue;
+          if (q.isNotEmpty &&
+              !p['name'].toString().toLowerCase().contains(q)) {
+            continue;
+          }
           // Extract pricing
-          final pricing = (p['pricing'] is List && (p['pricing'] as List).isNotEmpty)
-              ? (p['pricing'] as List).first
-              : null;
+          final pricing =
+              (p['pricing'] is List && (p['pricing'] as List).isNotEmpty)
+                  ? (p['pricing'] as List).first
+                  : null;
           final price = pricing?['price'];
 
           // Extract categories
@@ -253,7 +264,8 @@ class _InventoryScreenState extends State<InventoryScreen>
 
           // Check if matches selected category
           if (catId != null) {
-            final matchesCat = cats.any((c) => c is Map && c['id']?.toString() == catId);
+            final matchesCat =
+                cats.any((c) => c is Map && c['id']?.toString() == catId);
             if (!matchesCat) continue;
           }
 
@@ -267,14 +279,21 @@ class _InventoryScreenState extends State<InventoryScreen>
 
           for (final cat in cats) {
             if (cat is Map && cat['id'] != null) {
-              catSet[cat['id'].toString()] = {'id': cat['id'], 'name': cat['name'] ?? 'Other'};
+              catSet[cat['id'].toString()] = {
+                'id': cat['id'],
+                'name': cat['name'] ?? 'Other'
+              };
             }
           }
         }
       }
       setState(() {
         _catalogItems = items;
-        _catalogCategories = catSet.values.toList();
+        // ✅ Only update categories if we don't have them yet, or if we are showing "All"
+        if (_catalogCategories.isEmpty ||
+            (_searchQuery.isEmpty && _selectedCategoryId == 'all')) {
+          _catalogCategories = catSet.values.toList();
+        }
         _isBrowseLoading = false;
       });
     }
@@ -298,12 +317,13 @@ class _InventoryScreenState extends State<InventoryScreen>
     if (mounted) {
       setState(() {
         _submitting.remove(id);
-        if (success) _cartQty.remove(id); // reset after submit
+        // Always reset to "Add" button state after attempt, as requested
+        _cartQty.remove(id); 
       });
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
         ..showSnackBar(SnackBar(
-          content: Text(success ? 'Request submitted!' : 'Failed to submit request'),
+          content: Text(success ? 'Request submitted!' : 'Unavaliable to submit request'),
           backgroundColor:  Colors.black87,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -714,7 +734,7 @@ class _InventoryScreenState extends State<InventoryScreen>
                         child: Container(
                           width: 32, height: 32,
                           alignment: Alignment.center,
-                          child: Icon(Icons.add, size: 16, color: AppTheme.primaryColor),
+                          child: const Icon(Icons.add, size: 16, color: Colors.black),
                         ),
                       ),
                     ],

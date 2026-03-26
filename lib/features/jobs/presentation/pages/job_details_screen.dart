@@ -1261,7 +1261,7 @@ print("Order ttt $orderId");
                     ),
                   ),
                   const SizedBox(height: 24),
-                  _buildLabel('Device Serial Number *'),
+                  _buildLabel('Device Serial Number'),
                   const SizedBox(height: 8),
                   TextField(
                     controller: idController,
@@ -1312,7 +1312,7 @@ print("Order ttt $orderId");
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: (isSubmitting || selectedItem == null || idController.text.trim().isEmpty || notesController.text.trim().isEmpty) ? null : () async {
+                      onPressed: (isSubmitting || selectedItem == null || notesController.text.trim().isEmpty) ? null : () async {
                         setState(() => isSubmitting = true);
                         try {
                           print('📡 Submitting Hub Service Request for item: ${selectedItem?.id}');

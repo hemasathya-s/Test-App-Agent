@@ -37,7 +37,7 @@ class _MyZonePageState extends State<MyZonePage> {
       
       if (!res.isSuccess) {
         debugPrint("DEBUG: API Error loading zones: ${res.error}");
-        _showErrorSnackBar(res.error ?? 'Failed to load zones');
+       // _showErrorSnackBar(res.error ?? 'Failed to load zones');
         setState(() {
           isLoading = false;
         });
@@ -84,7 +84,7 @@ class _MyZonePageState extends State<MyZonePage> {
       setState(() {
         isLoading = false;
       });
-      _showErrorSnackBar(e.toString());
+      //_showErrorSnackBar(e.toString());
     }
   }
 

@@ -1720,6 +1720,8 @@ print("service Response body ${response.body}");
     try {
       final deviceInfo = await _getDeviceInfo();
 
+      final ipAddress = await _getPublicIp();
+
       final LoginRequestModel finalRequest;
 
       if (request.loginType == 'PASSWORD') {
@@ -1730,7 +1732,7 @@ print("service Response body ${response.body}");
           deviceType: Platform.isAndroid ? 'ANDROID' : 'IOS',
           deviceId: deviceInfo['device_id'] ?? 'unknown',
           deviceName: deviceInfo['device_name'] ?? 'unknown',
-          ipAddress: '0.0.0.0',
+          ipAddress: ipAddress,
         );
       } else {
         finalRequest = LoginRequestModel.otp(
@@ -1739,7 +1741,7 @@ print("service Response body ${response.body}");
           deviceType: Platform.isAndroid ? 'ANDROID' : 'IOS',
           deviceId: deviceInfo['device_id'] ?? 'unknown',
           deviceName: deviceInfo['device_name'] ?? 'unknown',
-          ipAddress: '0.0.0.0',
+          ipAddress: ipAddress,
         );
       }
 
@@ -1817,7 +1819,6 @@ print("service Response body ${response.body}");
 
       if (response.statusCode == 200) {
         final msg = json['message']?.toString() ?? 'OTP sent successfully';
-        print('✅ [SendOtp] Success — $msg');
         final receivedOtp = (json['data']?['otp'] ?? json['otp'])?.toString(); // Capture OTP
         print('✅ [SendOtp] Success — $msg, OTP: $receivedOtp');
         return ApiResponse(isSuccess: true, data: msg, otp: receivedOtp);
@@ -1853,6 +1854,7 @@ print("service Response body ${response.body}");
   }) async {
     try {
       final deviceInfo = await _getDeviceInfo();
+      final ipAddress = await _getPublicIp();
 
       final body = {
         'mobile_number': mobileNumber,
@@ -1862,7 +1864,7 @@ print("service Response body ${response.body}");
         'device_type': Platform.isAndroid ? 'ANDROID' : 'IOS',
         'device_id': deviceInfo['device_id'] ?? 'unknown',
         'device_name': deviceInfo['device_name'] ?? 'unknown',
-        'ip_address': '0.0.0.0',
+        'ip_address': ipAddress,
       };
 
       print('📲 [VerifyOtp] Request body : $body');
@@ -2012,7 +2014,28 @@ print("service Response body ${response.body}");
     } catch (e) {
       print('⚠️ Device info error: $e');
     }
-    return {'device_id': 'unknown', 'device_name': 'unknown'};
+      return {'device_id': 'unknown', 'device_name': 'unknown'};
+  }
+
+  Future<String> _getPublicIp() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/api/third-party/get-ip/'))
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final jsonData = jsonDecode(response.body);
+        print("ip address:${response.body}");
+        if (jsonData['success'] == true && jsonData['data'] != null) {
+          final ip = jsonData['data']['ip']?.toString() ?? '0.0.0.0';
+          print("📡 Public IP: $ip");
+          return ip;
+        }
+      }
+      return '0.0.0.0';
+    } catch (e) {
+      print('⚠️ [IP Fetch] Error: $e');
+    }
+    return '0.0.0.0';
   }
 
 //   Future<AgentApiResult<AgentRegistrationResponse>> registerAgent({

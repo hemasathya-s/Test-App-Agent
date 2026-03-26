@@ -226,7 +226,7 @@ class TrackingService {
       final payload = jsonEncode(data);
       try {
         _channel!.sink.add(payload);
-        debugPrint("[TRACKING] SYNCED: ${position.latitude}, ${position.longitude}");
+       // debugPrint("[TRACKING] SYNCED: ${position.latitude}, ${position.longitude}");
       } catch (e) {
         debugPrint("[TRACKING] Sink send failed: $e");
         _handleDisconnect();
