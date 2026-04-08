@@ -22,14 +22,12 @@ class InventoryWebSocketService {
       final token = prefs.getString('access_token');
       
       if (token == null) {
-        print('❌ WebSocket error: No access token found');
         _isConnecting = false;
         return;
       }
 
       final uri = Uri.parse('$_wsUrl?token=$token');
-      print('📡 Connecting to WebSocket: $uri');
-      
+
       _channel = WebSocketChannel.connect(uri);
 
       // Wait for the first message or error to confirm connection
@@ -37,42 +35,35 @@ class InventoryWebSocketService {
         (message) {
           _reconnectAttempts = 0;
           _isConnecting = false;
-          print('📦 WebSocket Message Received: $message');
           try {
             final Map<String, dynamic> data = jsonDecode(message);
             _messageController.add(data);
           } catch (e) {
-            print('❌ WebSocket parse error: $e');
           }
         },
         onError: (error) {
           _isConnecting = false;
-          print('❌ WebSocket error: $error');
           _reconnect();
         },
         onDone: () {
           _isConnecting = false;
-          print('🔌 WebSocket connection closed');
           _reconnect();
         },
       );
     } catch (e) {
       _isConnecting = false;
-      print('❌ WebSocket connection exception: $e');
       _reconnect();
     }
   }
 
   void _reconnect() {
     if (_reconnectAttempts > 5) {
-      print('⚠️ WebSocket: Max reconnect attempts reached. Waiting longer...');
     }
     
     _reconnectAttempts++;
     final delay = Duration(seconds: (2 * _reconnectAttempts).clamp(5, 30));
     
-    print('🔄 Attempting to reconnect in ${delay.inSeconds} seconds (Attempt $_reconnectAttempts)...');
-    
+
     Future.delayed(delay, () {
       if (_channel == null || _isConnecting == false) {
         connect();

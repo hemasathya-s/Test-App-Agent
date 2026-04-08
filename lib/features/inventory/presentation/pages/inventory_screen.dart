@@ -2,15 +2,8 @@ import 'dart:async';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shimmer/shimmer.dart';
-import '../../../../Model/Product.dart';
-import '../../../../Model/ToolStock.dart';
-import '../../../../Model/ProductStock.dart';
-import '../../../../Model/Tool.dart';
 import '../../../../core/services/apiservices.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../Model/ServiceCategory.dart';
-import '../../../../Model/PaginatedProductResponse.dart';
-import '../../../../Model/AuthResponse.dart';
 import 'package:flutter/material.dart';
 
 class InventoryScreen extends StatefulWidget {
@@ -213,7 +206,6 @@ class _InventoryScreenState extends State<InventoryScreen>
         }
       }
     } catch (e) {
-      print('⚠️ [Inventory] Could not pre-fetch master categories: $e');
     }
 
     if (_activeTab == 'Tools') {
@@ -227,8 +219,7 @@ class _InventoryScreenState extends State<InventoryScreen>
       final catMap = <String, Map<String, dynamic>>{};
       
       if (res.isSuccess && res.data != null) {
-        print('📦 [Inventory] Total tools fetched: ${res.data!.length}');
-        
+
         for (final t in res.data!) {
           items.add({
             'id': t.id,
@@ -249,13 +240,10 @@ class _InventoryScreenState extends State<InventoryScreen>
           }
         }
       } else {
-        print('❌ [Inventory] Failed to fetch tools: ${res.error}');
       }
 
-      print('📊 [Inventory] Number of Tool Categories: ${catMap.length}');
       catMap.forEach((id, cat) {
         final count = items.where((i) => i['categoryId'] == id).length;
-        print('   🔹 Category: ${cat['name']} (ID: $id) - Count: $count');
       });
 
       setState(() {
@@ -272,7 +260,6 @@ class _InventoryScreenState extends State<InventoryScreen>
       final catMap = <String, Map<String, dynamic>>{};
       
       if (res.isSuccess && res.data != null) {
-        print('📦 [Inventory] Total products fetched: ${res.data!.products.length}');
         final q = _searchQuery.toLowerCase();
         
         for (final p in res.data!.products) {
@@ -312,12 +299,10 @@ class _InventoryScreenState extends State<InventoryScreen>
         }
       }
 
-      print('📊 [Inventory] Number of Product Categories: ${catMap.length}');
       catMap.forEach((id, cat) {
         final count = items.where((i) => 
           (i['categories'] as List).any((c) => c['id'].toString() == id)
         ).length;
-        print('   🔹 Category: ${cat['name']} (ID: $id) - Count: $count');
       });
 
       setState(() {

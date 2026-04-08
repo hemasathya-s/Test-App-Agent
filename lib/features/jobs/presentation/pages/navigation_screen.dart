@@ -14,17 +14,12 @@ import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../../../../core/model/slot_availability.dart';
 import '../../../../core/model/order_details.dart';
 import '../../../../core/services/apiservices.dart';
 import '../../../../core/services/tracking_service.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../providers/job_provider.dart';
 
-
-
-
-/*
 class NavigationScreen extends ConsumerStatefulWidget {
   final OrderDetails order;
   const NavigationScreen({super.key, required this.order});
@@ -33,25 +28,35 @@ class NavigationScreen extends ConsumerStatefulWidget {
   ConsumerState<NavigationScreen> createState() => _NavigationScreenState();
 }
 
-class _NavigationScreenState extends ConsumerState<NavigationScreen> {
+class _NavigationScreenState extends ConsumerState<NavigationScreen>
+    with TickerProviderStateMixin {
   GoogleMapController? _mapController;
   final String apiKey = "AIzaSyAflftNedMvJ812sMI1l0h7kqj1-HBYDE8";
-  final TrackingService _trackingService = TrackingService();
   final _bgService = FlutterBackgroundService();
-
+  DateTime? _lastRouteFetch;
   String? currentOrderId;
   String? customerPhone;
-  LatLng? destination;
   LatLng? riderPosition;
-  double riderRotation = 0;
+  LatLng? destination;
+  final ValueNotifier<LatLng?> _visualRiderPositionNotifier = ValueNotifier(null);
+  final ValueNotifier<double> _riderRotationNotifier = ValueNotifier(0);
+
+  // Bridging getters for existing code logic
+  LatLng? get visualRiderPosition => _visualRiderPositionNotifier.value;
+  double get riderRotation => _riderRotationNotifier.value;
+
+  int _movementAnimationId = 0;
+  AnimationController? _movementController;
   double? distanceToDestination;
 
   Set<Marker> markers = {};
   Set<Polyline> polylines = {};
-  List<LatLng> remainingPoints = [];
+  List<LatLng> fullRoutePoints = [];   // full decoded route — never trimmed
+  int _routeProgressIdx = 0;           // how far along the route the rider is
 
   bool isLoading = true;
   bool isStarted = false;
+  bool _shouldFollowRider = true;
   String currentStatus = 'PENDING';
 
   String eta = "Calculating...";
@@ -60,6 +65,12 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
 
   BitmapDescriptor? _navigationIcon;
   StreamSubscription<Position>? _positionStream;
+  Timer? _recenterTimer;
+
+  String normalizeStatus(String? status) {
+    if (status == null) return 'PENDING';
+    return status.toUpperCase().replaceAll(' ', '_');
+  }
 
   @override
   void initState() {
@@ -70,7 +81,11 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
   @override
   void dispose() {
     _positionStream?.cancel();
+    _recenterTimer?.cancel();
+    _movementController?.dispose();
     _mapController?.dispose();
+    _visualRiderPositionNotifier.dispose();
+    _riderRotationNotifier.dispose();
     super.dispose();
   }
 
@@ -78,708 +93,10 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
     if (!mounted) return;
     setState(() => isLoading = true);
 
-    print("DEBUG: --- START NAVIGATION INITIALIZATION ---");
-
     try {
-      final status = await [
-        Permission.location,
-        Permission.notification,
-      ].request();
+      await [Permission.location, Permission.notification].request();
 
-      if (status[Permission.location]?.isDenied ?? true) {
-         if (mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(
-             const SnackBar(content: Text("Location permission is required for navigation.")),
-           );
-         }
-         setState(() => isLoading = false);
-         return;
-      }
-
-      // Use bestAccuracy for initial position as well
-      Position position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.bestForNavigation,
-        ),
-      );
-      riderPosition = LatLng(position.latitude, position.longitude);
-      print("DEBUG: Current Agent Position: $riderPosition");
-
-      final targetOrder = widget.order;
-      currentOrderId = targetOrder.id;
-      destinationName = targetOrder.address ?? "Job Location";
-      currentStatus = targetOrder.orderStatus?.toUpperCase() ?? 'PENDING';
-
-      // If we are already in transit or progress, start tracking immediately
-      if (currentStatus == 'IN_TRANSIT' || currentStatus == 'IN_PROGRESS') {
-        isStarted = true;
-        _listenToPosition();
-      }
-
-      if (targetOrder.latitude != null && targetOrder.longitude != null) {
-        destination = LatLng(targetOrder.latitude!, targetOrder.longitude!);
-
-        final isRunning = await _bgService.isRunning();
-        if (!isRunning) {
-          await _bgService.startService();
-        }
-
-        _bgService.invoke('updateDestination', {
-          'latitude': targetOrder.latitude,
-          'longitude': targetOrder.longitude,
-        });
-      }
-      customerPhone = targetOrder.customerNumber;
-
-      if (destination != null) {
-        if (riderPosition != null) {
-          distanceToDestination = _calculateDistance(riderPosition!, destination!);
-        }
-        await _createNavigationIcon();
-        await fetchRoute();
-      }
-    } catch (e) {
-      debugPrint("DEBUG: ERROR during _initializeNavigation: $e");
-    } finally {
-      if (mounted) setState(() => isLoading = false);
-    }
-  }
-
-
-  Future<void> _launchExternalMap() async {
-    final String? destinationParam = (widget.order.address != null && widget.order.address!.isNotEmpty)
-        ? Uri.encodeComponent(widget.order.address!)
-        : (destination != null ? "${destination!.latitude},${destination!.longitude}" : null);
-
-    if (destinationParam == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Destination not available", style: TextStyle(color: Colors.white)), backgroundColor: Colors.black87),
-      );
-      return;
-    }
-
-    // google.navigation:q= triggers the Navigation mode directly in Google Maps on Android
-    final googleNavUrl = 'google.navigation:q=$destinationParam';
-    // Fallback for iOS or if the above scheme is not supported
-    final appleMapsUrl = 'http://maps.apple.com/?daddr=$destinationParam';
-    final fallbackUrl = 'https://www.google.com/maps/dir/?api=1&destination=$destinationParam&travelmode=driving';
-
-    try {
-      if (await canLaunchUrl(Uri.parse(googleNavUrl))) {
-        await launchUrl(Uri.parse(googleNavUrl), mode: LaunchMode.externalApplication);
-      } else if (await canLaunchUrl(Uri.parse(appleMapsUrl))) {
-        await launchUrl(Uri.parse(appleMapsUrl), mode: LaunchMode.externalApplication);
-      } else if (await canLaunchUrl(Uri.parse(fallbackUrl))) {
-        await launchUrl(Uri.parse(fallbackUrl), mode: LaunchMode.externalApplication);
-      } else {
-        throw 'Could not launch maps';
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Could not launch maps", style: TextStyle(color: Colors.white)), backgroundColor: Colors.black87),
-        );
-      }
-    }
-  }
-
-  Future<void> _createNavigationIcon() async {
-    final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
-    final Canvas canvas = Canvas(pictureRecorder);
-    const double size = 100.0;
-
-    final Paint orangePaint = Paint()..color = Colors.blue;
-    final Paint whiteBorderPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 10.0;
-
-    final Path path = Path();
-    path.moveTo(size / 2, 0);
-    path.lineTo(size * 0.9, size);
-    path.lineTo(size / 2, size * 0.7);
-    path.lineTo(size * 0.1, size);
-    path.close();
-
-    canvas.drawShadow(path, Colors.black, 6, true);
-    canvas.drawPath(path, orangePaint);
-    canvas.drawPath(path, whiteBorderPaint);
-
-    final ui.Image image = await pictureRecorder.endRecording().toImage(size.toInt(), size.toInt());
-    final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    if (byteData != null && mounted) {
-      setState(() {
-        _navigationIcon = BitmapDescriptor.fromBytes(byteData.buffer.asUint8List());
-      });
-    }
-  }
-
-  Future<void> fetchRoute() async {
-    if (riderPosition == null || destination == null) return;
-
-    final String url = "https://maps.googleapis.com/maps/api/directions/json?"
-        "origin=${riderPosition!.latitude},${riderPosition!.longitude}"
-        "&destination=${destination!.latitude},${destination!.longitude}"
-        "&key=$apiKey";
-
-    try {
-      final response = await http.get(Uri.parse(url));
-      final data = json.decode(response.body);
-      if (data["status"] == "OK" && data["routes"].isNotEmpty) {
-        final route = data["routes"][0];
-        final legs = route["legs"][0];
-
-        if (mounted) {
-          setState(() {
-            eta = legs["duration"]["text"];
-            // Use direct radius distance for distance text if desired, but here we keep route distance for ETA context
-            // distanceText = legs["distance"]["text"];
-
-            // Calculating direct distance for more accuracy on arrival
-            double directDist = _calculateDistance(riderPosition!, destination!);
-            if (directDist < 1000) {
-              distanceText = "${directDist.toStringAsFixed(0)} m";
-            } else {
-              distanceText = "${(directDist / 1000).toStringAsFixed(1)} km";
-            }
-
-            final encoded = route["overview_polyline"]["points"];
-            PolylinePoints polylinePoints = PolylinePoints();
-            List<PointLatLng> result = polylinePoints.decodePolyline(encoded);
-            remainingPoints = result.map((p) => LatLng(p.latitude, p.longitude)).toList();
-            if (remainingPoints.isNotEmpty) {
-              remainingPoints.last = destination!;
-            }
-          });
-          _updateUI();
-        }
-      }
-    } catch (e) {
-      debugPrint("DEBUG: Fetch Route Error: $e");
-    }
-  }
-
-  void _updateUI() {
-    if (riderPosition == null || destination == null) return;
-
-    List<LatLng> points = [riderPosition!];
-    if (remainingPoints.isNotEmpty) {
-      points.addAll(remainingPoints);
-    } else {
-      double distToFinish = _calculateDistance(riderPosition!, destination!);
-      if (distToFinish > 5) {
-        points.add(destination!);
-      }
-    }
-
-    setState(() {
-      polylines = {
-        if (points.length >= 2)
-          Polyline(
-            polylineId: const PolylineId("path"),
-            points: points,
-            color: Colors.blue,
-            width: 8,
-            jointType: JointType.round,
-            startCap: Cap.roundCap,
-            endCap: Cap.roundCap,
-          ),
-      };
-
-      markers = {
-        Marker(
-          markerId: const MarkerId("agent"),
-          position: riderPosition!,
-          rotation: 0,
-          anchor: const Offset(0.5, 0.5),
-          flat: false,
-          icon: _navigationIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-          zIndex: 2,
-        ),
-        Marker(
-          markerId: const MarkerId("destination"),
-          position: destination!,
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-          infoWindow: InfoWindow(title: destinationName),
-          zIndex: 1,
-        ),
-      };
-    });
-  }
-
-  void _recenterPosition() {
-    if (riderPosition != null && _mapController != null) {
-      _mapController?.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: riderPosition!,
-            zoom: 15,
-            tilt: 0,
-            bearing: riderRotation,
-          ),
-        ),
-      );
-    }
-  }
-
-  Future<void> _updateStatus(String status) async {
-    if (currentOrderId == null) return;
-
-    final success = await ApiService.updateJobStatus(currentOrderId!, status);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(success ? "Status updated: $status" : "Failed to update status"),
-          backgroundColor: success ? Colors.black87 : Colors.black87,
-          duration: const Duration(seconds: 1),
-        ),
-      );
-      if (success) {
-        setState(() {
-          currentStatus = status;
-        });
-      }
-    }
-  }
-
-  void _startTracking() async {
-    if (isStarted) return;
-    await _updateStatus('IN_TRANSIT');
-
-    final isRunning = await _bgService.isRunning();
-    if (!isRunning) {
-      await _bgService.startService();
-    }
-
-    setState(() => isStarted = true);
-    _listenToPosition();
-  }
-
-  void _listenToPosition() {
-    _positionStream?.cancel();
-    _positionStream = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: 2,
-      ),
-    ).listen((Position position) {
-      if (!mounted) return;
-
-      LatLng newPos = LatLng(position.latitude, position.longitude);
-
-      if (destination != null) {
-        distanceToDestination = _calculateDistance(newPos, destination!);
-
-        // Update distance text dynamically
-        if (distanceToDestination != null) {
-          setState(() {
-            if (distanceToDestination! < 1000) {
-              distanceText = "${distanceToDestination!.toStringAsFixed(0)} m";
-            } else {
-              distanceText = "${(distanceToDestination! / 1000).toStringAsFixed(1)} km";
-            }
-          });
-        }
-
-      if (remainingPoints.isNotEmpty) {
-        double dist = _calculateDistance(newPos, remainingPoints.first);
-        if (dist > 50) {
-          riderPosition = newPos;
-          fetchRoute();
-          return;
-        }
-      }
-
-      if (riderPosition != null) {
-        riderRotation = _calculateBearing(riderPosition!, newPos);
-      }
-
-      setState(() {
-        riderPosition = newPos;
-        _updateRemainingPoints(newPos);
-        _updateUI();
-      });
-
-      _mapController?.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: riderPosition!,
-            zoom: 19,
-            tilt: 0,
-            bearing: riderRotation,
-          ),
-        ),
-      );
-    }});
-  }
-
-  void _updateRemainingPoints(LatLng pos) {
-    if (remainingPoints.isEmpty) return;
-    int closest = -1;
-    double minD = double.infinity;
-    for (int i = 0; i < min(remainingPoints.length, 5); i++) {
-      double d = _calculateDistance(pos, remainingPoints[i]);
-      if (d < minD) { minD = d; closest = i; }
-    }
-    if (closest != -1 && minD < 25) {
-      remainingPoints.removeRange(0, closest + 1);
-    }
-  }
-
-  double _calculateDistance(LatLng p1, LatLng p2) {
-    var p = 0.017453292519943295;
-    var a = 0.5 - cos((p2.latitude - p1.latitude) * p) / 2 +
-        cos(p1.latitude * p) * cos(p2.latitude * p) * (1 - cos((p2.longitude - p1.longitude) * p)) / 2;
-    return 12742 * asin(sqrt(a)) * 1000;
-  }
-
-  double _calculateBearing(LatLng start, LatLng end) {
-    double lat1 = start.latitude * pi / 180;
-    double lon1 = start.longitude * pi / 180;
-    double lat2 = end.latitude * pi / 180;
-    double lon2 = end.longitude * pi / 180;
-    double dLon = lon2 - lon1;
-    double y = sin(dLon) * cos(lat2);
-    double x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon);
-    return (atan2(y, x) * 180 / pi + 360) % 360;
-  }
-
-  Future<void> _makePhoneCall() async {
-    if (customerPhone == null || customerPhone!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Phone number not available")),
-      );
-      return;
-    }
-    final Uri launchUri = Uri(
-      scheme: 'tel',
-      path: customerPhone,
-    );
-    if (await canLaunchUrl(launchUri)) {
-      await launchUrl(launchUri);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Could not launch dialer")),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final jobController = ref.read(jobProvider.notifier);
-    bool isNearDestination = distanceToDestination != null && distanceToDestination! <= 50;
-    bool isCompleted = currentStatus == 'COMPLETED' || currentStatus == 'DELIVERED';
-    return Scaffold(
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Stack(
-        children: [
-          GoogleMap(
-            padding: const EdgeInsets.only(bottom: 320, top: 100),
-            initialCameraPosition: CameraPosition(
-              target: riderPosition ?? const LatLng(13.0827, 80.2707),
-              zoom: 19,
-              tilt: 0,
-              bearing: 0,
-            ),
-            onMapCreated: (controller) {
-              _mapController = controller;
-              _recenterPosition();
-            },
-            markers: markers,
-            polylines: polylines,
-            myLocationEnabled: false,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
-            compassEnabled: false,
-          ),
-
-          // Top Navigation Bar
-          Positioned(
-            top: 50,
-            left: 15,
-            right: 15,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => context.pop(),
-                    child: const Icon(Icons.arrow_back, color: Colors.black87),
-                  ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          "Navigating to Job",
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        Text(
-                          destinationName,
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      eta,
-                      style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.primaryColor,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(20, 25, 20, 40),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-                boxShadow: [
-                  BoxShadow(color: Colors.black12, blurRadius: 20, spreadRadius: 5),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            distanceText,
-                            style: GoogleFonts.poppins(
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          Text(
-                            "Remaining Distance",
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          _buildCircleButton(
-                            icon: Icons.call,
-                            color: Colors.green,
-                            onTap: _makePhoneCall,
-                          ),
-                          const SizedBox(width: 15),
-                          _buildCircleButton(
-                            icon: Icons.directions_outlined,
-                            color: Colors.blue,
-                            onTap: _launchExternalMap,
-                          ),
-                          const SizedBox(width: 15),
-                          _buildCircleButton(
-                            icon: Icons.my_location,
-                            color: AppTheme.primaryColor,
-                            onTap: _recenterPosition,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 25),
-
-                  // DYNAMIC BUTTON LOGIC BASED ON STATUS
-                  if (isCompleted)
-                    SizedBox(
-                      width: double.infinity,
-                      height: 55,
-                      child: ElevatedButton(
-                        onPressed: null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                        ),
-                        child: Text(
-                          "ORDER COMPLETED",
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    )
-                  else if (currentStatus != 'IN_TRANSIT' && currentStatus != 'IN_PROGRESS')
-                    SizedBox(
-                      width: double.infinity,
-                      height: 55,
-                      child: ElevatedButton(
-                        onPressed: isNearDestination ? () => _updateStatus('IN_PROGRESS') : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isNearDestination ? Colors.blue : Colors.grey[400],
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                        ),
-                        child: Text(
-                          isNearDestination ? "ARRIVED / START JOB" : "MOVING TO LOCATION...",
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    )
-                  else if (currentStatus == 'IN_PROGRESS')
-                    SizedBox(
-                      width: double.infinity,
-                      height: 55,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          jobController.arriveAtLocation(); // Updates internal provider state if needed
-                          context.push('/checklist', extra: widget.order);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                        ),
-                        child: Text(
-                          "COMPLETE CHECKLIST",
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCircleButton({required IconData icon, required Color color, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, color: color, size: 26),
-      ),
-    );
-  }
-}
-*/
-
-class NavigationScreen extends ConsumerStatefulWidget {
-  final OrderDetails order;
-  const NavigationScreen({super.key, required this.order});
-
-  @override
-  ConsumerState<NavigationScreen> createState() => _NavigationScreenState();
-}
-
-class _NavigationScreenState extends ConsumerState<NavigationScreen> {
-  GoogleMapController? _mapController;
-  final String apiKey = "AIzaSyAflftNedMvJ812sMI1l0h7kqj1-HBYDE8";
-  final TrackingService _trackingService = TrackingService();
-  final _bgService = FlutterBackgroundService();
-
-  String? currentOrderId;
-  String? customerPhone;
-  LatLng? destination;
-  LatLng? riderPosition;
-  double riderRotation = 0;
-  double? distanceToDestination;
-
-  Set<Marker> markers = {};
-  Set<Polyline> polylines = {};
-  List<LatLng> remainingPoints = [];
-
-  bool isLoading = true;
-  bool isStarted = false;
-  String currentStatus = 'PENDING';
-
-  String eta = "Calculating...";
-  String distanceText = "--";
-  String destinationName = "Destination";
-
-  BitmapDescriptor? _navigationIcon;
-  StreamSubscription<Position>? _positionStream;
-
-  @override
-  void initState() {
-    super.initState();
-    _initializeNavigation();
-  }
-
-  @override
-  void dispose() {
-    _positionStream?.cancel();
-    _mapController?.dispose();
-    super.dispose();
-  }
-
-  Future<void> _initializeNavigation() async {
-    if (!mounted) return;
-    setState(() => isLoading = true);
-
-    print("DEBUG: --- START NAVIGATION INITIALIZATION ---");
-
-    try {
-      final status = await [
-        Permission.location,
-        Permission.notification,
-      ].request();
-
-      if (status[Permission.location]?.isDenied ?? true) {
+      if (await Permission.location.isDenied) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Location permission is required for navigation.")),
@@ -789,21 +106,27 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen> {
         return;
       }
 
-      // Use bestAccuracy for initial position as well
+      if (widget.order.id != null) {
+        final updatedOrder = await ApiService.getOrderbyId(widget.order.id!);
+        if (updatedOrder != null) {
+          currentStatus = normalizeStatus(updatedOrder.orderStatus);
+        } else {
+          currentStatus = normalizeStatus(widget.order.orderStatus);
+        }
+      } else {
+        currentStatus = normalizeStatus(widget.order.orderStatus);
+      }
+
       Position position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.bestForNavigation,
-        ),
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.bestForNavigation),
       );
       riderPosition = LatLng(position.latitude, position.longitude);
-      print("DEBUG: Current Agent Position: $riderPosition");
+      _visualRiderPositionNotifier.value = riderPosition;
 
       final targetOrder = widget.order;
       currentOrderId = targetOrder.id;
       destinationName = targetOrder.address ?? "Job Location";
-      currentStatus = targetOrder.orderStatus?.toUpperCase() ?? 'PENDING';
-print("Current Stu=atus $currentStatus , ${widget.order.orderStatus}");
-      // If we are already in transit or progress, start tracking immediately
+
       if (currentStatus == 'IN_TRANSIT' || currentStatus == 'IN_PROGRESS') {
         isStarted = true;
         _listenToPosition();
@@ -811,12 +134,8 @@ print("Current Stu=atus $currentStatus , ${widget.order.orderStatus}");
 
       if (targetOrder.latitude != null && targetOrder.longitude != null) {
         destination = LatLng(targetOrder.latitude!, targetOrder.longitude!);
-
         final isRunning = await _bgService.isRunning();
-        if (!isRunning) {
-          await _bgService.startService();
-        }
-
+        if (!isRunning) await _bgService.startService();
         _bgService.invoke('updateDestination', {
           'latitude': targetOrder.latitude,
           'longitude': targetOrder.longitude,
@@ -825,25 +144,11 @@ print("Current Stu=atus $currentStatus , ${widget.order.orderStatus}");
       customerPhone = targetOrder.customerNumber;
 
       if (destination != null) {
-        if (riderPosition != null) {
-          distanceToDestination = _calculateDistance(riderPosition!, destination!);
-          if (distanceToDestination != null) {
-            setState(() {
-              if (distanceToDestination! < 1000) {
-                distanceText = "${distanceToDestination!.toStringAsFixed(0)} m";
-              } else {
-                distanceText = "${(distanceToDestination! / 1000).toStringAsFixed(1)} km";
-              }
-            });
-          }
-        }
         await _createNavigationIcon();
-
-        // 🗺️ Always generate polyline if destination is available
         await fetchRoute();
       }
     } catch (e) {
-      debugPrint("DEBUG: ERROR during _initializeNavigation: $e");
+      debugPrint("ERROR during _initializeNavigation: $e");
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
@@ -852,23 +157,22 @@ print("Current Stu=atus $currentStatus , ${widget.order.orderStatus}");
   Future<void> _createNavigationIcon() async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
-    const double size = 100.0;
+    const double size = 120.0;
 
-    final Paint orangePaint = Paint()..color = Colors.blue;
+    final Paint bluePaint = Paint()..color = const Color(0xFF2196F3);
     final Paint whiteBorderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 10.0;
+      ..strokeWidth = 12.0;
 
     final Path path = Path();
     path.moveTo(size / 2, 0);
-    path.lineTo(size * 0.9, size);
-    path.lineTo(size / 2, size * 0.7);
-    path.lineTo(size * 0.1, size);
+    path.lineTo(size * 0.85, size);
+    path.lineTo(size / 2, size * 0.75);
+    path.lineTo(size * 0.15, size);
     path.close();
 
-    canvas.drawShadow(path, Colors.black, 6, true);
-    canvas.drawPath(path, orangePaint);
+    canvas.drawPath(path, bluePaint);
     canvas.drawPath(path, whiteBorderPaint);
 
     final ui.Image image = await pictureRecorder.endRecording().toImage(size.toInt(), size.toInt());
@@ -883,7 +187,8 @@ print("Current Stu=atus $currentStatus , ${widget.order.orderStatus}");
   Future<void> fetchRoute() async {
     if (riderPosition == null || destination == null) return;
 
-    final String url = "https://maps.googleapis.com/maps/api/directions/json?"
+    final String url =
+        "https://maps.googleapis.com/maps/api/directions/json?"
         "origin=${riderPosition!.latitude},${riderPosition!.longitude}"
         "&destination=${destination!.latitude},${destination!.longitude}"
         "&key=$apiKey";
@@ -896,47 +201,115 @@ print("Current Stu=atus $currentStatus , ${widget.order.orderStatus}");
         final route = data["routes"][0];
         final legs = route["legs"][0];
 
+        // 🔥 IMPORTANT: Use STEPS instead of overview_polyline
+        List<LatLng> fullPoints = [];
+
+        for (var step in legs["steps"]) {
+          final encoded = step["polyline"]["points"];
+          List<PointLatLng> decoded =
+          PolylinePoints().decodePolyline(encoded);
+
+          fullPoints.addAll(
+            decoded.map((p) => LatLng(p.latitude, p.longitude)),
+          );
+        }
+
         if (mounted) {
           setState(() {
             eta = legs["duration"]["text"];
-            distanceText = legs["distance"]["text"];
-
-            final encoded = route["overview_polyline"]["points"];
-            PolylinePoints polylinePoints = PolylinePoints();
-            List<PointLatLng> result = polylinePoints.decodePolyline(encoded);
-            remainingPoints = result.map((p) => LatLng(p.latitude, p.longitude)).toList();
-            if (remainingPoints.isNotEmpty) {
-              remainingPoints.last = destination!;
+            fullRoutePoints = _densifyPolyline(fullPoints);
+            if (fullRoutePoints.isNotEmpty) {
+              fullRoutePoints.last = destination!;
             }
+            // Reset progress index — new route starts from the beginning
+            _routeProgressIdx = 0;
+            _updateDistanceDisplay(riderPosition!);
           });
+
           _updateUI();
         }
       }
     } catch (e) {
-      debugPrint("DEBUG: Fetch Route Error: $e");
+      debugPrint("Fetch Route Error: $e");
     }
   }
 
-  void _updateUI() {
-    if (riderPosition == null || destination == null) return;
+  void _updateDistanceDisplay(LatLng pos) {
+    double roadDist = _calculateRemainingRoadDistance(pos);
 
-    List<LatLng> points = [riderPosition!];
-    if (remainingPoints.isNotEmpty) {
-      points.addAll(remainingPoints);
-    } else {
-      double distToFinish = _calculateDistance(riderPosition!, destination!);
-      if (distToFinish > 5) {
-        points.add(destination!);
+    // Stable distance updates: ignore minor GPS drift (< 2m)
+    if (distanceToDestination == null || (roadDist - distanceToDestination!).abs() > 2) {
+      setState(() {
+        distanceToDestination = roadDist;
+        if (roadDist < 1000) {
+          distanceText = "${roadDist.toStringAsFixed(0)} m";
+        } else {
+          distanceText = "${(roadDist / 1000).toStringAsFixed(1)} km";
+        }
+      });
+    }
+  }
+
+  double _calculateRemainingRoadDistance(LatLng currentPos) {
+    if (destination == null) return 0;
+    if (fullRoutePoints.isEmpty) {
+      return Geolocator.distanceBetween(currentPos.latitude, currentPos.longitude, destination!.latitude, destination!.longitude);
+    }
+
+    // Snap to nearest point from current progress index (not from 0)
+    int searchFrom = _routeProgressIdx.clamp(0, fullRoutePoints.length - 1);
+    int nearestIdx = _findNearestRouteIndexFrom(currentPos, fullRoutePoints, searchFrom);
+    if (nearestIdx == -1) return Geolocator.distanceBetween(currentPos.latitude, currentPos.longitude, destination!.latitude, destination!.longitude);
+
+    double total = Geolocator.distanceBetween(currentPos.latitude, currentPos.longitude, fullRoutePoints[nearestIdx].latitude, fullRoutePoints[nearestIdx].longitude);
+    for (int i = nearestIdx; i < fullRoutePoints.length - 1; i++) {
+      total += Geolocator.distanceBetween(fullRoutePoints[i].latitude, fullRoutePoints[i].longitude, fullRoutePoints[i+1].latitude, fullRoutePoints[i+1].longitude);
+    }
+    return total;
+  }
+
+  /// Searches for the nearest point starting from [fromIdx], scanning up to 120
+  /// points forward. This prevents snapping back to already-passed road points.
+  int _findNearestRouteIndexFrom(LatLng pos, List<LatLng> route, int fromIdx) {
+    if (route.isEmpty) return -1;
+    int nearestIdx = fromIdx;
+    double minDist = double.infinity;
+    int searchLimit = min(route.length, fromIdx + 120);
+    for (int i = fromIdx; i < searchLimit; i++) {
+      double d = Geolocator.distanceBetween(
+          pos.latitude, pos.longitude, route[i].latitude, route[i].longitude);
+      if (d < minDist) {
+        minDist = d;
+        nearestIdx = i;
       }
+    }
+    return nearestIdx;
+  }
+
+  void _updateUI() {
+    if (visualRiderPosition == null || destination == null) return;
+
+    // Marker always reflects the visually-animated position (not snapped to road).
+    final LatLng markerPos = visualRiderPosition!;
+
+    // Build polyline starting FROM the rider's current visual position so there
+    // is never a gap between the marker and the line start.
+    // Then append remaining road points from _routeProgressIdx onward.
+    List<LatLng> pathPoints;
+    if (fullRoutePoints.isNotEmpty && _routeProgressIdx < fullRoutePoints.length) {
+      // Prepend markerPos so the line visually originates from the rider.
+      pathPoints = [markerPos, ...fullRoutePoints.sublist(_routeProgressIdx)];
+    } else {
+      pathPoints = [markerPos, destination!];
     }
 
     setState(() {
       polylines = {
-        if (points.length >= 2)
+        if (pathPoints.length >= 2)
           Polyline(
             polylineId: const PolylineId("path"),
-            points: points,
-            color: Colors.blue,
+            points: pathPoints,
+            color: const Color(0xFF2196F3),
             width: 8,
             jointType: JointType.round,
             startCap: Cap.roundCap,
@@ -947,17 +320,20 @@ print("Current Stu=atus $currentStatus , ${widget.order.orderStatus}");
       markers = {
         Marker(
           markerId: const MarkerId("agent"),
-          position: riderPosition!,
-          rotation: 0,
+          position: markerPos,
+          rotation: riderRotation,
           anchor: const Offset(0.5, 0.5),
-          flat: false,
-          icon: _navigationIcon ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-          zIndex: 2,
+          flat: true,
+          icon: _navigationIcon ??
+              BitmapDescriptor.defaultMarkerWithHue(
+                  BitmapDescriptor.hueAzure),
+          zIndex: 5,
         ),
         Marker(
           markerId: const MarkerId("destination"),
           position: destination!,
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueRed),
           infoWindow: InfoWindow(title: destinationName),
           zIndex: 1,
         ),
@@ -965,52 +341,138 @@ print("Current Stu=atus $currentStatus , ${widget.order.orderStatus}");
     });
   }
 
-  void _recenterPosition() {
-    if (riderPosition != null && _mapController != null) {
-      _mapController?.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: riderPosition!,
-            zoom: 15,
-            tilt: 0,
-            bearing: riderRotation,
-          ),
-        ),
-      );
+  double _lerpAngle(double a, double b, double t) {
+    double diff = (b - a) % 360;
+    if (diff.abs() > 180) {
+      if (diff > 0) diff -= 360;
+      else diff += 360;
     }
+    return (a + diff * t) % 360;
   }
 
-  Future<void> _updateStatus(String status) async {
-    if (currentOrderId == null) return;
+  void _animateMarkerMovement(
+    LatLng from,
+    LatLng to, {
+      double fromRotation = 0,
+      double toRotation = 0,
+      Duration duration = const Duration(milliseconds: 1000),
+      required int animationId,
+    }) {
+    // Cancel previous animation and stop any running controller
+    _movementController?.stop();
+    _movementController?.dispose();
 
-    final success = await ApiService.updateJobStatus(currentOrderId!, status);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(success ? "Status updated: $status" : "Failed to update status"),
-          backgroundColor: success ? Colors.black87 : Colors.black87,
-          duration: const Duration(seconds: 1),
-        ),
+    _movementController = AnimationController(
+      vsync: this,
+      duration: duration,
+    );
+
+    // Use a listener to update the visual state on every hardware frame
+    _movementController!.addListener(() {
+      if (!mounted || animationId != _movementAnimationId) return;
+
+      final double t = _movementController!.value;
+
+      final double lat = from.latitude + (to.latitude - from.latitude) * t;
+      final double lng = from.longitude + (to.longitude - from.longitude) * t;
+      final double rot = _lerpAngle(fromRotation, toRotation, t);
+
+      LatLng animatedPos = LatLng(lat, lng);
+
+      // Advance route progress and update distance (Throttled every 10%)
+      _updateRouteProgress(animatedPos);
+      if ((t * 100).toInt() % 10 == 0) {
+        _updateDistanceDisplay(animatedPos);
+      }
+
+      // 🚀 HIGH PERFORMANCE: Update notifiers WITHOUT setState to keep UI fluid
+      _visualRiderPositionNotifier.value = animatedPos;
+      _riderRotationNotifier.value = rot;
+
+      // Update markers and polylines visually
+      _updateUI();
+
+      if (_shouldFollowRider && _mapController != null) {
+        _mapController?.moveCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: animatedPos,
+              zoom: 19,
+              tilt: 0,
+              bearing: rot,
+            ),
+          ),
+        );
+      }
+    });
+
+    _movementController!.forward();
+  }
+
+  List<LatLng> _densifyPolyline(List<LatLng> points) {
+    if (points.length < 2) return points;
+
+    List<LatLng> dense = [];
+
+    for (int i = 0; i < points.length - 1; i++) {
+      LatLng a = points[i];
+      LatLng b = points[i + 1];
+
+      dense.add(a);
+
+      double dist = Geolocator.distanceBetween(
+        a.latitude, a.longitude,
+        b.latitude, b.longitude,
       );
-      if (success) {
-        setState(() {
-          currentStatus = status;
-        });
+
+      int segments = (dist / 2).floor(); // every 5 meters — precise enough, much smaller array
+
+      for (int j = 1; j < segments; j++) {
+        double t = j / segments;
+        dense.add(LatLng(
+          a.latitude + (b.latitude - a.latitude) * t,
+          a.longitude + (b.longitude - a.longitude) * t,
+        ));
       }
     }
+
+    dense.add(points.last);
+    return dense;
   }
 
-  void _startTracking() async {
-    if (isStarted) return;
-    await _updateStatus('IN_TRANSIT');
+  void _recenterPosition() {
+    setState(() => _shouldFollowRider = true);
+    if (visualRiderPosition != null && _mapController != null) {
+      // Snap camera to the current road segment using _routeProgressIdx
+      LatLng camPos = (fullRoutePoints.isNotEmpty && _routeProgressIdx < fullRoutePoints.length)
+          ? fullRoutePoints[_routeProgressIdx]
+          : visualRiderPosition!;
 
-    final isRunning = await _bgService.isRunning();
-    if (!isRunning) {
-      await _bgService.startService();
+      _mapController?.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: camPos, zoom: 19, tilt: 0, bearing: riderRotation),
+        ),
+        duration: const Duration(milliseconds: 600),
+      );
+    }
+  }
+
+  LatLng _smoothPosition(LatLng oldPos, LatLng newPos, double speed) {
+    // Use high alpha (closer to 1.0) so the visual position tracks GPS closely.
+    // Low alpha causes visible lag where the marker appears stuck behind real position.
+    double alpha;
+    if (speed > 10) {
+      alpha = 0.95; // Fast - almost instant
+    } else if (speed > 5) {
+      alpha = 0.9;  // Responsive
+    } else {
+      alpha = 0.8;  // Light smoothing
     }
 
-    setState(() => isStarted = true);
-    _listenToPosition();
+    return LatLng(
+      oldPos.latitude * (1 - alpha) + newPos.latitude * alpha,
+      oldPos.longitude * (1 - alpha) + newPos.longitude * alpha,
+    );
   }
 
   void _listenToPosition() {
@@ -1018,74 +480,115 @@ print("Current Stu=atus $currentStatus , ${widget.order.orderStatus}");
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: 2,
+        distanceFilter: 0,
       ),
     ).listen((Position position) {
       if (!mounted) return;
 
-      LatLng newPos = LatLng(position.latitude, position.longitude);
+      LatLng newPosRaw = LatLng(position.latitude, position.longitude);
 
-      if (destination != null) {
-        setState(() {
-          distanceToDestination = _calculateDistance(newPos, destination!);
-          if (distanceToDestination! < 1000) {
-            distanceText = "${distanceToDestination!.toStringAsFixed(0)} m";
-          } else {
-            distanceText = "${(distanceToDestination! / 1000).toStringAsFixed(1)} km";
-          }
-        });
+      // ── Stationary guard ────────────────────────────────────────────────────
+      if (riderPosition != null) {
+        final double rawDist = Geolocator.distanceBetween(
+          riderPosition!.latitude, riderPosition!.longitude,
+          newPosRaw.latitude, newPosRaw.longitude,
+        );
+        // 🚀 REDUCED: Only block if movement is less than 1.5m (GPS noise range)
+        if (rawDist < 1.5 && position.speed < 0.2) return;
       }
 
-      if (remainingPoints.isNotEmpty) {
-        double dist = _calculateDistance(newPos, remainingPoints.first);
-        if (dist > 50) {
-          riderPosition = newPos;
-          fetchRoute();
-          return;
+      LatLng newPos = riderPosition != null
+          ? _smoothPosition(riderPosition!, newPosRaw, position.speed)
+          : newPosRaw;
+
+      // ── Advance route progress index ────────────────────────────────────────
+      _updateRouteProgress(newPos);
+
+      // ── Rotation locked to upcoming road direction ──────────────────────────
+      double targetRotation = riderRotation;
+      if (_routeProgressIdx < fullRoutePoints.length - 1) {
+        targetRotation = _calculateBearing(
+            fullRoutePoints[_routeProgressIdx],
+            fullRoutePoints[_routeProgressIdx + 1]);
+      } else if (position.heading > 0) {
+        targetRotation = position.heading;
+      }
+
+      // Prevent sudden jump: only allow large bearing change at low speed
+      if ((targetRotation - riderRotation).abs() > 45 && position.speed > 2) {
+        targetRotation = riderRotation;
+      }
+
+      final LatLng fromPos = visualRiderPosition ?? riderPosition ?? newPos;
+      double dist = Geolocator.distanceBetween(
+          fromPos.latitude, fromPos.longitude, newPos.latitude, newPos.longitude);
+      
+      // 🚀 AGGRESSIVE ANIMATION: Real-time gliding
+      int durationMs = (dist * 3).clamp(100, 300).toInt();
+      Duration animDuration = Duration(milliseconds: durationMs);
+
+      riderPosition = newPos;
+
+      _movementAnimationId++;
+      _animateMarkerMovement(
+        fromPos, newPos,
+        fromRotation: riderRotation,
+        toRotation: targetRotation,
+        duration: animDuration,
+        animationId: _movementAnimationId,
+      );
+
+      // ── Off-course detection ────────────────────────────────────────────────
+      // Check from _routeProgressIdx forward (not from 0) so already-passed
+      // points don't keep the rider falsely "on-course".
+      bool offCourse = true;
+      if (fullRoutePoints.isNotEmpty) {
+        int searchFrom = _routeProgressIdx.clamp(0, fullRoutePoints.length - 1);
+        int searchLimit = min(fullRoutePoints.length, searchFrom + 120);
+        for (int i = searchFrom; i < searchLimit; i++) {
+          if (Geolocator.distanceBetween(
+                newPos.latitude, newPos.longitude,
+                fullRoutePoints[i].latitude, fullRoutePoints[i].longitude) < 45) {
+            offCourse = false;
+            break;
+          }
         }
       }
 
-      if (riderPosition != null) {
-        riderRotation = _calculateBearing(riderPosition!, newPos);
+      if (offCourse && destination != null && riderPosition != null) {
+        if (_lastRouteFetch == null ||
+            DateTime.now().difference(_lastRouteFetch!) > const Duration(seconds: 10)) {
+          _lastRouteFetch = DateTime.now();
+          fetchRoute();
+        }
       }
-
-      setState(() {
-        riderPosition = newPos;
-        _updateRemainingPoints(newPos);
-        _updateUI();
+    }, onError: (error) {
+      debugPrint("GEOLOCATOR STREAM ERROR: $error");
+      // Handle potential timeout or permission loss by attempting to restart stream
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted && isStarted) _listenToPosition();
       });
-
-      _mapController?.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: riderPosition!,
-            zoom: 19,
-            tilt: 0,
-            bearing: riderRotation,
-          ),
-        ),
-      );
-    });
+    }, cancelOnError: false);
   }
 
-  void _updateRemainingPoints(LatLng pos) {
-    if (remainingPoints.isEmpty) return;
-    int closest = -1;
+  /// No hard distance gate: the nearest point within the window is always the
+  /// correct next road segment, even if GPS drifts slightly off-road.
+  void _updateRouteProgress(LatLng pos) {
+    if (fullRoutePoints.isEmpty) return;
+    final int searchFrom = _routeProgressIdx.clamp(0, fullRoutePoints.length - 1);
+    final int searchLimit = min(fullRoutePoints.length, searchFrom + 150);
+    int nearest = searchFrom;
     double minD = double.infinity;
-    for (int i = 0; i < min(remainingPoints.length, 5); i++) {
-      double d = _calculateDistance(pos, remainingPoints[i]);
-      if (d < minD) { minD = d; closest = i; }
+    for (int i = searchFrom; i < searchLimit; i++) {
+      final double d = Geolocator.distanceBetween(
+          pos.latitude, pos.longitude,
+          fullRoutePoints[i].latitude, fullRoutePoints[i].longitude);
+      if (d < minD) { minD = d; nearest = i; }
     }
-    if (closest != -1 && minD < 25) {
-      remainingPoints.removeRange(0, closest + 1);
+    // Only ever move forward — polyline can only shrink, never grow back.
+    if (nearest > _routeProgressIdx) {
+      _routeProgressIdx = nearest;
     }
-  }
-
-  double _calculateDistance(LatLng p1, LatLng p2) {
-    var p = 0.017453292519943295;
-    var a = 0.5 - cos((p2.latitude - p1.latitude) * p) / 2 +
-        cos(p1.latitude * p) * cos(p2.latitude * p) * (1 - cos((p2.longitude - p1.longitude) * p)) / 2;
-    return 12742 * asin(sqrt(a)) * 1000;
   }
 
   double _calculateBearing(LatLng start, LatLng end) {
@@ -1099,88 +602,57 @@ print("Current Stu=atus $currentStatus , ${widget.order.orderStatus}");
     return (atan2(y, x) * 180 / pi + 360) % 360;
   }
 
-  Future<void> _makePhoneCall() async {
-    if (customerPhone == null || customerPhone!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Phone number not available")),
-      );
-      return;
-    }
-    final Uri launchUri = Uri(
-      scheme: 'tel',
-      path: customerPhone,
-    );
-    if (await canLaunchUrl(launchUri)) {
-      await launchUrl(launchUri);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Could not launch dialer")),
-      );
-    }
+  void _startTracking() async {
+    if (isStarted) return;
+    final success = await ApiService.updateJobStatus(currentOrderId!, 'IN_TRANSIT');
+    if (!success.isSuccess) return;
+    setState(() {
+      currentStatus = 'IN_TRANSIT';
+      isStarted = true;
+    });
+    ref.read(jobProvider.notifier).startNavigation();
+    if (!(await _bgService.isRunning())) await _bgService.startService();
+    _listenToPosition();
   }
-  Future<void> _launchExternalMap() async {
-    final String? destinationParam = (widget.order.address != null && widget.order.address!.isNotEmpty)
-        ? Uri.encodeComponent(widget.order.address!)
-        : (destination != null ? "${destination!.latitude},${destination!.longitude}" : null);
 
-    if (destinationParam == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Destination not available", style: TextStyle(color: Colors.white)), backgroundColor: Colors.black87),
-      );
-      return;
-    }
-
-    // google.navigation:q= triggers the Navigation mode directly in Google Maps on Android
-    final googleNavUrl = 'google.navigation:q=$destinationParam';
-    // Fallback for iOS or if the above scheme is not supported
-    final appleMapsUrl = 'http://maps.apple.com/?daddr=$destinationParam';
-    final fallbackUrl = 'https://www.google.com/maps/dir/?api=1&destination=$destinationParam&travelmode=driving';
-
-    try {
-      if (await canLaunchUrl(Uri.parse(googleNavUrl))) {
-        await launchUrl(Uri.parse(googleNavUrl), mode: LaunchMode.externalApplication);
-      } else if (await canLaunchUrl(Uri.parse(appleMapsUrl))) {
-        await launchUrl(Uri.parse(appleMapsUrl), mode: LaunchMode.externalApplication);
-      } else if (await canLaunchUrl(Uri.parse(fallbackUrl))) {
-        await launchUrl(Uri.parse(fallbackUrl), mode: LaunchMode.externalApplication);
-      } else {
-        throw 'Could not launch maps';
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Could not launch maps", style: TextStyle(color: Colors.white)), backgroundColor: Colors.black87),
-        );
-      }
-    }
-  }
   @override
   Widget build(BuildContext context) {
     final jobController = ref.read(jobProvider.notifier);
     bool isNearDestination = distanceToDestination != null && distanceToDestination! <= 50;
-
-    // 🏆 Final Status Overlay State
     final bool isCompleted = currentStatus == 'COMPLETED' || currentStatus == 'DELIVERED';
     final bool isCancelled = currentStatus == 'CANCELLED';
-    final bool showOverlay = isCompleted || isCancelled;
 
     return Scaffold(
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : Stack(
         children: [
-          // 🗺️ Map Content
           GoogleMap(
-            padding: const EdgeInsets.only(bottom: 320, top: 100),
+            padding: const EdgeInsets.only(bottom: 280, top: 80),
             initialCameraPosition: CameraPosition(
               target: riderPosition ?? const LatLng(13.0827, 80.2707),
               zoom: 19,
               tilt: 0,
-              bearing: 0,
             ),
             onMapCreated: (controller) {
               _mapController = controller;
               _recenterPosition();
+            },
+            onCameraMove: (pos) {
+              if (_shouldFollowRider && visualRiderPosition != null) {
+                double d = Geolocator.distanceBetween(
+                  pos.target.latitude, pos.target.longitude, 
+                  visualRiderPosition!.latitude, visualRiderPosition!.longitude
+                );
+                // 🚀 IMPROVED: Higher tolerance (60m) to prevent small GPS jumps from disabling auto-follow
+                if (d > 60) {
+                  setState(() => _shouldFollowRider = false);
+                  _recenterTimer?.cancel();
+                  _recenterTimer = Timer(const Duration(seconds: 8), () {
+                    if (mounted && isStarted) _recenterPosition();
+                  });
+                }
+              }
             },
             markers: markers,
             polylines: polylines,
@@ -1189,300 +661,154 @@ print("Current Stu=atus $currentStatus , ${widget.order.orderStatus}");
             zoomControlsEnabled: false,
             mapToolbarEnabled: false,
             compassEnabled: false,
+            buildingsEnabled: false,
           ),
 
-          // Top Navigation Bar
+          // Top Info
           Positioned(
-            top: 50,
+            top: MediaQuery.of(context).padding.top + 10,
             left: 15,
             right: 15,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+              padding: const EdgeInsets.all(15),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: const Offset(0, 4))],
               ),
               child: Row(
                 children: [
-                  GestureDetector(
-                    onTap: () => context.pop(),
-                    child: const Icon(Icons.arrow_back, color: Colors.black87),
-                  ),
-                  const SizedBox(width: 15),
+                  IconButton(onPressed: () => context.pop(), icon: const Icon(Icons.arrow_back)),
+                  const SizedBox(width: 5),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          "Navigating to Job",
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        Text(
-                          destinationName,
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        Text("Destination", style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey)),
+                        Text(destinationName, style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
                       ],
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      eta,
-                      style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.primaryColor,
-                      ),
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(color: AppTheme.primaryColor.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+                    child: Text(eta, style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
                   ),
                 ],
               ),
             ),
           ),
 
+          // Bottom Controls
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(20, 25, 20, 40),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-                boxShadow: [
-                  BoxShadow(color: Colors.black12, blurRadius: 20, spreadRadius: 5),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            distanceText,
-                            style: GoogleFonts.poppins(
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          Text(
-                            "Remaining Distance",
-                            style: GoogleFonts.poppins(
-                              fontSize: 14,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          _buildCircleButton(
-                            icon: Icons.call,
-                            color: Colors.green,
-                            onTap: _makePhoneCall,
-                          ),
-                          const SizedBox(width: 15),
-                          _buildCircleButton(
-                            icon: Icons.directions_outlined,
-                            color: Colors.blue,
-                            onTap: _launchExternalMap,
-                          ),
-                          const SizedBox(width: 15),
-                          _buildCircleButton(
-                            icon: Icons.my_location,
-                            color: AppTheme.primaryColor,
-                            onTap: _recenterPosition,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 25),
-
-                  // DYNAMIC BUTTON LOGIC BASED ON STATUS
-                  if (currentStatus != 'IN_TRANSIT' && currentStatus != 'IN_PROGRESS')
-                    SizedBox(
-                      width: double.infinity,
-                      height: 55,
-                      child: ElevatedButton(
-                        onPressed: _startTracking,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryColor,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+            child: SafeArea(
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(20, 25, 20, 40),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+                  boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 20)],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(distanceText, style: GoogleFonts.poppins(fontSize: 32, fontWeight: FontWeight.bold)),
+                            Text("Remaining", style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey)),
+                          ],
                         ),
-                        child: Text(
-                          "START NAVIGATION",
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
+                        Row(
+                          children: [
+                            _buildCircleButton(icon: Icons.call, color: Colors.green, onTap: () async {
+                              if (customerPhone != null) {
+                                final uri = Uri(scheme: 'tel', path: customerPhone);
+                                if (await canLaunchUrl(uri)) await launchUrl(uri);
+                              }
+                            }),
+                            const SizedBox(width: 12),
+                            _buildCircleButton(icon: Icons.directions, color: Colors.blue, onTap: () async {
+                              final dest = (widget.order.address != null) ? Uri.encodeComponent(widget.order.address!) : (destination != null ? "${destination!.latitude},${destination!.longitude}" : null);
+                              if (dest != null) {
+                                final url = 'google.navigation:q=$dest';
+                                if (await canLaunchUrl(Uri.parse(url))) await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                              }
+                            }),
+                            const SizedBox(width: 12),
+                            _buildCircleButton(icon: Icons.my_location, color: _shouldFollowRider ? AppTheme.primaryColor : Colors.grey, onTap: _recenterPosition),
+                          ],
                         ),
-                      ),
-                    )
-                  else if (currentStatus == 'IN_TRANSIT')
-                    SizedBox(
-                      width: double.infinity,
-                      height: 55,
-                      child: ElevatedButton(
-                        onPressed: isNearDestination ? () => _updateStatus('IN_PROGRESS') : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isNearDestination ? Colors.blue : Colors.grey[400],
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                        ),
-                        child: Text(
-                          isNearDestination ? "ARRIVED / START JOB" : "MOVING TO LOCATION...",
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    )
-                  else if (currentStatus == 'IN_PROGRESS')
-                      SizedBox(
-                        width: double.infinity,
-                        height: 55,
-                        child: ElevatedButton(
-                          onPressed: isNearDestination ? () {
-                            jobController.arriveAtLocation(); // Updates internal provider state if needed
-                            context.push('/checklist', extra: widget.order);
-                          } : null,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: isNearDestination ? Colors.orange : Colors.grey[400],
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                          ),
-                          child: Text(
-                            isNearDestination ? "COMPLETE CHECKLIST" : "MOVING TO LOCATION...",
-                            style: GoogleFonts.poppins(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                ],
+                      ],
+                    ),
+                    const SizedBox(height: 25),
+                    if (currentStatus == 'PENDING' || currentStatus == 'ASSIGNED' || currentStatus == 'CONFIRMED')
+                      _buildMainButton("START NAVIGATION", _startTracking, AppTheme.primaryColor)
+                    else if (currentStatus == 'IN_TRANSIT')
+                      _buildMainButton(isNearDestination ? "ARRIVED" : "MOVING TO LOCATION...", isNearDestination ? () => ApiService.updateJobStatus(currentOrderId!, 'IN_PROGRESS').then((s) => s.isSuccess ? setState(() => currentStatus = 'IN_PROGRESS') : null) : null, isNearDestination ? Colors.blue : Colors.grey)
+                    else if (currentStatus == 'IN_PROGRESS'&& isNearDestination)
+                        _buildMainButton("COMPLETE CHECKLIST", () {
+                          jobController.arriveAtLocation();
+                          context.push('/checklist', extra: widget.order);
+                        }, Colors.orange)
+                      else if (isCompleted)
+                          _buildMainButton("COMPLETED", null, Colors.green),
+                  ],
+                ),
               ),
             ),
           ),
 
-          // 🏁 Status Overlay
-          if (showOverlay) _buildStatusOverlay(context, isCompleted: isCompleted),
+          // if (!_shouldFollowRider && isStarted)
+          // Positioned(
+          //   bottom: 300,
+          //   right: 20,
+          //   child: FloatingActionButton.extended(
+          //     onPressed: _recenterPosition,
+          //     label: Text("Re-center", style: GoogleFonts.poppins(color: Colors.white)),
+          //     icon: const Icon(Icons.my_location, color: Colors.white),
+          //     backgroundColor: AppTheme.primaryColor,
+          //   ),
+          // ),
+
+          if (isCancelled) _buildStatusOverlay(context, isCompleted: false),
         ],
       ),
     );
   }
 
-  /// 🎨 Animated Overlay for Completed/Cancelled Orders
-  Widget _buildStatusOverlay(BuildContext context, {required bool isCompleted}) {
-    final String title = isCompleted ? 'Job Completed' : 'Job Cancelled';
-    final String subtitle = isCompleted
-        ? 'Great job! This order has been successfully finished.'
-        : 'This order has been cancelled and is no longer active.';
-    final IconData icon = isCompleted ? Icons.check_circle_rounded : Icons.cancel_rounded;
-    final Color color = isCompleted ? Colors.green : Colors.red;
+  Widget _buildMainButton(String text, VoidCallback? onTap, Color color) {
+    return SizedBox(
+      width: double.infinity,
+      height: 55,
+      child: ElevatedButton(
+        onPressed: onTap,
+        style: ElevatedButton.styleFrom(backgroundColor: color, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+        child: Text(text, style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+      ),
+    );
+  }
 
+  Widget _buildStatusOverlay(BuildContext context, {required bool isCompleted}) {
     return Container(
       color: Colors.white,
-      width: double.infinity,
-      height: double.infinity,
       child: Center(
-        child: TweenAnimationBuilder<double>(
-          duration: const Duration(milliseconds: 800),
-          curve: Curves.elasticOut,
-          tween: Tween(begin: 0.0, end: 1.0),
-          builder: (context, value, child) {
-            return Transform.scale(
-              scale: value,
-              child: Opacity(
-                opacity: value.clamp(0.0, 1.0),
-                child: child,
-              ),
-            );
-          },
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 100, color: color),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                title.toUpperCase(),
-                textAlign: TextAlign.center,
-                style: GoogleFonts.outfit(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40),
-                child: Text(
-                  subtitle,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.outfit(
-                    fontSize: 16,
-                    color: Colors.grey[600],
-                    height: 1.4,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 48),
-              ElevatedButton(
-                onPressed: () => context.pop(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                  padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  elevation: 0,
-                ),
-                child: Text(
-                  "BACK TO DETAILS",
-                  style: GoogleFonts.outfit(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ],
-          ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(isCompleted ? Icons.check_circle : Icons.cancel, size: 100, color: isCompleted ? Colors.green : Colors.red),
+            const SizedBox(height: 20),
+            Text(isCompleted ? "JOB COMPLETED" : "JOB CANCELLED", style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 40),
+            _buildMainButton("BACK", () => context.pop(), AppTheme.primaryColor),
+          ],
         ),
       ),
     );
@@ -1493,11 +819,8 @@ print("Current Stu=atus $currentStatus , ${widget.order.orderStatus}");
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, color: color, size: 26),
+        decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+        child: Icon(icon, color: color, size: 24),
       ),
     );
   }

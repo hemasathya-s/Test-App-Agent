@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/apiservices.dart';
 import '../../../../Model/AgentProfileResponse.dart';
@@ -11,8 +12,9 @@ import 'package:flutter/gestures.dart';
 
 class AgentEditProfilePage extends StatefulWidget {
   final AgentProfileData agentData;
+  final String supportNumber;
 
-  const AgentEditProfilePage({super.key, required this.agentData});
+  const AgentEditProfilePage({super.key, required this.agentData, required this.supportNumber});
 
   @override
   State<AgentEditProfilePage> createState() => _AgentEditProfilePageState();
@@ -77,6 +79,15 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     return false;
   }
 
+  bool get _allDocumentsVerified {
+    if (_agentData == null) return false;
+    return _agentData!.isAadharVerified.toUpperCase() == 'VERIFIED' &&
+        _agentData!.isPanVerified.toUpperCase() == 'VERIFIED' &&
+        _agentData!.isRcVerified.toUpperCase() == 'VERIFIED' &&
+        _agentData!.isLicenseVerified.toUpperCase() == 'VERIFIED' &&
+        _agentData!.isVideoKycVerified.toUpperCase() == 'VERIFIED';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -84,7 +95,17 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     _initControllers(_agentData!);
     _fetchProfile();
   }
-
+  Future<void> _launchURL(String urlString) async {
+    if (urlString.isEmpty) return;
+    final Uri url = Uri.parse(urlString);
+    try {
+      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+        debugPrint('Could not launch $urlString');
+      }
+    } catch (e) {
+      debugPrint('Error launching URL: $e');
+    }
+  }
   void _initControllers(AgentProfileData agent) {
     String name = agent.userDetails.name;
     if (name.isEmpty && agent.userName.isNotEmpty) name = agent.userName;
@@ -122,7 +143,6 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
   }
 
   Future<void> _fetchProfile() async {
-    print('📡 Fetching fresh profile data...');
     final result = await ApiService.getAgentProfile();
     if (result.isSuccess && result.data != null) {
       if (mounted) {
@@ -137,7 +157,6 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
     } else {
       if (mounted) {
         setState(() => _isLoading = false);
-        print('❌ Failed to fetch fresh profile: ${result.error}');
         if (result.error?.toLowerCase().contains('authenticated') == true ||
             result.error?.toLowerCase().contains('login') == true) {
           context.go('/login');
@@ -767,9 +786,10 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                 const SizedBox(height: 32),
 
                 // ── Submit Button ───────────────────────────
-                Padding(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 16),
+                if (!_allDocumentsVerified)
+                  Padding(
+                    padding:
+                    const EdgeInsets.symmetric(horizontal: 16),
                   child: SizedBox(
                     width: double.infinity,
                     height: 56,
@@ -822,9 +842,10 @@ class _AgentEditProfilePageState extends State<AgentEditProfilePage> {
                             recognizer: TapGestureRecognizer()
                               ..onTap = () {
                                 // Add logic to contact support (e.g. open email, chat, or phone)
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Contacting support...'))
-                                );
+                                // ScaffoldMessenger.of(context).showSnackBar(
+                                //   const SnackBar(content: Text('Contacting support...'))
+                                // );
+                                _launchURL('tel:${widget.supportNumber}');
                               },
                           ),
                         ],

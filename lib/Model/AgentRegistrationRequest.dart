@@ -116,12 +116,10 @@ class AgentRegistrationResponse {
     final tokensJson = root['tokens'] as Map<String, dynamic>?;
 
     if (userJson == null) {
-      print('⚠️ API Response missing "user" key: ${root.keys}');
       throw FormatException('Response missing required "user" information');
     }
 
     if (tokensJson == null) {
-      print('⚠️ API Response missing "tokens" key: ${root.keys}');
       // Some APIs return tokens at the root level if not nested
       final access = root['access']?.toString() ?? '';
       final refresh = root['refresh']?.toString() ?? '';
@@ -150,7 +148,6 @@ class AgentRegistrationResponse {
     await prefs.setString('user_name', user.name);
     await prefs.setString('user_email', user.email);
     await prefs.setString('user_mobile', user.mobileNumber);
-    print('✅ Agent registered & tokens saved for: ${user.name}');
   }
 }
 

@@ -21,7 +21,6 @@ final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey = GlobalKey<Scaffol
 const MethodChannel _alarmChannel = MethodChannel('in.itfixer199.agent/alarm');
 
 Future<void> initializeNotifications() async {
-  print("🔔 [main] Initializing Local Notifications...");
 
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
     'modification_alert_channel',
@@ -44,16 +43,12 @@ Future<void> initializeNotifications() async {
   await flutterLocalNotificationsPlugin.initialize(
     initializationSettings,
     onDidReceiveNotificationResponse: (details) async {
-      print("🔔 [main] Notification tapped. Payload: ${details.payload}");
       try {
         await _alarmChannel.invokeMethod('stopAlarm');
-        print("🔔 [main] stopAlarm called via MethodChannel");
-        
+
         // 🔔 Refresh Data: Trigger a refresh when a notification is tapped
         _container.read(dashboardProvider.notifier).fetchUpcomingJobs();
-        print('🔔 [main] Auto-refresh triggered via onDidReceiveNotificationResponse');
       } catch (e) {
-        print("❌ [main] Error in onDidReceiveNotificationResponse: $e");
       }
     },
   );
@@ -69,11 +64,7 @@ bool _isAlarmNotification(RemoteMessage message) {
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  print("🔔 [main] Received BACKGROUND message: ${message.messageId}");
-  print("🔔 [main] Full Message Data: ${message.data}");
   if (message.notification != null) {
-    print("🔔 [main] Notification Title: ${message.notification?.title}");
-    print("🔔 [main] Notification Body: ${message.notification?.body}");
   }
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -81,7 +72,6 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
   // 🔔 Reliability Fix: Skip Flutter local notification if Native AlarmService is triggered
   if (_isAlarmNotification(message)) {
-    print("🔔 [main] Native AlarmService will handle this. Skipping Flutter local notification.");
     return;
   }
 
@@ -140,25 +130,18 @@ void main()async{
   await initializeNotifications();
 
   FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-    print('🔔 [main] Received FOREGROUND message');
-    print('🔔 [main] Full Message Data: ${message.data}');
     if (message.notification != null) {
-      print('🔔 [main] Notification Title: ${message.notification?.title}');
-      print('🔔 [main] Notification Body: ${message.notification?.body}');
     }
 
     // 🔔 Refresh Data: Trigger a refresh when ANY message arrives in the foreground
     // Use the global provider container (created below in main)
     try {
       _container.read(dashboardProvider.notifier).fetchUpcomingJobs();
-      print('🔔 [main] Auto-refresh triggered for dashboardProvider');
     } catch (e) {
-      print('❌ [main] Error triggering refresh: $e');
     }
 
     // 🔔 Reliability Fix: Skip Flutter local notification if Native AlarmService is triggered
     if (_isAlarmNotification(message)) {
-      print("🔔 [main] Native AlarmService will handle this. Skipping Flutter local notification.");
       return;
     }
 
@@ -189,18 +172,14 @@ void main()async{
         }),
       );
     } else {
-      print('⚠️ [main] Foreground message received but has no title. Notification not shown.');
     }
   });
   
   // 🔔 Handle notification clicks when the app is in background
   FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-    print('🔔 [main] Notification tapped while in background: ${message.messageId}');
     try {
       _container.read(dashboardProvider.notifier).fetchUpcomingJobs();
-      print('🔔 [main] Auto-refresh triggered via onMessageOpenedApp');
     } catch (e) {
-      print('❌ [main] Error in onMessageOpenedApp refresh: $e');
     }
   });
 
@@ -209,12 +188,9 @@ void main()async{
   // 🔔 Handle the app being opened from a terminated state via a notification
   FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
     if (message != null) {
-      print('🔔 [main] App opened from TERMINATED state via notification: ${message.messageId}');
       try {
         _container.read(dashboardProvider.notifier).fetchUpcomingJobs();
-        print('🔔 [main] Auto-refresh triggered via getInitialMessage');
       } catch (e) {
-        print('❌ [main] Error in getInitialMessage refresh: $e');
       }
     }
   });
@@ -289,7 +265,6 @@ class _MyAppState extends State<MyApp> {
         });
       }
     } catch (e) {
-      print("❌ [main] Version check failed: $e");
       if (!mounted) return;
       setState(() {
         _errorMessage = 'Unable to check app version.\nPlease check your internet.';

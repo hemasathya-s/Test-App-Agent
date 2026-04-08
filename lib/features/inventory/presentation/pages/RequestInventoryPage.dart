@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shimmer/shimmer.dart';
 import 'dart:async';
+import 'package:intl/intl.dart';
 import '../../../../core/services/apiservices.dart';
 import '../../../../core/theme/app_theme.dart';
 
@@ -24,6 +25,8 @@ class _RequestInventoryPageState extends State<RequestInventoryPage>
   String _activeTab = 'Tools'; // 'Tools' | 'Products'
   final List<Map<String, dynamic>> _requestedItems = [];
   DateTime _selectedDate = DateTime.now();
+  Set<String> _toolDates = {};
+  Set<String> _productDates = {};
 
   late AnimationController _shimmerController;
 
@@ -37,11 +40,25 @@ class _RequestInventoryPageState extends State<RequestInventoryPage>
 
     _connectWithDate(_selectedDate);
     _listenToWebSockets();
+    _fetchRequestDates();
+  }
+
+  Future<void> _fetchRequestDates() async {
+    try {
+      final data = await ApiService.getRequestDates();
+      if (mounted) {
+        setState(() {
+          _toolDates = Set<String>.from(data['tools'] ?? []);
+          _productDates = Set<String>.from(data['products'] ?? []);
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching request dates: $e");
+    }
   }
 
   void _connectWithDate(DateTime date) {
     final dateStr = "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
-    print('📡 RequestPage: Connecting WebSockets for date $dateStr');
     _apiService.connectMovementWebSocket(startDate: dateStr, endDate: dateStr);
     _apiService.connectToolMovementWebSocket(startDate: dateStr, endDate: dateStr);
   }
@@ -70,20 +87,17 @@ class _RequestInventoryPageState extends State<RequestInventoryPage>
     
     // Listen to Product Movements
     _prodWsSub = _apiService.movementStream.listen((data) {
-      print('📦 RequestPage: Received Product WS Data');
       _handleWsMessage(data, isToolStream: false);
     });
     
     // Listen to Tool Movements
     _toolWsSub = _apiService.toolMovementStream.listen((data) {
-      print('📦 RequestPage: Received Tool WS Data');
       _handleWsMessage(data, isToolStream: true);
     });
 
     // Fallback: stop shimmer if WS takes too long
     Future.delayed(const Duration(seconds: 8), () {
       if (mounted && _isLoading) {
-        print('⏱️ RequestPage: WS Timeout fallback');
         setState(() => _isLoading = false);
       }
     });
@@ -92,10 +106,8 @@ class _RequestInventoryPageState extends State<RequestInventoryPage>
   void _handleWsMessage(Map<String, dynamic> data, {required bool isToolStream}) {
     final encoder = JsonEncoder.withIndent('  ');
     final prettyData = encoder.convert(data);
-    print('📦 RequestPage: Received Data (${isToolStream ? "Tools" : "Products"}):\n$prettyData');
     if (data['type'] == 'initial_data') {
       final List movements = data['movements'] ?? data['results'] ?? data['data'] ?? [];
-      print('📦 RequestPage: Processing ${movements.length} initial items');
       setState(() {
         _isLoading = false;
         for (var m in movements) {
@@ -106,7 +118,6 @@ class _RequestInventoryPageState extends State<RequestInventoryPage>
     }
 
     // Live update
-    print('📦 RequestPage: Processing live update (${isToolStream ? "Tools" : "Products"})');
     _processSingleMovement(data, isToolStream: isToolStream);
   }
 
@@ -225,6 +236,227 @@ class _RequestInventoryPageState extends State<RequestInventoryPage>
     super.dispose();
   }
 
+  void _showHighlightDatePicker() {
+    DateTime viewedMonth = DateTime(_selectedDate.year, _selectedDate.month);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return SafeArea(
+          child: StatefulBuilder(
+            builder: (context, setModalState) {
+              final firstDayOfMonth = DateTime(viewedMonth.year, viewedMonth.month, 1);
+              final lastDayOfMonth = DateTime(viewedMonth.year, viewedMonth.month + 1, 0);
+              final daysInMonth = lastDayOfMonth.day;
+              final startingWeekday = firstDayOfMonth.weekday; // 1 (Mon) - 7 (Sun)
+              
+              // Adjust for grid (Mon=1 ... Sun=7)
+              final prevMonthLastDay = DateTime(viewedMonth.year, viewedMonth.month, 0).day;
+              final prevMonthDaysToDisplay = (startingWeekday - 1) % 7;
+          
+              return Container(
+                height: MediaQuery.of(context).size.height * 0.57,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+                ),
+                child: Column(
+                  children: [
+                    // Handle
+                    Container(
+                      margin: const EdgeInsets.only(top: 12),
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    
+                    // Header
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            DateFormat('MMMM yyyy').format(viewedMonth),
+                            style: GoogleFonts.outfit(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.chevron_left),
+                                onPressed: () {
+                                  setModalState(() {
+                                    viewedMonth = DateTime(viewedMonth.year, viewedMonth.month - 1);
+                                  });
+                                },
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.chevron_right),
+                                onPressed: () {
+                                  setModalState(() {
+                                    viewedMonth = DateTime(viewedMonth.year, viewedMonth.month + 1);
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    
+                    // Weekdays
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d) => SizedBox(
+                          width: 40,
+                          child: Text(d, 
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey),
+                          ),
+                        )).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    
+                    // Days Grid
+                    Expanded(
+                      child: GridView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 7,
+                          mainAxisSpacing: 8,
+                          crossAxisSpacing: 8,
+                        ),
+                        itemCount: 42, // Fix grid size
+                        itemBuilder: (context, index) {
+                          int dayNum = index - prevMonthDaysToDisplay + 1;
+                          bool isCurrentMonth = dayNum > 0 && dayNum <= daysInMonth;
+                          
+                          if (!isCurrentMonth) return const SizedBox();
+                          
+                          final date = DateTime(viewedMonth.year, viewedMonth.month, dayNum);
+                          final dateStr = DateFormat('yyyy-MM-dd').format(date);
+                          final isSelected = isSameDay(date, _selectedDate);
+                          final isToday = isSameDay(date, DateTime.now());
+                          
+                          // Highlighting logic
+                          bool hasHighlight = false;
+                          Color highlightColor = Colors.transparent;
+                          
+                          if (_activeTab == 'Tools') {
+                            if (_toolDates.contains(dateStr)) {
+                              hasHighlight = true;
+                              highlightColor = AppTheme.primaryColor;
+                            }
+                          } else {
+                            if (_productDates.contains(dateStr)) {
+                              hasHighlight = true;
+                              highlightColor = Colors.amber;
+                            }
+                          }
+          
+                          return GestureDetector(
+                            onTap: () {
+                              _onDateChanged(date);
+                              Navigator.pop(context);
+                            },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: isSelected ? AppTheme.primaryColor : Colors.transparent,
+                                shape: BoxShape.circle,
+                                border: isToday && !isSelected 
+                                  ? Border.all(color: AppTheme.secondaryColor, width: 2) 
+                                  : null,
+                              ),
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Text(
+                                    dayNum.toString(),
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 14,
+                                      fontWeight: isSelected || isToday ? FontWeight.bold : FontWeight.w500,
+                                      color: isSelected ? Colors.white : AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                  if (hasHighlight && !isSelected)
+                                    Positioned(
+                                      bottom: 6,
+                                      child: Container(
+                                        width: 4,
+                                        height: 4,
+                                        decoration: BoxDecoration(
+                                          color: highlightColor,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    
+                    // Legend
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Row(
+                        children: [
+                          _buildLegendItem(AppTheme.primaryColor, "Today", isBorder: true),
+                          const SizedBox(width: 16),
+                          if (_activeTab == 'Tools')
+                             _buildLegendItem(AppTheme.primaryColor, "Tool Requests")
+                          else
+                             _buildLegendItem(Colors.amber, "Product Requests"),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLegendItem(Color color, String label, {bool isBorder = false}) {
+    return Row(
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: isBorder ? Colors.transparent : color,
+            shape: BoxShape.circle,
+            border: isBorder ? Border.all(color: color, width: 2) : null,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(label, style: GoogleFonts.outfit(fontSize: 12, color: AppTheme.textSecondary)),
+      ],
+    );
+  }
+
+  bool isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
   // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
@@ -241,15 +473,7 @@ class _RequestInventoryPageState extends State<RequestInventoryPage>
         actions: [
           IconButton(
             icon: const Icon(Icons.calendar_month_outlined, color: AppTheme.primaryColor),
-            onPressed: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: _selectedDate,
-                firstDate: DateTime(2023),
-                lastDate: DateTime.now(),
-              );
-              if (picked != null) _onDateChanged(picked);
-            },
+            onPressed: () => _showHighlightDatePicker(),
           ),
           Padding(
             padding: const EdgeInsets.only(right: 16),
@@ -382,7 +606,6 @@ class _RequestInventoryPageState extends State<RequestInventoryPage>
             timeStr = '$d/$mo  $h:$m $period';
           }
         } catch (e) {
-          print('❌ Error parsing date $createdAt: $e');
         }
 
         final statusColor = isApproved

@@ -112,7 +112,7 @@ class DashboardController extends Notifier<DashboardState> {
     final locationGranted = await Permission.location.isGranted;
     final isServiceEnabled = await Geolocator.isLocationServiceEnabled();
 
-    if (!locationGranted) missing.add("Location");
+    if (!locationGranted || !isServiceEnabled) missing.add("Location");
     if (!await Permission.notification.isGranted) missing.add("Notification");
     // Check battery optimization status
     if (!await Permission.ignoreBatteryOptimizations.isGranted) missing.add("Battery Optimization");
@@ -144,7 +144,6 @@ class DashboardController extends Notifier<DashboardState> {
       
       final orders = agentOrderResponse?.orders ?? [];
       final noOrdersMsg = agentOrderResponse?.message;
-      print("API Response - noOrdersMessage: $noOrdersMsg");
 
       // Fetch profile to get availability status
       final profileResult = await ApiService.getAgentProfile();
@@ -160,13 +159,11 @@ class DashboardController extends Notifier<DashboardState> {
         isAvailable: isAvailable,
         isLoading: false,
       );
-      print("Dashboard State - isAvailable: $isAvailable");
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
         error: "Failed to load jobs: $e",
       );
-      print("Error fetching upcoming jobs: $e");
     }
   }
 
@@ -181,9 +178,10 @@ class DashboardController extends Notifier<DashboardState> {
     // 2. Check current status
     final locationStatus = await Permission.location.status;
     final notificationStatus = await Permission.notification.status;
+    final isServiceEnabled = await Geolocator.isLocationServiceEnabled();
 
     // 3. Handle Permission Request Logic
-    if (state.missingPermissions.contains("Location Service")) {
+    if (!isServiceEnabled) {
       // If service is disabled, we need to open location settings
       await Geolocator.openLocationSettings();
     }
@@ -212,10 +210,11 @@ class DashboardController extends Notifier<DashboardState> {
     // 6. Re-check status
     await _checkPermissions();
 
-    // If essential tracking permissions are now granted, automatically try to go online
+    // If essential tracking permissions and GPS are now granted/enabled, automatically try to go online
     final hasLoc = await Permission.location.isGranted;
     final hasNotif = await Permission.notification.isGranted;
-    if (hasLoc && hasNotif && !state.isAvailable) {
+    final isGpsOn = await Geolocator.isLocationServiceEnabled();
+    if (hasLoc && hasNotif && isGpsOn && !state.isAvailable) {
        await toggleAvailability(true);
     }
   }
@@ -276,6 +275,10 @@ class DashboardController extends Notifier<DashboardState> {
 
   void clearToggleError() {
     state = state.copyWith(toggleError: null);
+  }
+
+  void clearError() {
+    state = state.copyWith(error: null);
   }
 
   void _startBackgroundService() {

@@ -58,6 +58,4 @@ void onStart(ServiceInstance service) async {
 
   // Start the tracking logic
   await TrackingService().setOnlineStatus(true);
-  
-  print("[BG] Background service started successfully");
 }

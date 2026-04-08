@@ -2,16 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:urban_agent_app/features/dashboard/presentation/pages/home_screen.dart';
 import '../../../../Model/LoginRequestModel.dart';
 import '../../../../core/services/apiservices.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../dashboard/presentation/pages/dashboard_shell.dart';
-import '../providers/login_provider.dart';
-import 'CreateAgent.dart';
 
 /*class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -313,10 +307,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 }*/
 
 
-import 'dart:async';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class LoginPage extends StatefulWidget {
   final String? initialMobileNumber;
@@ -363,7 +353,6 @@ class LoginPageState extends State<LoginPage> {
 
     final phone = _mobileNumberController.text.trim();
 
-    print('📲 [LoginPage] CONTINUE tapped — phone: $phone');
 
     final request = LoginRequestModel.otp(
       mobileNumber: int.tryParse(phone) ?? 0,
@@ -373,14 +362,12 @@ class LoginPageState extends State<LoginPage> {
     final api    = ApiService();
     final result = await api.unifiedLogin(request);
 
-    print('📲 [LoginPage] unifiedLogin — isSuccess: ${result.isSuccess}, error: ${result.error}');
 
     if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (result.isSuccess) {
       // ✅ Account exists + OTP dispatched — open OTP sheet
-      print('✅ [LoginPage] Initial OTP received: ${result.otp}');
       _showOtpBottomSheet(pageContext, initialOtp: result.otp);
     } else {
       final error     = result.error ?? '';
@@ -388,7 +375,6 @@ class LoginPageState extends State<LoginPage> {
           error.toLowerCase().contains('not found') ||
           error.toLowerCase().contains('no account found');
 
-      print('❌ [LoginPage] Error: "$error" | isNewUser: $isNewUser');
 
       if (isNewUser) {
         // ✅ No account — redirect to registration using GoRouter
@@ -429,7 +415,6 @@ class LoginPageState extends State<LoginPage> {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    print('🔐 [LoginPage] Password Login tapped — email: $email');
 
     final request = LoginRequestModel.password(
       username: email,
@@ -444,7 +429,6 @@ class LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = false);
 
     if (result.isSuccess) {
-      print('✅ [LoginPage] Password Login success');
       ScaffoldMessenger.of(pageContext).clearSnackBars();
       context.go('/home');
     } else {
@@ -862,25 +846,21 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
     setState(() { _isVerifying = true; _errorMsg = null; });
 
     final otp = _otpController.text.trim();
-    print('🔐 [OtpSheet] Verifying OTP: $otp for phone: ${widget.phoneNumber}');
 
     final result = await ApiService().verifyOtp(
       mobileNumber: widget.phoneNumber,
       otp:          otp,
     );
 
-    print('🔐 [OtpSheet] verifyOtp — isSuccess: ${result.isSuccess}, error: ${result.error}');
 
     if (!mounted) return;
     setState(() => _isVerifying = false);
 
     if (result.isSuccess) {
       final data = result.data;
-      print('✅ [OtpSheet] Verified — user: ${data?.user?.name}, role: ${data?.user?.role}');
       widget.onVerified();
     } else {
       setState(() => _errorMsg = _flattenError(result.error ?? 'Invalid OTP. Try again.'));
-      print('❌ [OtpSheet] Verification failed: $_errorMsg');
     }
   }
 
@@ -889,11 +869,9 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
   Future<void> _handleResend() async {
     setState(() { _isResending = true; _errorMsg = null; });
 
-    print('📲 [OtpSheet] Resending OTP to: ${widget.phoneNumber}');
 
     final result = await ApiService().sendOtp(widget.phoneNumber);
 
-    print('📲 [OtpSheet] Resend — isSuccess: ${result.isSuccess}, error: ${result.error}');
 
     if (!mounted) return;
     setState(() => _isResending = false);

@@ -104,7 +104,6 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
         setState(() {
           _categories = result.data!.cast<cat.Category>();
           _isLoadingCategories = false;
-          print('Categories loaded: ${_categories.length}');
         });
       } else {
         if (mounted) setState(() => _isLoadingCategories = false);
@@ -125,7 +124,6 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
           _services = fetched;
           _hasMoreServices = false;
           _isLoadingServices = false;
-          print('All services loaded: ${_services.length}');
         });
       }
     } catch (e) {
@@ -142,7 +140,6 @@ class _ModifyOrderScreenState extends ConsumerState<ModifyOrderScreen> {
         setState(() {
           _products = result.data!;
           _isLoadingProducts = false;
-          print('All products loaded: ${_products.length}');
         });
       } else {
         if (mounted) setState(() => _isLoadingProducts = false);

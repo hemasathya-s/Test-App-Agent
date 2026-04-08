@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:urban_agent_app/features/jobs/presentation/pages/product_serial_numbers.dart';
 import '../core/model/order_details.dart';
 import '../core/model/slot_availability.dart';
 import '../features/auth/presentation/pages/CreateAgent.dart';
@@ -119,8 +120,16 @@ final router = GoRouter(
     GoRoute(
       path: '/checklist',
       builder: (context, state) {
-        final order = state.extra as OrderDetails;
-        return ServiceChecklistScreen(order: order);
+        if (state.extra is OrderDetails) {
+          return ServiceChecklistScreen(order: state.extra as OrderDetails);
+        } else if (state.extra is Map<String, dynamic>) {
+          final data = state.extra as Map<String, dynamic>;
+          return ServiceChecklistScreen(
+            order: data['order'] as OrderDetails,
+            inventory: data['inventory'] as List<Map<String, dynamic>>?,
+          );
+        }
+        return const Scaffold(body: Center(child: Text("Checklist error: Order missing")));
       },
     ),
     GoRoute(
@@ -156,8 +165,11 @@ final router = GoRouter(
     GoRoute(
       path: '/edit-profile',
       builder: (context, state) {
-        final agentData = state.extra as AgentProfileData;
-        return AgentEditProfilePage(agentData: agentData);
+        final data = state.extra as Map<String, dynamic>;
+        return AgentEditProfilePage(
+          agentData: data['agentData'] as AgentProfileData,
+          supportNumber: data['supportNumber'] as String,
+        );
       },
     ),
     GoRoute(
@@ -175,5 +187,12 @@ final router = GoRouter(
         );
       },
     ),
+    GoRoute(
+        path: "/product-serial",
+        builder:(context, state) {
+          final order = state.extra as OrderDetails;
+          return ProductListPage(order: order);
+        }
+    )
   ],
 );

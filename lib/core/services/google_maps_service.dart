@@ -28,7 +28,6 @@ class GoogleMapsService {
         }
       }
     } catch (e) {
-      print("Error fetching directions: $e");
     }
     return null;
   }

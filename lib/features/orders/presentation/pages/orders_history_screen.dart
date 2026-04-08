@@ -7,7 +7,6 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/apiservices.dart';
 import '../../../../core/model/order_details.dart';
 import '../../../../core/model/slot_availability.dart';
-import '../../../jobs/presentation/pages/job_details_screen.dart';
 
 class OrdersHistoryScreen extends StatefulWidget {
   const OrdersHistoryScreen({super.key});

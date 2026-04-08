@@ -452,7 +452,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg, style: _labelStyle.copyWith(color: Colors.white)),
-        backgroundColor: _orangeDark,
+        backgroundColor: Colors.black87,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),

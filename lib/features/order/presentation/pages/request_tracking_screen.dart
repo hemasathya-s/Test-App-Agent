@@ -613,8 +613,6 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
       String requestId,
       Map<String, dynamic> request,
       VoidCallback onSuccess) {
-    print(
-        '🛠️ [OTP DIAGNOSTICS] Delivered clicked for Request ID: $requestId');
 
     final List<TextEditingController> controllers =
     List.generate(6, (index) => TextEditingController());
@@ -796,15 +794,11 @@ class _RequestTrackingScreenState extends State<RequestTrackingScreen> {
                             dialogError = null;
                           });
 
-                          print(
-                              '📡 [OTP DIAGNOSTICS] Starting verification for ID: $requestId with OTP: $otp');
 
                           final res =
                           await ApiService.verifyRequestOtp(
                               requestId, otp);
 
-                          print(
-                              '📡 [OTP DIAGNOSTICS] Result: ${res.isSuccess} | Error: ${res.error}');
 
                           if (!dialogContext.mounted) return;
 

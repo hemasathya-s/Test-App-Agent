@@ -13,14 +13,12 @@ import 'package:urban_agent_app/core/model/slot_availability.dart';
 import 'package:urban_agent_app/core/model/order_details.dart';
 import 'package:urban_agent_app/core/model/service_modification.dart';
 import 'package:urban_agent_app/core/model/order_item_modification.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../../../../core/services/apiservices.dart';
 import '../../../../core/theme/app_theme.dart';
 import 'package:dropdown_button2/dropdown_button2.dart';
 import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 import '../providers/job_provider.dart';
 import '../../../order/presentation/providers/order_modification_provider.dart' hide OrderItem;
-
+import '../widgets/media_tabs_widget.dart';
 class JobDetailsScreen extends ConsumerStatefulWidget {
   final SlotAvailability? slot;
   final OrderDetails? order;
@@ -40,7 +38,6 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
   void initState() {
     super.initState();
     _loadFullDetails();
-    print("Order Id ${widget.order?.id}");
   }
 
   Future<void> _loadFullDetails() async {
@@ -83,8 +80,16 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
     final orderId = effectiveOrder?.id ?? widget.slot?.orderId ?? 'N/A';
     final address = effectiveOrder?.address ?? 'No address provided';
     final items = effectiveOrder?.items ?? [];
+    final serviceItems = items.where((item) => (item.type ?? '').toUpperCase() == 'SERVICE').toList();
+    final productItems = items.where((item) => (item.type ?? '').toUpperCase() == 'PRODUCT').toList();
     final totalPrice = effectiveOrder?.totalPrice ?? '0.00';
 
+    final List<ItemMedia> allMedia = [];
+    for (var item in items) {
+      if (item.media != null) {
+        allMedia.addAll(item.media!);
+      }
+    }
     // Use fields from OrderDetails/FullDetails if possible, else fallback to slot
     final date = widget.slot?.date ?? (effectiveOrder?.createdAt?.split('T')[0]) ?? 'N/A';
     final timeSlot = widget.slot != null
@@ -230,19 +235,53 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                         ),
                         child: Column(
                           children: [
-                            // List each item in the order
-                            ...items.map((item) {
-                              return Column(
-                                children: [
-                                  _buildDetailRow(
-                                    Icons.build_circle_outlined,
-                                    'Service/Product',
-                                    '${item.itemDetails?.name ?? "Unknown"} (x${item.quantity ?? 1})',
-                                  ),
-                                  const Divider(height: 24),
-                                ],
-                              );
-                            }).toList(),
+                            // List Services
+                            if (serviceItems.isNotEmpty) ...[
+                              ...serviceItems.map((item) {
+                                return Column(
+                                  children: [
+                                    _buildDetailRow(
+                                      HugeIcons.strokeRoundedSettings01,
+                                      'Service',
+                                      '${item.itemDetails?.name ?? "Unknown"} (x${item.quantity ?? 1})',
+                                    ),
+                                    if (item.issueDescriptionText != null && item.issueDescriptionText!.isNotEmpty) ...[
+                                      const SizedBox(height: 16),
+                                      _buildDetailRow(
+                                        Icons.description_outlined,
+                                        'Issue Description',
+                                        item.issueDescriptionText!,
+                                      ),
+                                    ],
+                                    const Divider(height: 24),
+                                  ],
+                                );
+                              }),
+                            ],
+
+                            // List Products
+                            if (productItems.isNotEmpty) ...[
+                              ...productItems.map((item) {
+                                return Column(
+                                  children: [
+                                    _buildDetailRow(
+                                      Icons.inventory_2_outlined,
+                                      'Product',
+                                      '${item.itemDetails?.name ?? "Unknown"} (x${item.quantity ?? 1})',
+                                    ),
+                                    if (item.issueDescriptionText != null && item.issueDescriptionText!.isNotEmpty) ...[
+                                      const SizedBox(height: 16),
+                                      _buildDetailRow(
+                                        Icons.description_outlined,
+                                        'Issue Description',
+                                        item.issueDescriptionText!,
+                                      ),
+                                    ],
+                                    const Divider(height: 24),
+                                  ],
+                                );
+                              }),
+                            ],
 
                             _buildDetailRow(
                               Icons.calendar_today,
@@ -283,14 +322,20 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 35),
+                      const SizedBox(height: 15),
+
+                      // Media Tabs Section
+                      if (allMedia.isNotEmpty) ...[
+                        MediaTabsWidget(mediaList: allMedia),
+                        const SizedBox(height: 14),
+                      ],
                     ],
                   ),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 35),
+          // const SizedBox(height: 1),
           // Action Bar
           if (effectiveOrder?.orderStatus?.toUpperCase() != 'COMPLETED' &&
               effectiveOrder?.orderStatus?.toUpperCase() != 'CANCELLED' &&
@@ -402,7 +447,6 @@ class _JobDetailsScreenState extends ConsumerState<JobDetailsScreen> {
       );
     }
 
-print("Order ttt $orderId");
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -439,18 +483,14 @@ print("Order ttt $orderId");
                 );
                 return;
               }
-              print('🎯 Menu Selected: $value');
               final modifications = effectiveOrder?.serviceModifications ?? [];
-              print('📦 Total Modifications: ${modifications.length}');
               for (var m in modifications) {
-                print('🔹 Mod: Type="${m.modificationType}", Status="${m.status}"');
               }
 
               if (value == 'hub_service') {
                 final hasHubRequest = modifications.any((m) {
                   final type = (m.modificationType ?? '').toUpperCase();
                   final status = (m.status ?? '').toUpperCase();
-                  print('🔍 Checking Hub: Type=$type, Status=$status');
                   // Hub types might be HUB_SERVICE or just SERVICE or empty for legacy
                   final isHubType = type.contains('HUB') || type.contains('SERVICE') || type.isEmpty;
                   final isActive = status == 'PENDING' || status == 'APPROVED' || status == 'APPLIED' || status == 'REQUESTED';
@@ -472,7 +512,6 @@ print("Order ttt $orderId");
                 final hasSlotRequest = modifications.any((m) {
                   final type = (m.modificationType ?? '').toUpperCase();
                   final status = (m.status ?? '').toUpperCase();
-                  print('🔍 Checking Slot: Type=$type, Status=$status');
                   // Common slot types: SLOT_CHANGE, TIME_CHANGE, SERVICE_MODIFICATION
                   final isSlotType = type.contains('SLOT') || type.contains('TIME');
                   final isActive = status == 'PENDING' || status == 'APPROVED' || status == 'APPLIED' || status == 'REQUESTED';
@@ -494,7 +533,6 @@ print("Order ttt $orderId");
                 final hasCancelRequest = modifications.any((m) {
                   final type = (m.modificationType ?? '').toUpperCase();
                   final status = (m.status ?? '').toUpperCase();
-                  print('🔍 Checking Cancel: Type=$type, Status=$status');
                   final isCancelType = type.contains('CANCEL') || type.contains('DELETE');
                   final isActive = status == 'PENDING' || status == 'APPROVED' || status == 'APPLIED' || status == 'REQUESTED';
                   return isCancelType && isActive;
@@ -1224,152 +1262,149 @@ print("Order ttt $orderId");
           return const SizedBox.shrink();
         }
 
-        return Padding(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(stateContext).viewInsets.bottom, left: 24, right: 24, top: 24),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
-                  const SizedBox(height: 24),
-                  Text('Hub Service Request', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Text('Submit a request for device repair or service at the hub.', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
-                  const SizedBox(height: 15),
-                  _buildLabel('Select Item *'),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField2<OrderItem>(
-                    isExpanded: true,
-                    decoration: AppTheme.inputDecoration('Select an item', Icons.inventory_2_outlined, const EdgeInsets.symmetric(horizontal: 0, vertical: 12)),
-                    items: (order.items ?? []).map((item) => DropdownMenuItem<OrderItem>(
-                      value: item,
-                      child: Text(
-                        item.itemDetails?.name ?? 'Unknown Item',
-                        style: GoogleFonts.outfit(fontSize: 14),
-                        overflow: TextOverflow.ellipsis,
+        return SafeArea(
+          child: Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(stateContext).viewInsets.bottom, left: 24, right: 24, top: 24),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
+                    const SizedBox(height: 24),
+                    Text('Hub Service Request', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text('Submit a request for device repair or service at the hub.', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
+                    const SizedBox(height: 15),
+                    _buildLabel('Select Item *'),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField2<OrderItem>(
+                      isExpanded: true,
+                      decoration: AppTheme.inputDecoration('Select an item', Icons.inventory_2_outlined, const EdgeInsets.symmetric(horizontal: 0, vertical: 12)),
+                      items: (order.items ?? []).map((item) => DropdownMenuItem<OrderItem>(
+                        value: item,
+                        child: Text(
+                          item.itemDetails?.name ?? 'Unknown Item',
+                          style: GoogleFonts.outfit(fontSize: 14),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      )).toList(),
+                      onChanged: (value) => setState(() => selectedItem = value),
+                      buttonStyleData: const ButtonStyleData(padding: EdgeInsets.symmetric(horizontal: 12)),
+                      iconStyleData: const IconStyleData(
+                        icon: Icon(Icons.keyboard_arrow_down, color: AppTheme.textSecondary),
+                        iconSize: 22,
                       ),
-                    )).toList(),
-                    onChanged: (value) => setState(() => selectedItem = value),
-                    buttonStyleData: const ButtonStyleData(padding: EdgeInsets.symmetric(horizontal: 12)),
-                    iconStyleData: const IconStyleData(
-                      icon: Icon(Icons.keyboard_arrow_down, color: AppTheme.textSecondary),
-                      iconSize: 22,
+                      dropdownStyleData: DropdownStyleData(
+                        decoration: BoxDecoration(borderRadius: BorderRadius.circular(15)),
+                      ),
                     ),
-                    dropdownStyleData: DropdownStyleData(
-                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(15)),
+                    const SizedBox(height: 24),
+                    _buildLabel('Device Serial Number'),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: idController,
+                      onChanged: (_) => setState(() {}),
+                      decoration: AppTheme.inputDecoration('Enter serial number', Icons.confirmation_number_outlined, const EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                  _buildLabel('Device Serial Number'),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: idController,
-                    onChanged: (_) => setState(() {}),
-                    decoration: AppTheme.inputDecoration('Enter serial number', Icons.confirmation_number_outlined, const EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildLabel('Condition Notes *'),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: notesController,
-                    onChanged: (_) => setState(() {}),
-                    maxLines: 3,
-                    decoration: AppTheme.inputDecoration('Describe device condition...', Icons.note_alt_outlined, const EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
-                  ),
-                  const SizedBox(height: 24),
-                  _buildLabel('Photos & Videos'),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      _buildMediaButton(Icons.add_a_photo, 'Add Photo', () {
-                        _showMediaSourceSheet(stateContext, isVideo: false, onPicked: (file) {
-                          if (file != null) setState(() => selectedImages.add(file));
-                        });
-                      }),
-                      const SizedBox(width: 12),
-                      _buildMediaButton(Icons.video_call, 'Add Video', () {
-                        _showMediaSourceSheet(stateContext, isVideo: true, onPicked: (file) {
-                          if (file != null) setState(() => selectedVideos.add(file));
-                        });
-                      }),
-                    ],
-                  ),
-                  if (selectedImages.isNotEmpty || selectedVideos.isNotEmpty) ...[
                     const SizedBox(height: 16),
+                    _buildLabel('Condition Notes *'),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: notesController,
+                      onChanged: (_) => setState(() {}),
+                      maxLines: 3,
+                      decoration: AppTheme.inputDecoration('Describe device condition...', Icons.note_alt_outlined, const EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
+                    ),
+                    const SizedBox(height: 24),
+                    _buildLabel('Photos & Videos'),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        _buildMediaButton(Icons.add_a_photo, 'Add Photo', () {
+                          _showMediaSourceSheet(stateContext, isVideo: false, onPicked: (file) {
+                            if (file != null) setState(() => selectedImages.add(file));
+                          });
+                        }),
+                        const SizedBox(width: 12),
+                        _buildMediaButton(Icons.video_call, 'Add Video', () {
+                          _showMediaSourceSheet(stateContext, isVideo: true, onPicked: (file) {
+                            if (file != null) setState(() => selectedVideos.add(file));
+                          });
+                        }),
+                      ],
+                    ),
+                    if (selectedImages.isNotEmpty || selectedVideos.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 80,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          children: [
+                            ...selectedImages.map((f) => _buildMediaPreview(f, true, () => setState(() => selectedImages.remove(f)))),
+                            ...selectedVideos.map((f) => _buildMediaPreview(f, false, () => setState(() => selectedVideos.remove(f)))),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 32),
                     SizedBox(
-                      height: 80,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        children: [
-                          ...selectedImages.map((f) => _buildMediaPreview(f, true, () => setState(() => selectedImages.remove(f)))),
-                          ...selectedVideos.map((f) => _buildMediaPreview(f, false, () => setState(() => selectedVideos.remove(f)))),
-                        ],
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 32),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: (isSubmitting || selectedItem == null || notesController.text.trim().isEmpty) ? null : () async {
-                        setState(() => isSubmitting = true);
-                        try {
-                          print('📡 Submitting Hub Service Request for item: ${selectedItem?.id}');
-                          final res = await ApiService.createHubServiceRequest(
-                            orderId: order.id ?? '',
-                            orderItemId: selectedItem?.id,
-                            deviceSerialNumber: idController.text,
-                            deviceConditionNotes: notesController.text,
-                            images: selectedImages,
-                            videos: selectedVideos,
-                          );
-                          print('📡 Hub Request Result: ${res.isSuccess}, Error: ${res.error}');
-                          
-                          if (stateContext.mounted) {
-                            final messenger = ScaffoldMessenger.of(context);
-                            if (res.isSuccess) {
-                              print('✅ Success - Popping Hub Sheet');
-                              Navigator.pop(sheetContext);
-                              final successMsg = res.data?['message'] ?? 'Request submitted successfully';
-                              messenger.showSnackBar(SnackBar(
-                                content: Text(successMsg, style: const TextStyle(color: Colors.white)),
-                                backgroundColor: Colors.black87,
-                              ));
-                              _loadFullDetails();
-                            } else {
-                              print('⚠️ Error detected - Popping Hub Sheet');
-                              Navigator.pop(sheetContext);
-                              messenger.showSnackBar(SnackBar(
-                                content: Text(res.error ?? 'Unknown error', style: const TextStyle(color: Colors.black87)),
-                                backgroundColor: Colors.grey.shade300,
-                              ));
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: (isSubmitting || selectedItem == null || notesController.text.trim().isEmpty) ? null : () async {
+                          setState(() => isSubmitting = true);
+                          try {
+                            final res = await ApiService.createHubServiceRequest(
+                              orderId: order.id ?? '',
+                              orderItemId: selectedItem?.id,
+                              deviceSerialNumber: idController.text,
+                              deviceConditionNotes: notesController.text,
+                              images: selectedImages,
+                              videos: selectedVideos,
+                            );
+          
+                            if (stateContext.mounted) {
+                              final messenger = ScaffoldMessenger.of(context);
+                              if (res.isSuccess) {
+                                Navigator.pop(sheetContext);
+                                final successMsg = res.data?['message'] ?? 'Request submitted successfully';
+                                messenger.showSnackBar(SnackBar(
+                                  content: Text(successMsg, style: const TextStyle(color: Colors.white)),
+                                  backgroundColor: Colors.black87,
+                                ));
+                                _loadFullDetails();
+                              } else {
+                                Navigator.pop(sheetContext);
+                                messenger.showSnackBar(SnackBar(
+                                  content: Text(res.error ?? 'Unknown', style: const TextStyle(color: Colors.white)),
+                                  backgroundColor: Colors.black87,
+                                ));
+                              }
                             }
+                          } catch (e) {
+                            if (stateContext.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e',style: const TextStyle(color: Colors.white)), backgroundColor: Colors.black87,));
+                            }
+                          } finally {
+                            if (stateContext.mounted) setState(() => isSubmitting = false);
                           }
-                        } catch (e) {
-                          print('❌ Exception in Hub Request: $e');
-                          if (stateContext.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-                          }
-                        } finally {
-                          if (stateContext.mounted) setState(() => isSubmitting = false);
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryColor,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
+                        child: isSubmitting
+                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : Text('Submit Request', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
                       ),
-                      child: isSubmitting
-                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : Text('Submit Request', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
                     ),
-                  ),
-                  const SizedBox(height: 32),
-                ],
+                    const SizedBox(height: 32),
+                  ],
+                ),
               ),
             ),
-          );
+        );
         },
       ),
     );
@@ -1420,14 +1455,12 @@ print("Order ttt $orderId");
 
           void fetchZones() async {
             if (order.latitude == null || order.longitude == null) {
-              print('⚠️ LAT/LNG missing for Zone fetch');
               return;
             }
             setState(() {
               isLoadingZones = true;
               zoneError = null;
             });
-            print('📡 Fetching slots for Lat: ${order.latitude}, Lng: ${order.longitude}');
             final res = await ApiService().getAvailableSlotsByLocation(
               lat: order.latitude!,
               lng: order.longitude!,
@@ -1437,10 +1470,8 @@ print("Order ttt $orderId");
                 isLoadingZones = false;
                 if (res.isSuccess) {
                   availableZones = res.data ?? [];
-                  print('✅ Found ${availableZones.length} slots');
                 } else {
                   zoneError = res.error;
-                  print('❌ Zone fetch error: ${res.error}');
                 }
               });
             }
@@ -1462,7 +1493,6 @@ print("Order ttt $orderId");
                 selectedEndTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
               }
             } catch (e) {
-              print('❌ Error parsing zone times: $e');
             }
           }
 
@@ -1556,282 +1586,280 @@ print("Order ttt $orderId");
             return '$hour:$minute';
           }
 
-          return Padding(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 24),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
-                  const SizedBox(height: 24),
-                  Text('Slot Change Request', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Text('Request a different time for this job.', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
-                  const SizedBox(height: 24),
-                   _buildLabel('Select Slot (Based on Location) *'),
-                   const SizedBox(height: 8),
-                   if (isLoadingZones)
-                     const Center(child: CircularProgressIndicator())
-                   else if (zoneError != null)
-                     Text('Error: $zoneError', style: GoogleFonts.outfit(color: Colors.red, fontSize: 13))
-                   else if (availableZones.isEmpty)
-                     Text('No slots found for this location.', style: GoogleFonts.outfit(color: Colors.orange, fontSize: 13))
-                   else
-                     DropdownButtonFormField<SlotAvailability>(
-                       isExpanded: true,
-                       value: selectedZone,
-                       decoration: AppTheme.inputDecoration('Choose a slot', Icons.timer_outlined),
-                       items: availableZones.map((z) => DropdownMenuItem(
-                         value: z,
-                         child: Row(
-                           children: [
-                             Text('${z.zoneName ?? "Slot"} (${z.etaStartTime ?? ""} - ${z.etaEndTime ?? ""})',
-                               style: GoogleFonts.outfit(
-                                 fontSize: 14,
-                                 color: z.isAvailable == true ? Colors.green : null,
-                                 fontWeight: z.isAvailable == true ? FontWeight.bold : null,
-                               )),
-                             if (z.isAvailable == true) ...[
-                               const SizedBox(width: 8),
-                               const Icon(Icons.check_circle, color: Colors.green, size: 16),
+          return SafeArea(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 24),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
+                    const SizedBox(height: 24),
+                    Text('Slot Change Request', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Text('Request a different time for this job.', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
+                    const SizedBox(height: 24),
+                     _buildLabel('Select Slot (Based on Location) *'),
+                     const SizedBox(height: 8),
+                     if (isLoadingZones)
+                       const Center(child: CircularProgressIndicator())
+                     else if (zoneError != null)
+                       Text(' $zoneError', style: GoogleFonts.outfit(color: Colors.red, fontSize: 13))
+                     else if (availableZones.isEmpty)
+                       Text('No slots found for this location.', style: GoogleFonts.outfit(color: Colors.orange, fontSize: 13))
+                     else
+                       DropdownButtonFormField<SlotAvailability>(
+                         isExpanded: true,
+                         value: selectedZone,
+                         decoration: AppTheme.inputDecoration('Choose a slot', Icons.timer_outlined),
+                         items: availableZones.map((z) => DropdownMenuItem(
+                           value: z,
+                           child: Row(
+                             children: [
+                               Text('${z.zoneName ?? "Slot"} (${z.etaStartTime ?? ""} - ${z.etaEndTime ?? ""})',
+                                 style: GoogleFonts.outfit(
+                                   fontSize: 14,
+                                   color: z.isAvailable == true ? Colors.green : null,
+                                   fontWeight: z.isAvailable == true ? FontWeight.bold : null,
+                                 )),
+                               if (z.isAvailable == true) ...[
+                                 const SizedBox(width: 8),
+                                 const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                               ],
                              ],
-                           ],
-                         ),
-                       )).toList(),
-                       onChanged: (val) {
-                         print('🎯 Selected Slot: ${val?.zoneName}');
-                         print('🆔 Slot ID: ${val?.slot}');
-                         print('⏰ Times: ${val?.etaStartTime} - ${val?.etaEndTime}');
-                         setState(() {
-                           selectedZone = val;
-                           selectedSlotId = val?.slot;
-                           updateTimeFromZone(val);
-                         });
-                       },
-                     ),
-                   const SizedBox(height: 16),
-                   _buildLabel('Requested Date *'),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(DateFormat('yyyy-MM-dd').format(selectedDate), style: GoogleFonts.outfit(fontSize: 16, color: AppTheme.textSecondary)),
-                    trailing: const Icon(Icons.calendar_month, color: AppTheme.textSecondary),
-                    onTap: null, // Temporarily disabled
-                  ),
-                  /*const Divider(),*/
-                  const SizedBox(height: 6),
-                  /*
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildLabel('Start Time'),
-                            InkWell(
-                              onTap: () async {
-                                final picked = await showTimePicker(
-                                  context: context,
-                                  initialTime: selectedStartTime ?? TimeOfDay.now(),
-                                );
-                                if (picked != null) {
-                                  setState(() => selectedStartTime = picked);
-                                }
-                              },
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(12),
-                                margin: const EdgeInsets.only(top: 8),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[50],
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.grey[200]!),
-                                ),
-                                child: Text(formatTimeOfDay(selectedStartTime),
-                                  style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w500, color: selectedStartTime != null ? Colors.black : Colors.grey)),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildLabel('End Time'),
-                            InkWell(
-                              onTap: () async {
-                                final picked = await showTimePicker(
-                                  context: context,
-                                  initialTime: selectedEndTime ?? TimeOfDay.now(),
-                                );
-                                if (picked != null) {
-                                  setState(() => selectedEndTime = picked);
-                                }
-                              },
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(12),
-                                margin: const EdgeInsets.only(top: 8),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[50],
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.grey[200]!),
-                                ),
-                                child: Text(formatTimeOfDay(selectedEndTime),
-                                  style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w500, color: selectedEndTime != null ? Colors.black : Colors.grey)),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  */
-                  const SizedBox(height: 6),
-                  /*if (matchedSlot != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(8)),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.check_circle_outline, size: 14, color: Colors.green),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Available in slot: ${matchedSlot.etaStartTime} - ${matchedSlot.etaEndTime}',
-                            style: GoogleFonts.outfit(color: Colors.green[700], fontSize: 12, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                    )
-                  else if (!isLoadingSlots && availableSlots.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8)),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Times fall outside your available slots.',
-                            style: GoogleFonts.outfit(color: Colors.orange[700], fontSize: 12, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
+                           ),
+                         )).toList(),
+                         onChanged: (val) {
+                           setState(() {
+                             selectedZone = val;
+                             selectedSlotId = val?.slot;
+                             updateTimeFromZone(val);
+                           });
+                         },
+                       ),
+                     const SizedBox(height: 16),
+                     _buildLabel('Requested Date *'),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(DateFormat('yyyy-MM-dd').format(selectedDate), style: GoogleFonts.outfit(fontSize: 16, color: AppTheme.textSecondary)),
+                      trailing: const Icon(Icons.calendar_month, color: AppTheme.textSecondary),
+                      onTap: null, // Temporarily disabled
                     ),
-                  const SizedBox(height: 24),*/
-                   _buildLabel('Reason Type *'),
-                   const SizedBox(height: 8),
-                    DropdownButtonFormField2<String>(
-                      isExpanded: true,
-                      decoration: AppTheme.inputDecoration('Select reason type', Icons.label_important_outline, const EdgeInsets.symmetric(horizontal: 0, vertical: 12)),
-                      items: const [
-                        DropdownMenuItem(value: 'AGENT_UNAVAILABLE', child: Text('Agent Unavailable')),
-                        DropdownMenuItem(value: 'RUNNING_LATE', child: Text('Running Late')),
-                        DropdownMenuItem(value: 'EMERGENCY', child: Text('Emergency')),
-                        DropdownMenuItem(value: 'VEHICLE_ISSUE', child: Text('Vehicle Issue')),
-                        DropdownMenuItem(value: 'PERSONAL_REASON', child: Text('Personal Reason')),
-                        DropdownMenuItem(value: 'OVERBOOKED', child: Text('Overbooked')),
-                        DropdownMenuItem(value: 'ROUTE_CONFLICT', child: Text('Route Conflict')),
-                        DropdownMenuItem(value: 'SERVICE_DELAY', child: Text('Service Delay')),
-                        DropdownMenuItem(value: 'PARTS_DELAY', child: Text('Parts Delay')),
-                        DropdownMenuItem(value: 'RESOURCE_UNAVAILABLE', child: Text('Resource Unavailable')),
-                        DropdownMenuItem(value: 'TRAFFIC_DELAY', child: Text('Traffic Delay')),
-                        DropdownMenuItem(value: 'WEATHER_ISSUE', child: Text('Weather Issue')),
-                        DropdownMenuItem(value: 'LOCATION_ACCESS_ISSUE', child: Text('Location Access Issue')),
-                        DropdownMenuItem(value: 'OTHER', child: Text('Other')),
+                    /*const Divider(),*/
+                    const SizedBox(height: 6),
+                    /*
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildLabel('Start Time'),
+                              InkWell(
+                                onTap: () async {
+                                  final picked = await showTimePicker(
+                                    context: context,
+                                    initialTime: selectedStartTime ?? TimeOfDay.now(),
+                                  );
+                                  if (picked != null) {
+                                    setState(() => selectedStartTime = picked);
+                                  }
+                                },
+                                child: Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  margin: const EdgeInsets.only(top: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[50],
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.grey[200]!),
+                                  ),
+                                  child: Text(formatTimeOfDay(selectedStartTime),
+                                    style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w500, color: selectedStartTime != null ? Colors.black : Colors.grey)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildLabel('End Time'),
+                              InkWell(
+                                onTap: () async {
+                                  final picked = await showTimePicker(
+                                    context: context,
+                                    initialTime: selectedEndTime ?? TimeOfDay.now(),
+                                  );
+                                  if (picked != null) {
+                                    setState(() => selectedEndTime = picked);
+                                  }
+                                },
+                                child: Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  margin: const EdgeInsets.only(top: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[50],
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.grey[200]!),
+                                  ),
+                                  child: Text(formatTimeOfDay(selectedEndTime),
+                                    style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w500, color: selectedEndTime != null ? Colors.black : Colors.grey)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
-                      onChanged: (val) => setState(() => reasonTypeController.text = val ?? ''),
-                      buttonStyleData: const ButtonStyleData(padding: EdgeInsets.symmetric(horizontal: 12)),
-                      iconStyleData: const IconStyleData(
-                        icon: Icon(Icons.keyboard_arrow_down, color: AppTheme.textSecondary),
-                        iconSize: 22,
-                      ),
-                      dropdownStyleData: DropdownStyleData(
-                        decoration: BoxDecoration(borderRadius: BorderRadius.circular(15)),
-                      ),
                     ),
-                  const SizedBox(height: 16),
-                  _buildLabel('Reason Description'),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: reasonController,
-                    maxLines: 2,
-                    decoration: AppTheme.inputDecoration('Tell us why...', Icons.description_outlined),
-                  ),
-                  if (selectedSlotId == null && !isLoadingSlots)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: Text(
-                        'Unable to find an available slot for this date. Please try another date.',
-                        style: GoogleFonts.outfit(color: Colors.red, fontSize: 13, fontWeight: FontWeight.w500),
-                        textAlign: TextAlign.center,
+                    */
+                    const SizedBox(height: 6),
+                    /*if (matchedSlot != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(8)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.check_circle_outline, size: 14, color: Colors.green),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Available in slot: ${matchedSlot.etaStartTime} - ${matchedSlot.etaEndTime}',
+                              style: GoogleFonts.outfit(color: Colors.green[700], fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (!isLoadingSlots && availableSlots.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Times fall outside your available slots.',
+                              style: GoogleFonts.outfit(color: Colors.orange[700], fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
                       ),
+                    const SizedBox(height: 24),*/
+                     _buildLabel('Reason Type *'),
+                     const SizedBox(height: 8),
+                      DropdownButtonFormField2<String>(
+                        isExpanded: true,
+                        decoration: AppTheme.inputDecoration('Select reason type', Icons.label_important_outline, const EdgeInsets.symmetric(horizontal: 0, vertical: 12)),
+                        items: const [
+                          DropdownMenuItem(value: 'AGENT_UNAVAILABLE', child: Text('Agent Unavailable')),
+                          DropdownMenuItem(value: 'RUNNING_LATE', child: Text('Running Late')),
+                          DropdownMenuItem(value: 'EMERGENCY', child: Text('Emergency')),
+                          DropdownMenuItem(value: 'VEHICLE_ISSUE', child: Text('Vehicle Issue')),
+                          DropdownMenuItem(value: 'PERSONAL_REASON', child: Text('Personal Reason')),
+                          DropdownMenuItem(value: 'OVERBOOKED', child: Text('Overbooked')),
+                          DropdownMenuItem(value: 'ROUTE_CONFLICT', child: Text('Route Conflict')),
+                          DropdownMenuItem(value: 'SERVICE_DELAY', child: Text('Service Delay')),
+                          DropdownMenuItem(value: 'PARTS_DELAY', child: Text('Parts Delay')),
+                          DropdownMenuItem(value: 'RESOURCE_UNAVAILABLE', child: Text('Resource Unavailable')),
+                          DropdownMenuItem(value: 'TRAFFIC_DELAY', child: Text('Traffic Delay')),
+                          DropdownMenuItem(value: 'WEATHER_ISSUE', child: Text('Weather Issue')),
+                          DropdownMenuItem(value: 'LOCATION_ACCESS_ISSUE', child: Text('Location Access Issue')),
+                          DropdownMenuItem(value: 'OTHER', child: Text('Other')),
+                        ],
+                        onChanged: (val) => setState(() => reasonTypeController.text = val ?? ''),
+                        buttonStyleData: const ButtonStyleData(padding: EdgeInsets.symmetric(horizontal: 12)),
+                        iconStyleData: const IconStyleData(
+                          icon: Icon(Icons.keyboard_arrow_down, color: AppTheme.textSecondary),
+                          iconSize: 22,
+                        ),
+                        dropdownStyleData: DropdownStyleData(
+                          decoration: BoxDecoration(borderRadius: BorderRadius.circular(15)),
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+                    _buildLabel('Reason Description'),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: reasonController,
+                      maxLines: 2,
+                      decoration: AppTheme.inputDecoration('Tell us why...', Icons.description_outlined),
                     ),
-                  SizedBox(height: 15,),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: (isSubmitting || selectedStartTime == null || selectedEndTime == null || selectedSlotId == null || reasonTypeController.text.isEmpty)
-                          ? null
-                          : () async {
-                              final currentId = order.slotId;
-                              final originalDateStr = order.createdAt?.split('T')[0];
-                              final isSameDate = originalDateStr != null && DateFormat('yyyy-MM-dd').format(selectedDate) == originalDateStr;
-
-                              if (isSameDate && selectedSlotId == currentId) {
-                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                  content: Text('Please select a different slot or date to request a change.',style: TextStyle(color: Colors.white),),
-                                  backgroundColor: Colors.black87,
-                                ));
-                                return;
-                              }
-
-                              setState(() => isSubmitting = true);
-                              final startStr = formatTimeOfDay(selectedStartTime);
-                              final endStr = formatTimeOfDay(selectedEndTime);
-
-                              final res = await ApiService.createSlotChangeRequest(
-                                orderId: order.id ?? '',
-                                orderItemId: order.items?.isNotEmpty == true ? order.items!.first.id : null,
-                                currentSlotId: order.slotId,
-                                requestedSlotId: selectedSlotId,
-                                requestedDate: DateFormat('yyyy-MM-dd').format(selectedDate),
-                                requestedStartTime: '$startStr:00Z',
-                                requestedEndTime: '$endStr:00Z',
-                                reasonType: reasonTypeController.text,
-                                reasonDescription: reasonController.text,
-                              );
-                              if (stateContext.mounted) {
-                                final messenger = ScaffoldMessenger.of(context);
-                                setState(() => isSubmitting = false);
-                                print('✅ Slot Request Success/Fail - Popping');
-                                Navigator.pop(sheetContext);
-                                final successMsg = res.data?['message'] ?? 'Slot change requested';
-                                messenger.showSnackBar(SnackBar(
-                                  content: Text(res.isSuccess ? successMsg : 'Error: ${res.error ?? "Unknown error"}', style: const TextStyle(color: Colors.white)),
-                                  backgroundColor: Colors.black87,
-                                ));
-                                if (res.isSuccess) {
-                                  _loadFullDetails();
+                    if (selectedSlotId == null && !isLoadingSlots)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Text(
+                          'Unable to find an available slot for this date. Please try another date.',
+                          style: GoogleFonts.outfit(color: Colors.red, fontSize: 13, fontWeight: FontWeight.w500),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    SizedBox(height: 15,),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: (isSubmitting || selectedStartTime == null || selectedEndTime == null || selectedSlotId == null || reasonTypeController.text.isEmpty)
+                            ? null
+                            : () async {
+                                final currentId = order.slotId;
+                                final originalDateStr = order.createdAt?.split('T')[0];
+                                final isSameDate = originalDateStr != null && DateFormat('yyyy-MM-dd').format(selectedDate) == originalDateStr;
+            
+                                if (isSameDate && selectedSlotId == currentId) {
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                    content: Text('Please select a different slot or date to request a change.',style: TextStyle(color: Colors.white),),
+                                    backgroundColor: Colors.black87,
+                                  ));
+                                  return;
                                 }
-                              }
-                            },
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryColor,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                      child: isSubmitting
-                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : Text(isLoadingSlots ? 'Checking availability...' : 'Submit Request',
-                              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+            
+                                setState(() => isSubmitting = true);
+                                final startStr = formatTimeOfDay(selectedStartTime);
+                                final endStr = formatTimeOfDay(selectedEndTime);
+            
+                                final res = await ApiService.createSlotChangeRequest(
+                                  orderId: order.id ?? '',
+                                  orderItemId: order.items?.isNotEmpty == true ? order.items!.first.id : null,
+                                  currentSlotId: order.slotId,
+                                  requestedSlotId: selectedSlotId,
+                                  requestedDate: DateFormat('yyyy-MM-dd').format(selectedDate),
+                                  requestedStartTime: '$startStr:00Z',
+                                  requestedEndTime: '$endStr:00Z',
+                                  reasonType: reasonTypeController.text,
+                                  reasonDescription: reasonController.text,
+                                );
+                                if (stateContext.mounted) {
+                                  final messenger = ScaffoldMessenger.of(context);
+                                  setState(() => isSubmitting = false);
+                                  Navigator.pop(sheetContext);
+                                  final successMsg = res.data?['message'] ?? 'Slot change requested';
+                                  messenger.showSnackBar(SnackBar(
+                                    content: Text(res.isSuccess ? successMsg : res.error ?? "Unknown error", style: const TextStyle(color: Colors.white)),
+                                    backgroundColor: Colors.black87,
+                                  ));
+                                  if (res.isSuccess) {
+                                    _loadFullDetails();
+                                  }
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryColor,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                        child: isSubmitting
+                            ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : Text(isLoadingSlots ? 'Checking availability...' : 'Submit Request',
+                                style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 32),
-                ],
+                    const SizedBox(height: 32),
+                  ],
+                ),
               ),
             ),
           );
@@ -1881,103 +1909,104 @@ print("Order ttt $orderId");
           return const SizedBox.shrink();
         }
 
-        return Padding(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(stateContext).viewInsets.bottom, left: 24, right: 24, top: 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
-                const SizedBox(height: 24),
-                Text('Cancel Job', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
-                const SizedBox(height: 8),
-                Text('Please provide a reason for canceling this job.', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
-                const SizedBox(height: 24),
-                _buildLabel('Cancellation Reason Type *'),
-                const SizedBox(height: 8),
-                DropdownButtonFormField2<String>(
-                  isExpanded: true,
-                  decoration: AppTheme.inputDecoration('Select reason type', Icons.cancel_outlined, const EdgeInsets.symmetric(horizontal: 0, vertical: 12)),
-                  items: const [
-                    DropdownMenuItem(value: 'CUSTOMER_CHANGE_OF_MIND', child: Text('Customer Change of Mind')),
-                    DropdownMenuItem(value: 'AGENT_RUNNING_LATE', child: Text('Agent Running Late')),
-                    DropdownMenuItem(value: 'WRONG_BOOKING', child: Text('Wrong Booking')),
-                    DropdownMenuItem(value: 'AGENT_PERSONAL_EMERGENCY', child: Text('Agent Personal Emergency')),
-                    DropdownMenuItem(value: 'SERVICE_NOT_AVAILABLE', child: Text('Service Not Available')),
-                    DropdownMenuItem(value: 'SERVICE_DELAY', child: Text('Service Delay')),
-                    DropdownMenuItem(value: 'CUSTOMER_NOT_AVAILABLE_AT_LOCATION', child: Text('Customer Not Available at Location')),
-                    DropdownMenuItem(value: 'AGENT_UNABLE_TO_CONTACT_CUSTOMER', child: Text('Unable to Contact Customer')),
-                    DropdownMenuItem(value: 'TECHNICAL_ISSUE', child: Text('Technical Issue')),
-                    DropdownMenuItem(value: 'CUSTOMER_NOT_RESPONDING', child: Text('Customer Not Responding')),
-                    DropdownMenuItem(value: 'AGENT_VEHICLE_ISSUE', child: Text('Agent Vehicle Issue')),
-                    DropdownMenuItem(value: 'AGENT_UNAVAILABLE', child: Text('Agent Unavailable')),
-                    DropdownMenuItem(value: 'OUT_OF_STOCK', child: Text('Out of Stock')),
-                    DropdownMenuItem(value: 'ADDRESS_NOT_SERVICEABLE', child: Text('Address Not Serviceable')),
-                    DropdownMenuItem(value: 'PRICE_DISPUTE', child: Text('Price Dispute')),
-                    DropdownMenuItem(value: 'OTHER', child: Text('Other')),
-                  ],
-                  onChanged: (val) => setState(() => cancellationReasonType = val),
-                  buttonStyleData: const ButtonStyleData(padding: EdgeInsets.symmetric(horizontal: 12)),
-                  iconStyleData: const IconStyleData(
-                    icon: Icon(Icons.keyboard_arrow_down, color: AppTheme.textSecondary),
-                    iconSize: 22,
+        return SafeArea(
+          child: Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(stateContext).viewInsets.bottom, left: 24, right: 24, top: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
+                  const SizedBox(height: 24),
+                  Text('Cancel Job', style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
+                  const SizedBox(height: 8),
+                  Text('Please provide a reason for canceling this job.', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
+                  const SizedBox(height: 24),
+                  _buildLabel('Cancellation Reason Type *'),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField2<String>(
+                    isExpanded: true,
+                    decoration: AppTheme.inputDecoration('Select reason type', Icons.cancel_outlined, const EdgeInsets.symmetric(horizontal: 0, vertical: 12)),
+                    items: const [
+                      DropdownMenuItem(value: 'CUSTOMER_CHANGE_OF_MIND', child: Text('Customer Change of Mind')),
+                      DropdownMenuItem(value: 'AGENT_RUNNING_LATE', child: Text('Agent Running Late')),
+                      DropdownMenuItem(value: 'WRONG_BOOKING', child: Text('Wrong Booking')),
+                      DropdownMenuItem(value: 'AGENT_PERSONAL_EMERGENCY', child: Text('Agent Personal Emergency')),
+                      DropdownMenuItem(value: 'SERVICE_NOT_AVAILABLE', child: Text('Service Not Available')),
+                      DropdownMenuItem(value: 'SERVICE_DELAY', child: Text('Service Delay')),
+                      DropdownMenuItem(value: 'CUSTOMER_NOT_AVAILABLE_AT_LOCATION', child: Text('Customer Not Available at Location')),
+                      DropdownMenuItem(value: 'AGENT_UNABLE_TO_CONTACT_CUSTOMER', child: Text('Unable to Contact Customer')),
+                      DropdownMenuItem(value: 'TECHNICAL_ISSUE', child: Text('Technical Issue')),
+                      DropdownMenuItem(value: 'CUSTOMER_NOT_RESPONDING', child: Text('Customer Not Responding')),
+                      DropdownMenuItem(value: 'AGENT_VEHICLE_ISSUE', child: Text('Agent Vehicle Issue')),
+                      DropdownMenuItem(value: 'AGENT_UNAVAILABLE', child: Text('Agent Unavailable')),
+                      DropdownMenuItem(value: 'OUT_OF_STOCK', child: Text('Out of Stock')),
+                      DropdownMenuItem(value: 'ADDRESS_NOT_SERVICEABLE', child: Text('Address Not Serviceable')),
+                      DropdownMenuItem(value: 'PRICE_DISPUTE', child: Text('Price Dispute')),
+                      DropdownMenuItem(value: 'OTHER', child: Text('Other')),
+                    ],
+                    onChanged: (val) => setState(() => cancellationReasonType = val),
+                    buttonStyleData: const ButtonStyleData(padding: EdgeInsets.symmetric(horizontal: 12)),
+                    iconStyleData: const IconStyleData(
+                      icon: Icon(Icons.keyboard_arrow_down, color: AppTheme.textSecondary),
+                      iconSize: 22,
+                    ),
+                    dropdownStyleData: DropdownStyleData(
+                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(15)),
+                    ),
                   ),
-                  dropdownStyleData: DropdownStyleData(
-                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(15)),
+                  const SizedBox(height: 16),
+                  _buildLabel('Cancellation Reason Description'),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: reasonController,
+                    maxLines: 3,
+                    decoration: AppTheme.inputDecoration('Why are you canceling?', Icons.cancel_presentation_outlined),
                   ),
-                ),
-                const SizedBox(height: 16),
-                _buildLabel('Cancellation Reason Description'),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: reasonController,
-                  maxLines: 3,
-                  decoration: AppTheme.inputDecoration('Why are you canceling?', Icons.cancel_presentation_outlined),
-                ),
-                const SizedBox(height: 32),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: (isSubmitting || cancellationReasonType == null)
-                        ? null
-                        : () async {
-                            setState(() => isSubmitting = true);
-                            final res = await ApiService.createCancellationRequest(
-                              orderId: order.id ?? '',
-                              orderItemId: order.items?.isNotEmpty == true ? order.items!.first.id : null,
-                              cancellationReasonType: cancellationReasonType!,
-                              reasonDescription: reasonController.text,
-                            );
-                            if (stateContext.mounted) {
-                              final messenger = ScaffoldMessenger.of(context);
-                              setState(() => isSubmitting = false);
-                              print('✅ Cancellation Success/Fail - Popping');
-                                 Navigator.pop(sheetContext);
-                              
-                              final successMsg = res.data?['message'] ?? 'Job cancelled';
-                              messenger.showSnackBar(SnackBar(
-                                content: Text(res.isSuccess ? successMsg : 'Error: ${res.error ?? "Unknown error"}', style: const TextStyle(color: Colors.white)),
-                                backgroundColor: Colors.black87,
-                              ));
-                              if (res.isSuccess) {
-                                _loadFullDetails();
+                  const SizedBox(height: 32),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: (isSubmitting || cancellationReasonType == null)
+                          ? null
+                          : () async {
+                              setState(() => isSubmitting = true);
+                              final res = await ApiService.createCancellationRequest(
+                                orderId: order.id ?? '',
+                                orderItemId: order.items?.isNotEmpty == true ? order.items!.first.id : null,
+                                cancellationReasonType: cancellationReasonType!,
+                                reasonDescription: reasonController.text,
+                              );
+                              if (stateContext.mounted) {
+                                final messenger = ScaffoldMessenger.of(context);
+                                setState(() => isSubmitting = false);
+                                   Navigator.pop(sheetContext);
+                                
+                                final successMsg = res.data?['message'] ?? 'Job cancelled';
+                                messenger.showSnackBar(SnackBar(
+                                  content: Text(res.isSuccess ? successMsg : ' ${res.error ?? "Unknown error"}', style: const TextStyle(color: Colors.white)),
+                                  backgroundColor: Colors.black87,
+                                ));
+                                if (res.isSuccess) {
+                                  _loadFullDetails();
+                                }
                               }
-                            }
-                          },
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryColor,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
-                    child: isSubmitting
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : Text('Confirm Cancellation',
-                            style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                            },
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                      child: isSubmitting
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : Text('Confirm Cancellation',
+                              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 32),
-              ],
+                  const SizedBox(height: 32),
+                ],
+              ),
             ),
-          );
+        );
         },
       ),
     );

@@ -31,7 +31,6 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
   }
 
   Future<void> _fetchProfile() async {
-    print("📡 AgentProfilePage: Fetching profile...");
     setState(() {
       _isLoading = true;
       _error = null;
@@ -40,7 +39,6 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
 
     final token = await ApiService.getAccessToken();
     if (token == null) {
-      print("❌ AgentProfilePage: No token found. Redirecting to login...");
       if (mounted) {
         context.go('/login');
       }
@@ -52,7 +50,6 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
 
     if (mounted) {
       if (result.isSuccess && result.data != null) {
-        print("✅ AgentProfilePage: Profile loaded for ${result.data!.agent.userDetails.name}");
         setState(() {
           _agentData = result.data!.agent;
            privacyUrl = appSettings?['agent_partner_privacy_policy_url'] ?? '';
@@ -60,10 +57,8 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
            supportPhone = appSettings?['support_phone'] ?? '';
            supportEmail = appSettings?['support_email'] ?? '';
           _isLoading = false;
-          print("Terms Url ${appSettings} $termsUrl");
         });
       } else {
-        print("❌ AgentProfilePage: Error loading profile: ${result.error}");
         setState(() {
           _isLoading = false;
           _error = result.error ?? "Failed to load profile";
@@ -176,11 +171,14 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
               title: "Edit Profile",
               onTap: () async {
                 if (_agentData != null) {
-                  print("🚀 AgentProfilePage: Navigating to edit-profile...");
-                  final result = await context.push('/edit-profile', extra: _agentData);
-                  print("🚀 AgentProfilePage: Returned from edit-profile with result: $result");
+                  final result = await context.push(
+                    '/edit-profile',
+                    extra: {
+                      'agentData': _agentData,
+                      'supportNumber': supportPhone ?? '',
+                    },
+                  );
                   if (result == true) {
-                    print("🔄 AgentProfilePage: Refreshing profile...");
                     _fetchProfile();
                   }
                 }

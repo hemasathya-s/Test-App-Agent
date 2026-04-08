@@ -130,7 +130,7 @@ class TrackingService {
     // Immediate first send, then every 60 seconds
     _sendLocationUpdate();
     _timer = Timer.periodic(
-      const Duration(seconds: 60),
+      const Duration(seconds: 15),
       (_) => _sendLocationUpdate(),
     );
   }

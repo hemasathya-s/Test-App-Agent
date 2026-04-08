@@ -7,10 +7,12 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/model/order_details.dart';
 import '../../../../core/services/apiservices.dart';
 import '../providers/job_provider.dart';
+import '../../../dashboard/presentation/providers/dashboard_provider.dart';
 
 class ServiceChecklistScreen extends ConsumerStatefulWidget {
   final OrderDetails order;
-  const ServiceChecklistScreen({super.key, required this.order});
+  final List<Map<String, dynamic>>? inventory;
+  const ServiceChecklistScreen({super.key, required this.order, this.inventory});
 
   @override
   ConsumerState<ServiceChecklistScreen> createState() =>
@@ -29,7 +31,6 @@ class _ServiceChecklistScreenState
     // 🔹 PRINT FULL ORDER DETAILS ON INITIALIZATION
     debugPrint('DEBUG: FULL ORDER DETAILS JSON:');
     debugPrint(jsonEncode(widget.order.toJson()));
-    
     _initializeChecklist();
   }
 
@@ -55,17 +56,28 @@ class _ServiceChecklistScreenState
     if (isOtpRequired) {
       setState(() => _isLoading = true);
       // Trigger OTP generation/sending
-      final success = await ApiService.updateJobStatus(widget.order.id!, 'COMPLETED');
+      final success = await ApiService.updateJobStatus(
+        widget.order.id!, 
+        'COMPLETED',
+        inventory: widget.inventory,
+      );
       setState(() => _isLoading = false);
 
-      if (success) {
+      if (success.isSuccess) {
         debugPrint('DEBUG: OTP triggered successfully. Showing dialog.');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('OTP sent to customer successfully!'), backgroundColor: Colors.black87),
+          );
+        }
         _showOtpDialog();
       } else {
         debugPrint('DEBUG: Failed to trigger OTP.');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to request OTP. Please try again.'), backgroundColor: Colors.black87),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(success.error ?? 'Failed to request OTP. Please try again.'), backgroundColor: Colors.black87),
+          );
+        }
       }
     } else {
       _processCompletion();
@@ -125,10 +137,26 @@ class _ServiceChecklistScreenState
     bool success;
     if (otp != null) {
       debugPrint('DEBUG: Verifying OTP: $otp');
-      success = await ApiService.verifyOrderOtp(widget.order.id!, otp);
+      success = await ApiService.verifyOrderOtp(
+        widget.order.id!, 
+        otp,
+      );
     } else {
       debugPrint('DEBUG: Completing job without OTP');
-      success = await ApiService.updateJobStatus(widget.order.id!, 'COMPLETED');
+      final response = await ApiService.updateJobStatus(
+        widget.order.id!, 
+        'COMPLETED',
+        inventory: widget.inventory,
+      );
+      success = response.isSuccess;
+      if (!success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(response.error ?? "Failed to complete job", style: GoogleFonts.outfit(color: Colors.white)),
+              backgroundColor: Colors.black87,
+            ),
+          );
+      }
     }
     
     if (mounted) {
@@ -136,19 +164,20 @@ class _ServiceChecklistScreenState
       if (success) {
         debugPrint('DEBUG: JOB COMPLETED SUCCESSFULLY');
         ref.read(jobProvider.notifier).completeJob();
+        ref.read(dashboardProvider.notifier).fetchUpcomingJobs();
         context.go('/home');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Job Completed Successfully!'), backgroundColor: Colors.black87),
         );
       } else {
         if (otp != null) {
-          print('otp failed'); // 🔹 Required print statement
+          // 🔹 Required print statement
           debugPrint('DEBUG: OTP VERIFICATION FAILED');
         } else {
           debugPrint('DEBUG: STATUS UPDATE FAILED');
         }
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to complete job. Check OTP or connection.'), backgroundColor: Colors.black87),
+          const SnackBar(content: Text('Failed to complete job. Please check OTP or connection.'), backgroundColor: Colors.black87),
         );
       }
     }

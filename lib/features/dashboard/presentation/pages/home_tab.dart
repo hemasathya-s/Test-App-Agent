@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../core/services/apiservices.dart';
 import '../providers/dashboard_provider.dart';
 import '../widgets/sos_bottom_sheet.dart';
 import '../../../../core/model/order_details.dart';
@@ -37,6 +36,27 @@ class _HomeTabState extends ConsumerState<HomeTab> {
       }
       if (state.toggleError != null) {
         _showToggleErrorDialog(context, ref, state.toggleError!);
+      }
+    });
+
+    // Listen for general dashboard errors and show as Snackbar
+    ref.listen(dashboardProvider.select((s) => s.error), (previous, next) {
+      if (next != null && next.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next, style: GoogleFonts.outfit(color: Colors.white)),
+            backgroundColor: Colors.grey,
+            behavior: SnackBarBehavior.floating,
+            // shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            // action: SnackBarAction(
+            //   label: 'Retry',
+            //   textColor: Colors.white,
+            //   onPressed: () => ref.read(dashboardProvider.notifier).fetchUpcomingJobs(),
+            // ),
+          ),
+        );
+        // Clear error so it doesn't show again on next build
+        ref.read(dashboardProvider.notifier).clearError();
       }
     });
 
@@ -205,29 +225,6 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                 child: CircularProgressIndicator(),
               ),
             )
-          else if (state.error != null)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32.0),
-                child: Column(
-                  children: [
-                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                    const SizedBox(height: 16),
-                    Text(
-                      state.error!,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.outfit(color: Colors.red),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () =>
-                          ref.read(dashboardProvider.notifier).fetchUpcomingJobs(),
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              ),
-            )
           else if (state.upcomingOrders.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 95),
@@ -266,7 +263,10 @@ class _HomeTabState extends ConsumerState<HomeTab> {
       barrierDismissible: false,
       builder: (ctx) => PopScope(
         canPop: false, // Prevent back button from closing mandatory dialog
-        child: AlertDialog(
+        child: Consumer(
+          builder: (context, ref, _) {
+            final state = ref.watch(dashboardProvider);
+            return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Text(
             'Action Required',
@@ -300,9 +300,9 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                           child: Icon(
                             p == 'Location'
                               ? Icons.location_on
-                              : p == 'Notification'
-                                ? Icons.notifications_active
-                                : Icons.battery_saver,
+                                : p == 'Notification'
+                                  ? Icons.notifications_active
+                                  : Icons.battery_saver,
                             size: 18,
                             color: AppTheme.primaryColor,
                           ),
@@ -319,11 +319,13 @@ class _HomeTabState extends ConsumerState<HomeTab> {
                                   fontSize: 16,
                                 ),
                               ),
-                              if (p == 'Location')
-                                Text(
-                                  'Enable GPS to track your job progress.',
-                                  style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey),
-                                ),
+                                  if (p == 'Location')
+                                    Text(
+                                      state.isLocationServiceEnabled 
+                                        ? 'Enable GPS to track your job progress.' 
+                                        : 'Please turn on your device GPS/Location.',
+                                      style: GoogleFonts.outfit(fontSize: 11, color: Colors.grey),
+                                    ),
                               if (p == 'Battery Optimization')
                                 Text(
                                   'Allows the app to run smoothly when the screen is off.',
@@ -358,6 +360,8 @@ class _HomeTabState extends ConsumerState<HomeTab> {
               ),
             ),
           ],
+            );
+          }
         ),
       ),
     );
@@ -564,13 +568,47 @@ class _HomeTabState extends ConsumerState<HomeTab> {
     WidgetRef ref,
     bool isAgentOnline,
   ) {
+    
+    String safeFormatDateCard(dynamic dateVal) {
+      if (dateVal == null || dateVal.toString().trim().isEmpty || dateVal == 'N/A') return 'N/A';
+      try {
+        return DateFormat('MMM d, yyyy, hh:mm a').format(DateTime.parse(dateVal.toString()));
+      } catch (e) {
+        return dateVal.toString();
+      }
+    }
+
+    Color _getStatusColor(String? status) {
+      if (status == null) return Colors.blue;
+      switch (status.toUpperCase()) {
+        case 'PENDING':
+          return Colors.orange;
+        case 'CONFIRMED':
+        case 'COMPLETED':
+        case 'SUCCESS':
+        case 'DELIVERED':
+        case 'ACCEPTED':
+          return Colors.green;
+        case 'REJECTED':
+        case 'CANCELLED':
+        case 'FAILED':
+          return Colors.red;
+        case 'IN_PROGRESS':
+        case 'ON_THE_WAY':
+        case 'OUT_FOR_DELIVERY':
+        case 'ARRIVED':
+          return Colors.blue;
+        default:
+          return Colors.blue;
+      }
+    }
+
     final title = (order.items != null && order.items!.isNotEmpty)
         ? (order.items!.first.itemDetails?.name ?? 'Unnamed Order')
         : 'Unnamed Order';
-    final time = DateFormat('MMM d, yyyy, hh:mm a').format(DateTime.parse(order.createdAt ?? ''));
+    final time = safeFormatDateCard(order.createdAt);
     final address = order.address ?? 'No Address Provided';
     final statusLabel = order.agentApproval?.toUpperCase() ?? 'PENDING';
-print("Agent Status ${order.agentApproval?.toLowerCase()}");
     String? isUrgent = order.orderStatus?.toUpperCase();
     final isPending = statusLabel == 'PENDING';
     final isRejected = statusLabel == 'REJECTED';
@@ -600,21 +638,13 @@ print("Agent Status ${order.agentApproval?.toLowerCase()}");
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: isRejected
-                      ? Colors.red.withOpacity(0.1)
-                      : isConfirmed
-                          ? Colors.green.withOpacity(0.1)
-                          : Colors.blue.withOpacity(0.1),
+                  color: _getStatusColor(isUrgent).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   isUrgent?.replaceAll('_', ' ') ?? '',
                   style: GoogleFonts.outfit(
-                    color: isRejected
-                        ? Colors.red
-                        : isConfirmed
-                            ? Colors.green
-                            : Colors.blue,
+                    color: _getStatusColor(isUrgent),
                     fontWeight: FontWeight.bold,
                     fontSize: 10,
                   ),
@@ -685,7 +715,7 @@ print("Agent Status ${order.agentApproval?.toLowerCase()}");
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: isAgentOnline ? () => _showAcceptBottomSheet(context, ref, order) : null,
+                    onPressed: isAgentOnline ? () => _showAcceptBottomSheet(context, ref, order,false) : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryColor,
                       disabledBackgroundColor: Colors.grey.shade300,
@@ -729,7 +759,7 @@ print("Agent Status ${order.agentApproval?.toLowerCase()}");
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: isAgentOnline ? () => _showAcceptBottomSheet(context, ref, order) : null,
+                onPressed: isAgentOnline ? () => _showAcceptBottomSheet(context, ref, order,isRejected) : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primaryColor,
                   disabledBackgroundColor: Colors.grey.shade300,
@@ -820,7 +850,17 @@ print("Agent Status ${order.agentApproval?.toLowerCase()}");
   }
 
   void _showAcceptBottomSheet(
-      BuildContext context, WidgetRef ref, OrderDetails order) {
+      BuildContext context, WidgetRef ref, OrderDetails order,bool isReject) {
+    
+    String safeFormatDate(dynamic dateVal) {
+      if (dateVal == null || dateVal.toString().trim().isEmpty || dateVal == 'N/A') return 'N/A';
+      try {
+        return DateFormat('MMM d, yyyy, hh:mm a').format(DateTime.parse(dateVal.toString()));
+      } catch (e) {
+        return dateVal.toString(); // Fallback to raw string if it's a time range like "23:59:00 - 01:00:00"
+      }
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -859,9 +899,9 @@ print("Agent Status ${order.agentApproval?.toLowerCase()}");
               _buildDetailItem(
                   Icons.work_outline, 'Order ID', order.id ?? 'N/A'),
               _buildDetailItem(Icons.calendar_today_outlined, 'Created At',
-                  DateFormat('MMM d, yyyy, hh:mm a').format(DateTime.parse(order.createdAt ?? 'N/A'))),
-              _buildDetailItem(Icons.location_on_outlined, 'Address',
-                  order.address ?? 'N/A'),
+                  safeFormatDate(order.createdAt)),
+              _buildDetailItem(Icons.location_on_outlined, 'Address', order.address ?? 'N/A'),
+              _buildDetailItem(Icons.access_time_rounded, 'Slot Time', safeFormatDate(order.slotTime)),
               const SizedBox(height: 24),
               Text(
                 'Order Items',
@@ -880,10 +920,21 @@ print("Agent Status ${order.agentApproval?.toLowerCase()}");
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Expanded(
-                          child: Text(
-                            '${item.itemDetails?.name ?? "Item"} x${item.quantity}',
-                            style: GoogleFonts.outfit(
-                                fontSize: 15, color: AppTheme.textPrimary),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${item.itemDetails?.name ?? "Item"} x${item.quantity}',
+                                style: GoogleFonts.outfit(
+                                    fontSize: 15, color: AppTheme.textPrimary),
+                              ),
+                              if (item.type != null)
+                                Text(
+                                  item.type!,
+                                  style: GoogleFonts.outfit(
+                                      fontSize: 12, color: AppTheme.textSecondary),
+                                ),
+                            ],
                           ),
                         ),
                         Text(
@@ -906,6 +957,7 @@ print("Agent Status ${order.agentApproval?.toLowerCase()}");
               const SizedBox(height: 32),
               Row(
                 children: [
+                  if(!isReject)
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () {

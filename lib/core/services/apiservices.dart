@@ -8,16 +8,14 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'dart:io';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:urban_agent_app/core/model/ServiceModal.dart';
 import 'package:urban_agent_app/core/model/order_details.dart';
 import 'package:urban_agent_app/core/model/agent_order_response.dart';
+import 'package:urban_agent_app/core/model/product_model.dart';
 import '../../Model/AgentRegistrationRequest.dart';
-import '../../Model/AppSettings.dart';
 import '../../Model/AuthResponse.dart';
 import '../../Model/AgentProfileResponse.dart';
 import '../../Model/LoginRequestModel.dart';
@@ -30,12 +28,12 @@ import '../../Model/Tool.dart';
 import '../model/slot_availability.dart';
 import '../model/category.dart' as cat;
 import '../../config/router.dart' as app_router;
-import '../../Model/ServiceCategory.dart';
 import '../../Model/PaginatedProductResponse.dart';
 import 'package:http_parser/http_parser.dart' as http;
-import 'package:http_parser/http_parser.dart'; // To avoid errors with MediaType
+// To avoid errors with MediaType
 
 class ApiService {
+  // static const String baseUrl = 'https://api-test.itfixer199.com';
   static const String baseUrl = 'https://api.itfixer199.com';
   static const String wsBaseUrl = "wss://api.itfixer199.com";
 
@@ -51,8 +49,6 @@ class ApiService {
           },
         ),
       );
-print("Response Body on app setting ${response.body}");
-print("Response Code pn ${response.statusCode}");
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
@@ -90,18 +86,15 @@ print("Response Code pn ${response.statusCode}");
       final accessToken =  await getAccessToken();
 
       final wsUrl = "$wsBaseUrl/ws/order/$orderId/?token=$accessToken";
-      print("WS CONNECTING → $wsUrl");
       channel = WebSocketChannel.connect(Uri.parse(wsUrl));
 
       sub = channel.stream.listen(
         (message) {
           try {
             final data = jsonDecode(message);
-            print("WS MESSAGE → $data");
             final modification = data["modification"];
             if (modification != null) {
               final status = (modification["status"] ?? "").toString().toUpperCase();
-              print("WS STATUS → $status");
               if (status == "APPROVED" || status == "APPLIED") {
                 close(true);
                 return;
@@ -110,18 +103,14 @@ print("Response Code pn ${response.statusCode}");
                 close(false);
                 return;
               }
-              print("WS PENDING → waiting...");
             }
           } catch (e) {
-            print("WS PARSE ERROR → $e");
           }
         },
         onError: (error) {
-          print("WS ERROR → $error");
           close(null);
         },
         onDone: () {
-          print("WS CLOSED BY SERVER");
           close(null);
         },
       );
@@ -131,7 +120,6 @@ print("Response Code pn ${response.statusCode}");
         channel?.sink.close();
       };
     } catch (e) {
-      print("WS CONNECT ERROR → $e");
       if (!controller.isClosed) {
         controller.addError(e);
         controller.close();
@@ -159,8 +147,6 @@ print("Response Code pn ${response.statusCode}");
         if (reason != null && reason.isNotEmpty) 'reason': reason,
       };
 
-      print('serviceAndProductModification → POST $url');
-      print('Payload: ${jsonEncode(body)}');
 
       final response = await _authorizedRequest(
         (accessToken) => http.post(
@@ -173,8 +159,6 @@ print("Response Code pn ${response.statusCode}");
         ),
       );
 
-      print('serviceAndProductModification status: ${response.statusCode}');
-      print('serviceAndProductModification body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         return true;
@@ -187,7 +171,6 @@ print("Response Code pn ${response.statusCode}");
       } catch (_) {}
       throw Exception(errorMsg);
     } catch (e) {
-      print('Error on serviceAndProductModification: $e');
       rethrow;
     }
   }
@@ -204,25 +187,20 @@ print("Response Code pn ${response.statusCode}");
       final accessToken =  getAccessToken();
 
       final wsUrl = "$wsBaseUrl/ws/api/tracking/log/?token=$accessToken";
-      print("[TRACKING] CONNECTING → $wsUrl");
       channel = WebSocketChannel.connect(Uri.parse(wsUrl));
 
       subscription = channel.stream.listen(
         (message) {
           try {
             final data = jsonDecode(message);
-            print("[TRACKING] DATA → $data");
             controller.add(data);
           } catch (e) {
-            print("[TRACKING] PARSE ERROR → $e");
           }
         },
         onError: (error) {
-          print("[TRACKING] WS ERROR → $error");
           controller.addError(error);
         },
         onDone: () {
-          print("[TRACKING] WS CLOSED");
           controller.close();
         },
       );
@@ -232,7 +210,6 @@ print("Response Code pn ${response.statusCode}");
         channel?.sink.close();
       };
     } catch (e) {
-      print("[TRACKING] CONNECT ERROR → $e");
       controller.addError(e);
       controller.close();
     }
@@ -251,9 +228,6 @@ print("Response Code pn ${response.statusCode}");
           },
         ),
       );
-     print("Url $baseUrl/api/slots/my-slots/?date=$fetchDate");
-     print("Response Data ${response.body}");
-     print("Response Code ${response.statusCode}");
      if(response.statusCode == 200){
        final dynamic decodedData = json.decode(response.body);
 
@@ -266,7 +240,6 @@ print("Response Code pn ${response.statusCode}");
          list = decodedData['data'];
        } else {
          // If it's a single object map, wrap it in a list, or return empty if unknown
-         print("Unexpected JSON format: $decodedData");
          return [];
        }
 
@@ -275,7 +248,6 @@ print("Response Code pn ${response.statusCode}");
      return [];
    }
    catch(e){
-     print("Error on get Agent Slot $e");
      return [];
    }
   }
@@ -297,7 +269,6 @@ print("Response Code pn ${response.statusCode}");
       }
       return [];
     } catch (e) {
-      print('Error fetching slots: $e');
       return [];
     }
   }
@@ -305,7 +276,6 @@ print("Response Code pn ${response.statusCode}");
   static Future<AgentOrderResponse?> agentOrder() async {
     try {
       String url = "$baseUrl/api/order/agent-orders/?is_active=true";
-      print("DEBUG: [API] Fetching Agent Orders URL: $url");
 
       final response = await _authorizedRequest(
         (accessToken) => http.get(
@@ -317,15 +287,10 @@ print("Response Code pn ${response.statusCode}");
         ),
       );
 
-      print("Response body agent order ${response.body}");
-      print("Response status code agent order ${response.statusCode}");
-      print("DEBUG: [API] Agent Orders Response Code: ${response.statusCode} and response body: ${response.body}");
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
-        print("DEBUG: [API] Agent Orders Response Body: ${jsonEncode(data)}");
         return AgentOrderResponse.fromJson(data);
       } else {
-        print("DEBUG: [API] Request Failed with status: ${response.statusCode}");
         try {
           final data = jsonDecode(response.body);
           return AgentOrderResponse.fromJson(data);
@@ -338,7 +303,6 @@ print("Response Code pn ${response.statusCode}");
         }
       }
     } catch (e) {
-      print("DEBUG: [API] Agent Order Exception: $e");
       return null;
     }
   }
@@ -350,7 +314,6 @@ print("Response Code pn ${response.statusCode}");
         url += "?start_date=$startDate";
       }
 
-      print('📡 GET Agent Orders: $url');
 
       final response = await _authorizedRequest(
         (accessToken) => http.get(
@@ -361,8 +324,6 @@ print("Response Code pn ${response.statusCode}");
           },
         ),
       );
-      print("Response Agent Order Response Body ${response.body}");
-      print("Response Agent Order Response status Code ${response.statusCode}");
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
         if (data['success'] == true && data['orders'] != null) {
@@ -391,7 +352,6 @@ print("Response Code pn ${response.statusCode}");
       } catch (_) {}
       throw Exception(errorMsg);
     } catch (e) {
-      print('❌ getAgentOrderHistory error: $e');
       rethrow;
     }
   }
@@ -451,7 +411,6 @@ print("Response Code pn ${response.statusCode}");
       {String? reason}) async {
     try {
       String url = '$baseUrl/api/order/orders/$orderID/agent-approval/';
-      print("Status of agent $status , reason $reason");
       final response = await _authorizedRequest(
         (accessToken) => http.post(
           Uri.parse(url),
@@ -466,14 +425,11 @@ print("Response Code pn ${response.statusCode}");
         ),
       );
 
-      print("Response body ${response.body}");
-      print("Response status code ${response.statusCode}");
       if (response.statusCode == 200 || response.statusCode == 201) {
         return true;
       }
       return false;
     } catch (e) {
-      print("Error on agent Approval order $e");
       return false;
     }
   }
@@ -508,8 +464,6 @@ print("Response Code pn ${response.statusCode}");
           },
         ),
       );
-print("service Response body ${response.body}");
-      print('listService [page=$page] status=${response.statusCode}');
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
@@ -535,7 +489,6 @@ print("service Response body ${response.body}");
           hasMore = list.length >= currentSize;
         }
 
-        print('listService [page=$page] count=${list.length} hasMore=$hasMore');
 
         final services = list.map((json) {
           final service = Service.fromJson(json);
@@ -546,7 +499,6 @@ print("service Response body ${response.body}");
       }
       return {'services': <ServiceModal>[], 'hasMore': false};
     } catch (e) {
-      print('Error on listService: $e');
       return {'services': <ServiceModal>[], 'hasMore': false};
     }
   }
@@ -569,8 +521,6 @@ print("service Response body ${response.body}");
           }),
         ),
       );
-      print("serviceModification status: ${response.statusCode}");
-      print("serviceModification body: ${response.body}");
       if (response.statusCode != 200 && response.statusCode != 201) {
         String errorMsg = 'Request failed (${response.statusCode})';
         try {
@@ -580,7 +530,6 @@ print("service Response body ${response.body}");
         throw Exception(errorMsg);
       }
     } catch (e) {
-      print("Error on service modification $e");
       rethrow;
     }
   }
@@ -596,8 +545,6 @@ print("service Response body ${response.body}");
           },
         ),
       );
-      print('getOrderbyId status: ${response.statusCode}');
-      print('getOrderbyId body: ${response.body}');
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         // API returns: { "success": true, "order": { ... } }
@@ -605,7 +552,6 @@ print("service Response body ${response.body}");
         return OrderDetails.fromJson(orderJson);
       }
     } catch (e) {
-      print('Error getOrderbyId: $e');
     }
     return null;
   }
@@ -613,8 +559,6 @@ print("service Response body ${response.body}");
   static Future<bool> verifyOrderOtp(String orderId, String otp) async {
     try {
       String url = '$baseUrl/api/order/orders/$orderId/verify-otp/';
-      print("DEBUG: [API] Verify OTP URL: $url");
-      print("DEBUG: [API] OTP: $otp");
 
       final response = await _authorizedRequest(
         (accessToken) => http.post(
@@ -626,21 +570,18 @@ print("service Response body ${response.body}");
           body: jsonEncode({"otp": otp}),
         ),
       );
-      print("DEBUG: [API] Verify OTP Status Code: ${response.statusCode}");
       if (response.statusCode == 200 || response.statusCode == 201 || response.statusCode == 204) {
         return true;
       }
       return false;
     } catch (e) {
-      print("DEBUG: OTP Verify Error: $e");
       return false;
     }
   }
 
-  static Future<bool> updateJobStatus(String orderId, String status, {String? otp}) async {
+  static Future<ApiResponse<bool>> updateJobStatus(String orderId, String status, {String? otp, List<Map<String, dynamic>>? inventory}) async {
     try {
       String url = '$baseUrl/api/order/orders/$orderId/update-status/';
-      print("DEBUG: [API] Request Status Update -> URL: $url");
 
       final response = await _authorizedRequest(
         (accessToken) => http.post(
@@ -652,38 +593,37 @@ print("service Response body ${response.body}");
           body: jsonEncode({
             "order_status": status,
             if (otp != null) "otp": otp,
+            if (inventory != null) "serial_numbers": inventory,
           }),
         ),
       );
-
-      print("DEBUG: [API] Status Code: ${response.statusCode}");
-      print("DEBUG: [API] Response Body: ${response.body}");
-
       if (response.statusCode == 200 || response.statusCode == 201) {
         final Map<String, dynamic> data = jsonDecode(response.body);
-        final updateStatus = data['update_status'];
-
-        // 🔹 MODIFIED: Return true if success is true, regardless of otp_required.
-        // This allows the UI to proceed to the OTP dialog if otp_required is true.
         if (data['success'] == true) {
-          print("DEBUG: [API] Request Successful. OTP sent/verified logic proceeding.");
-          return true;
+          return const ApiResponse(isSuccess: true, data: true);
         }
-        return false;
+        
+        // Return failure response with message from data
+        final String errorMessage = data['message'] ?? data['error'] ?? 'Update failed';
+        return ApiResponse(isSuccess: false, data: false, error: errorMessage);
       } else {
-        print("DEBUG: [API] Request Failed with status: ${response.statusCode}");
-        return false;
+        // Handle non-200 status codes
+        String errorMessage = "Failed to update status (${response.statusCode})";
+        try {
+          final Map<String, dynamic> data = jsonDecode(response.body);
+          errorMessage = data['message'] ?? data['error'] ?? errorMessage;
+        } catch (_) {}
+        
+        return ApiResponse(isSuccess: false, data: false, error: errorMessage);
       }
     } catch (e) {
-      print("DEBUG: [API] Error on update job status: $e");
-      return false;
+      return ApiResponse(isSuccess: false, data: false, error: "Error: ${e.toString()}");
     }
   }
 
   static Future<ApiResponse<bool?>> toggleActiveStatus() async {
     try {
       String url = '$baseUrl/api/user/toggle-active';
-      print("Calling Toggle API: $url");
 
       final response = await _authorizedRequest(
         (accessToken) => http.patch(
@@ -695,16 +635,12 @@ print("service Response body ${response.body}");
         ),
       );
 
-      print("Status Code: ${response.statusCode}");
-      print("Raw Response: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         bool? isActive = data['data']['is_active'];
-        print("Toggle Success - is_active value: $isActive");
         return ApiResponse(isSuccess: true, data: isActive);
       } else {
-        print("Toggle Failed with status code: ${response.statusCode}");
         String message = 'Failed to toggle status';
         try {
           final data = jsonDecode(response.body);
@@ -713,36 +649,28 @@ print("service Response body ${response.body}");
         return ApiResponse(isSuccess: false, error: message);
       }
     } catch (e) {
-      print("Error toggling active status: $e");
       return ApiResponse(isSuccess: false, error: e.toString());
     }
   }
   static Future<void> addFcmToken() async {
-    print("🔔 [addFcmToken] Starting token registration...");
     try {
       final token = await getAccessToken();
       if (token == null || token.isEmpty) {
-        print("🔔 [addFcmToken] Access token is NULL or EMPTY. User might not be logged in.");
         return;
       }
-      print("🔔 [addFcmToken] Getting FCM token...");
       String? fcmToken;
       try {
         fcmToken = await FirebaseMessaging.instance.getToken();
-        print("🔔 [addFcmToken] FCM Token received: $fcmToken");
       } catch (e) {
-        print("🔔 [addFcmToken] Error getting FCM token from Firebase: $e");
         return;
       }
 
       if (fcmToken == null || fcmToken.isEmpty) {
-        print("🔔 [addFcmToken] FCM token is null/empty. skipping registration.");
         return;
       }
 
       String url = '$baseUrl/api/notifications/register-fcm/';
 
-      print("🔔 [addFcmToken] Sending to API: $url");
 
       final response = await _authorizedRequest(
         (accessToken) => http.post(
@@ -757,17 +685,11 @@ print("service Response body ${response.body}");
         ),
       );
 
-      print("🔔 [addFcmToken] API Response Status: ${response.statusCode}");
-      print("🔔 [addFcmToken] API Response Body: ${response.body}");
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        print("🔔 [addFcmToken] Successfully registered token on server.");
       } else {
-        print("🔔 [addFcmToken] Server rejected token registration.");
       }
     } catch (e, stack) {
-      print("🔔 [addFcmToken] EXCEPTION: $e");
-      print("🔔 [addFcmToken] STACKTRACE: $stack");
     }
   }
   // static Future<List<LatLng>> getAgentZone() async {
@@ -809,11 +731,42 @@ print("service Response body ${response.body}");
   //
   //   return [];
   // }
+  
+  static Future<ApiResponse<MyPossessionResponse>> getProductDetails(String productId, {int page = 1, int size = 10}) async {
+    try {
+      final url = Uri.parse("$baseUrl/api/product-serial/my-possession/").replace(queryParameters: {
+        'page': page.toString(),
+        'size': size.toString(),
+       if(productId.isNotEmpty) "product_ids": productId,
+      });
+      final response = await _authorizedRequest(
+        (accessToken) => http.get(
+          url,
+          headers: {
+            "accept": "application/json",
+            "Authorization": "Bearer $accessToken",
+          },
+        ),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        return ApiResponse(isSuccess: true, data: MyPossessionResponse.fromJson(data));
+      } else {
+        String errorMsg = 'Failed to load possessions (${response.statusCode})';
+        try {
+          final data = jsonDecode(response.body);
+          errorMsg = data['message'] ?? data['detail'] ?? errorMsg;
+        } catch (_) {}
+        return ApiResponse(isSuccess: false, error: errorMsg);
+      }
+    } catch (e) {
+      log("Error on get Product Details $e");
+      return ApiResponse(isSuccess: false, error: e.toString());
+    }
+  }
   static Future<ApiResponse<List<Map<String, dynamic>>>> getAgentZones() async {
     try {
       final url = Uri.parse("$baseUrl/api/agent-zones/agent/");
-      print("ZONE API CALLING...");
-      print("URL: $url");
 
       final response = await _authorizedRequest(
         (accessToken) => http.get(
@@ -825,14 +778,11 @@ print("service Response body ${response.body}");
         ),
       );
 
-      print("ZONE STATUS: ${response.statusCode}");
-      print("ZONE BODY: ${response.body}");
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         List zones = data["data"]["zone_details"] ?? [];
 
-        print("TOTAL ZONES FOUND: ${zones.length}");
 
         final items = zones.map((zone) {
           List coords = zone["coordinates"] ?? [];
@@ -869,104 +819,30 @@ print("service Response body ${response.body}");
   }
 
 
-//   Future<AgentApiResult<AgentRegistrationResponse>> registerAgent({
-//     required AgentRegistrationRequest request,
-//     File? profileImage,
-//     File? aadharDoc,
-//     File? panCard,
-//     File? videoKyc,
-//   }) async {
-//     try {
-//       print('?? Registering agent: ${request.name}');
-//
-//       final uri = Uri.parse('$baseUrl/api/user/agent'); // ?? update endpoint if different
-//
-//       final multipartRequest = http.MultipartRequest('POST', uri)
-//         ..headers.addAll({
-//           'accept': 'application/json',
-//         });
-//
-//       // Add all text fields
-//       multipartRequest.fields.addAll(request.toFormFields());
-//
-//       // Add files if provided
-//       if (profileImage != null) {
-//         multipartRequest.files.add(await http.MultipartFile.fromPath(
-//           'profile_image',
-//           profileImage.path,
-//           contentType: http.MediaType('image', _fileExtension(profileImage.path)),
-//         ));
-//       }
-//       if (aadharDoc != null) {
-//         multipartRequest.files.add(await http.MultipartFile.fromPath(
-//           'aadhar_doc',
-//           aadharDoc.path,
-//           contentType: http.MediaType('image', _fileExtension(aadharDoc.path)),
-//         ));
-//       }
-//       if (panCard != null) {
-//         multipartRequest.files.add(await http.MultipartFile.fromPath(
-//           'pan_card',
-//           panCard.path,
-//           contentType: http.MediaType('image', _fileExtension(panCard.path)),
-//         ));
-//       }
-//       if (videoKyc != null) {
-//         multipartRequest.files.add(await http.MultipartFile.fromPath(
-//           'video_kyc',
-//           videoKyc.path,
-//           contentType: http.MediaType('video', 'mp4'),
-//         ));
-//       }
-//
-//       print('?? Fields: ${multipartRequest.fields}');
-//       print('?? Files: ${multipartRequest.files.map((f) => f.field).toList()}');
-//
-//       final streamedResponse = await multipartRequest
-//           .send()
-//           .timeout(const Duration(seconds: 30));
-//
-//       final response = await http.Response.fromStream(streamedResponse);
-//
-//       print('?? Register Agent [${response.statusCode}]: ${response.body}');
-//
-//       final json = jsonDecode(response.body);
-//
-//       if (response.statusCode == 200 || response.statusCode == 201) {
-//         final result = AgentRegistrationResponse.fromJson(json);
-//         await result.saveToPrefs(); // ? saves accessTokens automatically
-//         return AgentApiResult.success(result);
-//       }
-//
-//       // Parse error from response
-//       final errors = json['errors'] as List<dynamic>?;
-//       final errorMsg = (errors?.isNotEmpty == true)
-//           ? errors!.first.toString()
-//           : json['message']?.toString() ??
-//           json['detail']?.toString() ??
-//           'Registration failed';
-//
-//       return AgentApiResult.failure(errorMsg);
-//
-//     } on SocketException {
-//       return AgentApiResult.failure('No internet connection');
-//     } on TimeoutException {
-//       return AgentApiResult.failure('Request timed out. Please try again.');
-//     } catch (e) {
-//       print('? registerAgent error: $e');
-//       return AgentApiResult.failure('Something went wrong. Please try again.');
-//     }
-//   }
-//
-// // Helper inside ApiService
-//   String _fileExtension(String path) {
-//     final ext = path.split('.').last.toLowerCase();
-//     if (ext == 'jpg' || ext == 'jpeg') return 'jpeg';
-//     if (ext == 'png') return 'png';
-//     return 'jpeg'; // default
-//   }
+static Future<Map<String,dynamic>> getRequestDates()async{
+    try{
+      String url = "$baseUrl/api/tools/movement/requested-dates/";
 
+      final response = await _authorizedRequest(
+        (accessToken) => http.get(
+          Uri.parse(url),
+          headers: {
+            "accept": "application/json",
+            "Authorization": "Bearer $accessToken",
+          },
+        )
+      );
 
+      if(response.statusCode == 200 || response.statusCode == 201){
+        final Map<String, dynamic> jsonData = jsonDecode(response.body);
+        return jsonData['data'];
+      }
+      return {};
+    }
+    catch(e){
+      rethrow;
+    }
+}
 
   static Future<ApiResponse<PaginatedProductResponse>> listProduct({
     String? lat,
@@ -989,12 +865,9 @@ print("service Response body ${response.body}");
       }
 
       final response = await http.get(Uri.parse(url));
-      print("📦 Product List Status Code: ${response.statusCode}");
-      print("📦 Product Url: $url");
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> jsonData = jsonDecode(response.body);
-        print("📦 Product Raw Response Keys: ${jsonData.keys}");
 
         // Handle various possible keys for product list
         final List<dynamic> dataList = jsonData['products'] ?? jsonData['data'] ?? jsonData['results'] ?? [];
@@ -1003,7 +876,6 @@ print("service Response body ${response.body}");
             .toList();
 
         final pagination = jsonData['pagination'] ?? jsonData['meta'];
-        print("📦 Product Pagination Data: $pagination");
 
         final total = pagination != null ? (pagination['total_elements'] ?? pagination['total'] ?? products.length) : products.length;
         final totalPages = pagination != null ? (pagination['total_pages'] ?? pagination['last_page'] ?? 1) : 1;
@@ -1019,7 +891,6 @@ print("service Response body ${response.body}");
           hasMore = products.length >= size;
         }
 
-        print("📦 Product hasMore: $hasMore (current: $currentPageNum, totalPages: $totalPages, count: ${products.length})");
 
         return ApiResponse(
           isSuccess: true,
@@ -1035,7 +906,6 @@ print("service Response body ${response.body}");
         return ApiResponse(isSuccess: false, error: 'Failed to fetch products: ${response.statusCode}');
       }
     } catch (e) {
-      print("❌ Error on list Product: $e");
       return ApiResponse(isSuccess: false, error: 'Network error: $e');
     }
   }
@@ -1095,8 +965,6 @@ print("service Response body ${response.body}");
         File? videoKyc,
       }) async {
     try {
-      print('?? Updating agent profile: $userId');
-      print('?? Data: $updatedData');
 
       final accessToken = await getAccessToken();
       if (accessToken == null) {
@@ -1173,7 +1041,6 @@ print("service Response body ${response.body}");
           ));
         }
 
-        print('?? Sending Multipart PUT to: $uri');
         final streamedResponse = await request.send().timeout(const Duration(seconds: 300));
         final response = await http.Response.fromStream(streamedResponse);
         return _handleUpdateResponse(response);
@@ -1197,7 +1064,6 @@ print("service Response body ${response.body}");
       _showError('Request timed out. Please try again.');
       return AgentApiResult.failure('Request timed out. Please try again.');
     } catch (e, stack) {
-      print('? updateAgentProfile error: $e\n$stack');
       _showError('Something went wrong. Please try again.');
       return AgentApiResult.failure('Something went wrong. Please try again.');
     }
@@ -1212,7 +1078,6 @@ print("service Response body ${response.body}");
     try {
       json = jsonDecode(response.body);
     } catch (e) {
-      print('? Failed to decode response: ${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}');
       _showError('Server error (${response.statusCode}). Please contact support.');
       return AgentApiResult.failure('Server error (${response.statusCode}). Please contact support.');
     }
@@ -1241,7 +1106,6 @@ print("service Response body ${response.body}");
       errorMsg = 'Video size exceeded limit';
     }
 
-    print('❌ Update Error [${response.statusCode}]: $errorMsg');
     return AgentApiResult.failure(errorMsg);
   }
 
@@ -1265,7 +1129,6 @@ print("service Response body ${response.body}");
   static Future<String?> getAccessToken() async {
     final prefs = await SharedPreferences.getInstance();
     final accessToken = prefs.getString('access_token');
-    print('?? Getting Access Token: $accessToken');
     return accessToken;
   }
 
@@ -1273,7 +1136,6 @@ print("service Response body ${response.body}");
   static Future<String?> _getRefreshToken() async {
     final prefs = await SharedPreferences.getInstance();
     final accessToken = prefs.getString('refresh_token');
-    print('?? Getting Refresh Token: $accessToken');
     return accessToken;
   }
 
@@ -1302,7 +1164,6 @@ print("service Response body ${response.body}");
   }
 
   static Future<void> _handleSessionExpiry() async {
-    print('🚨 Session expired. Redirecting to login...');
     _showError('Session expired. Please login again.');
     await _clearTokens();
     // Use the global router to navigate to login
@@ -1311,10 +1172,8 @@ print("service Response body ${response.body}");
 
   static Future<bool> _refreshAccessToken() async {
     final refreshToken = await _getRefreshToken();
-    print('?? Refresh Token Used: $refreshToken');
 
     if (refreshToken == null) {
-      print('? No refresh accessToken found');
       return false;
     }
 
@@ -1329,29 +1188,23 @@ print("service Response body ${response.body}");
         }),
       );
 
-      print('?? Refresh Status: ${response.statusCode}');
-      print('?? Refresh Body: ${response.body}');
 
       if (response.statusCode == 200) {
         final jsonData = jsonDecode(response.body);
         final prefs = await SharedPreferences.getInstance();
 
         await prefs.setString('access_token', jsonData['access']);
-        print('? New Access Token Saved: ${jsonData['access']}');
 
         if (jsonData['refresh'] != null) {
           await prefs.setString('refresh_token', jsonData['refresh']);
-          print('✅ New Refresh Token Saved: ${jsonData['refresh']}');
         }
 
         return true;
       } else {
-        print('? Refresh failed. Clearing accessTokens.');
         await _clearTokens();
         return false;
       }
     } catch (e) {
-      print('? Refresh Exception: $e');
       return false;
     }
   }
@@ -1364,11 +1217,9 @@ print("service Response body ${response.body}");
   ) async {
     try {
       String? accessToken = await getAccessToken();
-      print('?? Authorized Request Using Token: $accessToken');
 
       // If no token, try to refresh immediately
       if (accessToken == null || accessToken.isEmpty) {
-        print('?? No token found. Attempting refresh...');
         final refreshed = await _refreshAccessToken();
         if (!refreshed) {
           await _handleSessionExpiry();
@@ -1383,20 +1234,16 @@ print("service Response body ${response.body}");
       }
 
       http.Response response = await request(accessToken);
-      print('?? Response Status: ${response.statusCode}');
 
       if (response.statusCode == 401) {
-        print('?? Token expired (401). Trying refresh...');
         final refreshed = await _refreshAccessToken();
 
         if (!refreshed) {
-          print('? Refresh failed. Handling session expiry.');
           await _handleSessionExpiry();
           throw Exception('Session expired');
         }
 
         accessToken = await getAccessToken();
-        print('?? Retrying with new accessToken: $accessToken');
         if (accessToken == null) {
           await _handleSessionExpiry();
           throw Exception('Session expired');
@@ -1416,7 +1263,6 @@ print("service Response body ${response.body}");
 
       return response;
     } catch (e) {
-      print('?? Authorized Request Exception: $e');
       if (e is SocketException) {
         _showError('No internet connection');
       } else if (e is TimeoutException) {
@@ -1487,7 +1333,7 @@ print("service Response body ${response.body}");
   final StreamController<Map<String, dynamic>> _wsController =
   StreamController<Map<String, dynamic>>.broadcast();
 
-  Stream<Map<String, dynamic>> get movementStream => _wsController.stream;
+  Stream<Map<String, dynamic>> get   movementStream => _wsController.stream;
 
   // Last used filters for reconnection
   String? _lastProdWsStartDate, _lastProdWsEndDate;
@@ -1540,7 +1386,6 @@ print("service Response body ${response.body}");
     try {
       final accessToken = await getAccessToken();
       if (accessToken == null) {
-        print('❌ WebSocket: No access accessToken');
         _wsIsConnecting = false;
         return;
       }
@@ -1554,36 +1399,30 @@ print("service Response body ${response.body}");
       };
 
       final uri = Uri.parse(_productwsUrl).replace(queryParameters: queryParams);
-      print('📡 WS Connecting: $uri');
       _wsChannel = WebSocketChannel.connect(uri);
       _wsSubscription = _wsChannel!.stream.listen(
             (msg) {
           _wsReconnectAttempts = 0;
           _wsIsConnecting = false;
           if (_isDisposed) return;
-          print('📦 WS Message: $msg');
           try {
             if (!_wsController.isClosed) {
               _wsController.add(jsonDecode(msg));
             }
           } catch (e) {
-            print('❌ WS parse error: $e');
           }
         },
         onError: (e) {
           _wsIsConnecting = false;
-          print('❌ WS error: $e');
           _wsReconnect();
         },
         onDone: () {
           _wsIsConnecting = false;
-          print('🔌 WS closed');
           _wsReconnect();
         },
       );
     } catch (e) {
       _wsIsConnecting = false;
-      print('❌ WS connect error: $e');
       _wsReconnect();
     }
   }
@@ -1592,8 +1431,6 @@ print("service Response body ${response.body}");
     if (_isDisposed) return;
     _wsReconnectAttempts++;
     final delay = Duration(seconds: (2 * _wsReconnectAttempts).clamp(5, 30));
-    print('🔄 WS reconnect in ${delay
-        .inSeconds}s (attempt $_wsReconnectAttempts)...');
     Future.delayed(delay, () {
       if (!_wsIsConnecting && !_isDisposed) {
         connectMovementWebSocket(
@@ -1625,7 +1462,6 @@ print("service Response body ${response.body}");
     try {
       final accessToken = await getAccessToken();
       if (accessToken == null) {
-        print('❌ Tool WebSocket: No access accessToken');
         _toolWsIsConnecting = false;
         return;
       }
@@ -1639,7 +1475,6 @@ print("service Response body ${response.body}");
       };
 
       final uri = Uri.parse(_toolWsUrl).replace(queryParameters: queryParams);
-      print('📡 Tool WS Connecting to: $uri');
 
       _toolWsChannel = WebSocketChannel.connect(uri);
       _toolWsSubscription = _toolWsChannel!.stream.listen(
@@ -1647,29 +1482,24 @@ print("service Response body ${response.body}");
           _toolWsReconnectAttempts = 0;
           _toolWsIsConnecting = false;
           if (_isDisposed) return;
-          print('📦 Tool WS Message: $msg');
           try {
             if (!_toolWsController.isClosed) {
               _toolWsController.add(jsonDecode(msg));
             }
           } catch (e) {
-            print('❌ Tool WS parse error: $e');
           }
         },
         onError: (e) {
           _toolWsIsConnecting = false;
-          print('❌ Tool WS error: $e');
           _toolWsReconnect();
         },
         onDone: () {
           _toolWsIsConnecting = false;
-          print('🔌 Tool WS closed');
           _toolWsReconnect();
         },
       );
     } catch (e) {
       _toolWsIsConnecting = false;
-      print('❌ Tool WS connect error: $e');
       _toolWsReconnect();
     }
   }
@@ -1679,8 +1509,6 @@ print("service Response body ${response.body}");
     _toolWsReconnectAttempts++;
     final delay = Duration(
         seconds: (2 * _toolWsReconnectAttempts).clamp(5, 30));
-    print('🔄 Tool WS reconnect in ${delay
-        .inSeconds}s (attempt $_toolWsReconnectAttempts)...');
     Future.delayed(delay, () {
       if (!_toolWsIsConnecting && !_isDisposed) {
         connectToolMovementWebSocket(
@@ -1745,9 +1573,6 @@ print("service Response body ${response.body}");
         );
       }
 
-      print('🔐 [UnifiedLogin] login_type : ${finalRequest.loginType}');
-      print('🔐 [UnifiedLogin] role       : ${finalRequest.role}');
-      print('🔐 [UnifiedLogin] Request body: ${finalRequest.toFormJson()}');
 
       final response = await http.post(
         Uri.parse('$baseUrl/api/unified-login'),
@@ -1758,15 +1583,12 @@ print("service Response body ${response.body}");
         body: finalRequest.toFormJson(),
       ).timeout(const Duration(seconds: 15));
 
-      print('🔐 [UnifiedLogin] Status Code : ${response.statusCode}');
-      print('🔐 [UnifiedLogin] Response    : ${response.body}');
 
       final json = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
         final authResponse = AuthResponse.fromJson(json);
         await authResponse.saveTokens();
-        print('✅ [UnifiedLogin] Success — user: ${authResponse.user?.name}, OTP: ${authResponse.otp}');
         return ApiResponse(isSuccess: true, data: authResponse, otp: authResponse.otp);
       }
 
@@ -1775,19 +1597,15 @@ print("service Response body ${response.body}");
           ? errors!.first.toString()
           : json['message']?.toString() ?? 'Login failed';
 
-      print('❌ [UnifiedLogin] Failed — error: $errorMsg');
       _showError(errorMsg);
       return ApiResponse(isSuccess: false, error: errorMsg);
     } on SocketException catch (e) {
-      print('❌ [UnifiedLogin] SocketException: $e');
       _showError('No internet connection');
       return ApiResponse(isSuccess: false, error: 'No internet connection');
     } on TimeoutException catch (e) {
-      print('❌ [UnifiedLogin] TimeoutException: $e');
       _showError('Request timed out');
       return ApiResponse(isSuccess: false, error: 'Request timed out');
     } catch (e) {
-      print('❌ [UnifiedLogin] Exception: $e');
       _showError('Something went wrong');
       return ApiResponse(isSuccess: false, error: 'Something went wrong');
     }
@@ -1801,7 +1619,6 @@ print("service Response body ${response.body}");
         role: 'AGENT',
       );
 
-      print('📲 [SendOtp] Request body  : ${jsonEncode(request.toJson())}');
 
       final response = await http.post(
         Uri.parse('$baseUrl/api/send-otp'),
@@ -1812,15 +1629,12 @@ print("service Response body ${response.body}");
         body: jsonEncode(request.toJson()),
       ).timeout(const Duration(seconds: 15));
 
-      print('📲 [SendOtp] Status Code   : ${response.statusCode}');
-      print('📲 [SendOtp] Response      : ${response.body}');
 
       final json = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
         final msg = json['message']?.toString() ?? 'OTP sent successfully';
         final receivedOtp = (json['data']?['otp'] ?? json['otp'])?.toString(); // Capture OTP
-        print('✅ [SendOtp] Success — $msg, OTP: $receivedOtp');
         return ApiResponse(isSuccess: true, data: msg, otp: receivedOtp);
       }
 
@@ -1829,19 +1643,15 @@ print("service Response body ${response.body}");
           ? errors!.first.toString()
           : json['message']?.toString() ?? 'Failed to send OTP';
 
-      print('❌ [SendOtp] Failed [${response.statusCode}] — $errorMsg');
       _showError(errorMsg);
       return ApiResponse(isSuccess: false, error: errorMsg);
     } on SocketException catch (e) {
-      print('❌ [SendOtp] SocketException: $e');
       _showError('No internet connection');
       return ApiResponse(isSuccess: false, error: 'No internet connection');
     } on TimeoutException catch (e) {
-      print('❌ [SendOtp] TimeoutException: $e');
       _showError('Request timed out');
       return ApiResponse(isSuccess: false, error: 'Request timed out');
     } catch (e) {
-      print('❌ [SendOtp] Exception: $e');
       _showError('Something went wrong');
       return ApiResponse(isSuccess: false, error: 'Something went wrong');
     }
@@ -1867,7 +1677,6 @@ print("service Response body ${response.body}");
         'ip_address': ipAddress,
       };
 
-      print('📲 [VerifyOtp] Request body : $body');
 
       final response = await http.post(
         Uri.parse('$baseUrl/api/verify-otp'),
@@ -1878,15 +1687,11 @@ print("service Response body ${response.body}");
         body: jsonEncode(body),
       ).timeout(const Duration(seconds: 15));
 
-      print('📲 [VerifyOtp] Status Code  : ${response.statusCode}');
-      print('FULL RESPONSE: ${response.body}');
 
       final json = jsonDecode(response.body) as Map<String, dynamic>;
 
       if (response.statusCode == 200) {
         // ── Deep debug: print every top-level key and its type ──────────
-        print('📲 [VerifyOtp] Top-level keys:');
-        json.forEach((k, v) => print('   "$k" → ${v.runtimeType} = $v'));
 
         // ── Try to locate user/token data at any nesting level ───────────
         // Pattern A: { "user": {...}, "tokens": {...} }  ← direct
@@ -1923,8 +1728,6 @@ print("service Response body ${response.body}");
           userMap = Map<String, dynamic>.from(json['user'] as Map);
         }
 
-        print('📲 [VerifyOtp] Resolved tokensMap : $tokensMap');
-        print('📲 [VerifyOtp] Resolved userMap   : $userMap');
 
         if (tokensMap != null) {
           final tokens = OtpTokens.fromJson(tokensMap);
@@ -1953,15 +1756,10 @@ print("service Response body ${response.body}");
             await prefs.setString('user_status', user.status);
           }
 
-          print('✅ [VerifyOtp] Success — user: ${user?.name}, role: ${user
-              ?.role}');
-          print('✅ [VerifyOtp] access_token saved: ${tokens.access}');
           return ApiResponse(isSuccess: true, data: verifyResponse);
         }
 
         // Still null after all patterns — full dump for diagnosis
-        print('⚠️ [VerifyOtp] Could not resolve tokens from 200 response.');
-        print('⚠️ [VerifyOtp] Full JSON dump: $json');
         return ApiResponse(isSuccess: false, error: 'Failed to parse response');
       }
 
@@ -1976,20 +1774,15 @@ print("service Response body ${response.body}");
         errorMsg = json['message']?.toString() ?? 'OTP verification failed';
       }
 
-      print('❌ [VerifyOtp] Failed [${response.statusCode}] — $errorMsg');
       _showError(errorMsg);
       return ApiResponse(isSuccess: false, error: errorMsg);
     } on SocketException catch (e) {
-      print('❌ [VerifyOtp] SocketException: $e');
       _showError('No internet connection');
       return ApiResponse(isSuccess: false, error: 'No internet connection');
     } on TimeoutException catch (e) {
-      print('❌ [VerifyOtp] TimeoutException: $e');
       _showError('Request timed out');
       return ApiResponse(isSuccess: false, error: 'Request timed out');
     } catch (e, stack) {
-      print('❌ [VerifyOtp] Exception: $e');
-      print('❌ [VerifyOtp] Stack: $stack');
       _showError('Something went wrong');
       return ApiResponse(isSuccess: false, error: 'Something went wrong');
     }
@@ -2012,7 +1805,6 @@ print("service Response body ${response.body}");
         };
       }
     } catch (e) {
-      print('⚠️ Device info error: $e');
     }
       return {'device_id': 'unknown', 'device_name': 'unknown'};
   }
@@ -2024,16 +1816,13 @@ print("service Response body ${response.body}");
 
       if (response.statusCode == 200) {
         final jsonData = jsonDecode(response.body);
-        print("ip address:${response.body}");
         if (jsonData['success'] == true && jsonData['data'] != null) {
           final ip = jsonData['data']['ip']?.toString() ?? '0.0.0.0';
-          print("📡 Public IP: $ip");
           return ip;
         }
       }
       return '0.0.0.0';
     } catch (e) {
-      print('⚠️ [IP Fetch] Error: $e');
     }
     return '0.0.0.0';
   }
@@ -2146,7 +1935,6 @@ print("service Response body ${response.body}");
     File? licenseDocument,
   }) async {
     try {
-      print('📝 Registering agent: ${request.name}');
 
       final uri = Uri.parse('$baseUrl/api/user/agent');
 
@@ -2207,14 +1995,10 @@ print("service Response body ${response.body}");
         ));
       }
 
-      print('📡 Sending to: $uri');
-      print('📡 Fields: ${multipartRequest.fields}');
 
       // Log file sizes for debugging
       for (var file in multipartRequest.files) {
         final length = file.length;
-        print('📡 File: ${file.field} (${file
-            .contentType}) - Size: $length bytes');
       }
 
       final streamedResponse = await multipartRequest
@@ -2222,8 +2006,6 @@ print("service Response body ${response.body}");
           .timeout(
         const Duration(seconds: 300), // Increased to 5 minutes
         onTimeout: () {
-          print(
-              '❌ TIMEOUT: $uri did not respond in 300s. Possible slow connection or large files.');
           throw TimeoutException(
               'Request timed out. Please check your internet connection or try with smaller files.');
         },
@@ -2231,8 +2013,6 @@ print("service Response body ${response.body}");
 
       final response = await http.Response.fromStream(streamedResponse);
 
-      print('📡 Status: ${response.statusCode}');
-      print('📡 Body: ${response.body}');
 
       if (response.body.isEmpty) {
         return AgentApiResult.failure('Server returned empty response');
@@ -2242,14 +2022,11 @@ print("service Response body ${response.body}");
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         if (json is Map) {
-          print('📡 Success Body Keys: ${json.keys}');
           if (json['data'] != null && json['data'] is Map) {
-            print('📡 Nested data keys: ${(json['data'] as Map).keys}');
           }
         }
         final result = AgentRegistrationResponse.fromJson(json);
         await result.saveToPrefs();
-        print('✅ Agent registered: ${result.user.name}');
         return AgentApiResult.success(result);
       }
 
@@ -2278,18 +2055,13 @@ print("service Response body ${response.body}");
         }
       }
 
-      print('❌ API Error [${ response.statusCode}]: $errorMsg');
       return AgentApiResult.failure(errorMsg);
     } on SocketException catch (e) {
-      print('❌ SocketException: $e');
       return AgentApiResult.failure(
           'No internet connection. Check your network.');
     } on TimeoutException catch (e) {
-      print('❌ TimeoutException: $e');
       return AgentApiResult.failure('Request timed out. Please try again.');
     } catch (e, stack) {
-      print('❌ registerAgent error: $e');
-      print('❌ Stack: $stack');
       return AgentApiResult.failure('Something went wrong. Please try again.');
     }
   }
@@ -2305,22 +2077,13 @@ print("service Response body ${response.body}");
             },
           ));
 
-      print('📡 getAgentProfile status: ${response.statusCode}');
-      print('📡 getAgentProfile body: ${response.body}');
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> jsonResponse = jsonDecode(response.body);
-        print("📡 Raw Response Body: ${response.body}");
 
         final user = jsonResponse['user'];
         if (user != null && user['agent_details'] != null) {
           final details = user['agent_details'];
-          print("🔍 Verification Statuses for Console Debugging:");
-          print("   - is_rc_verified: ${details['is_rc_verified']} (Type: ${details['is_rc_verified']?.runtimeType})");
-          print("   - is_license_verified: ${details['is_license_verified']} (Type: ${details['is_license_verified']?.runtimeType})");
-          print("   - is_pan_verified: ${details['is_pan_verified']} (Type: ${details['is_pan_verified']?.runtimeType})");
-          print("   - is_aadhar_verified: ${details['is_aadhar_verified']} (Type: ${details['is_aadhar_verified']?.runtimeType})");
-          print("   - is_video_kyc_verified: ${details['is_video_kyc_verified']} (Type: ${details['is_video_kyc_verified']?.runtimeType})");
         }
 
         return ApiResponse(
@@ -2335,7 +2098,6 @@ print("service Response body ${response.body}");
         error: json['message']?.toString() ?? 'Failed to fetch profile',
       );
     } catch (e) {
-      print('❌ getAgentProfile error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
     }
   }
@@ -2352,7 +2114,6 @@ print("service Response body ${response.body}");
         return AgentApiResult.success(true);
       }
 
-      print('📡 Logging out user: $userId');
 
       final response = await http.post(
         Uri.parse('$baseUrl/api/logout/$userId'),
@@ -2362,7 +2123,6 @@ print("service Response body ${response.body}");
         },
       ).timeout(const Duration(seconds: 15));
 
-      print('📡 Logout Status: ${response.statusCode}');
 
       // Clear accessTokens regardless of server response success
       await AuthResponse.clearTokens();
@@ -2372,12 +2132,9 @@ print("service Response body ${response.body}");
       } else {
         // Return success anyway because local session is cleared,
         // but maybe log the error
-        print('⚠️ Server logout failed but local accessTokens cleared: ${response
-            .body}');
         return AgentApiResult.success(true);
       }
     } catch (e) {
-      print('❌ logoutUser error: $e');
       // Still clear accessTokens locally on error
       await AuthResponse.clearTokens();
       return AgentApiResult.failure('Network error: ${e.toString()}');
@@ -2417,7 +2174,6 @@ print("service Response body ${response.body}");
 
       final uri = Uri.parse('$baseUrl/api/product').replace(
           queryParameters: queryParams);
-      print('📡 Fetching Products from: $uri');
 
       final response = await _authorizedRequest((accessToken) =>
           http.get(
@@ -2428,7 +2184,6 @@ print("service Response body ${response.body}");
             },
           )).timeout(const Duration(seconds: 30));
 
-      print('📡 Get Products Status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
@@ -2437,7 +2192,6 @@ print("service Response body ${response.body}");
         if (decoded is List) {
           raw = decoded;
         } else if (decoded is Map) {
-          print('📡 Products Response Keys: ${decoded.keys}');
           // Priority: data, results, products, items
           final data = decoded['data'] ??
               decoded['results'] ??
@@ -2458,7 +2212,6 @@ print("service Response body ${response.body}");
         }
 
         final items = raw.map((e) => Product.fromJson(e)).toList();
-        print('✅ Fetched ${items.length} products');
         return ApiResponse(isSuccess: true, data: items);
       }
 
@@ -2467,7 +2220,6 @@ print("service Response body ${response.body}");
           error: 'Failed to fetch products (${response.statusCode})'
       );
     } catch (e) {
-      print('❌ getProducts error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
     }
   }
@@ -2479,7 +2231,6 @@ print("service Response body ${response.body}");
   }) async {
     try {
       final url = Uri.parse('$baseUrl/api/product-inventory/movements/request/');
-      print('📡 Requesting Movement: $url');
 
       final response = await _authorizedRequest(
         (accessToken) => http.post(
@@ -2497,7 +2248,6 @@ print("service Response body ${response.body}");
         ),
       );
 
-      print('📡 Movement Status: ${response.statusCode}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
@@ -2516,11 +2266,9 @@ print("service Response body ${response.body}");
         } else {
           errorMsg = data['message'] ?? data['detail'] ?? errorMsg;
         }
-        print('❌ requestToolMovement error: $data');
       } catch (_) {}
       return ApiResponse(isSuccess: false, error: errorMsg);
     } catch (e) {
-      print('❌ requestProductMovement error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
     }
   }
@@ -2543,7 +2291,6 @@ print("service Response body ${response.body}");
       };
 
       final url = Uri.parse('$baseUrl/api/tools/').replace(queryParameters: queryParams);
-      print('📡 [listTools] GET: $url');
 
       final accessToken = await getAccessToken();
       final response = await http.get(url, headers: {
@@ -2551,7 +2298,6 @@ print("service Response body ${response.body}");
         'Accept': 'application/json',
       }).timeout(const Duration(seconds: 15));
 
-      print('📡 [listTools] Status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
@@ -2570,15 +2316,12 @@ print("service Response body ${response.body}");
             raw = decoded['tools'] ?? decoded['results'] ?? decoded['items'] ?? [];
           }
         }
-        print('📡 [listTools] Status Response: ${response.body}');
         final items = raw.map((e) => Tool.fromJson(e)).toList();
-        print('✅ [listTools] Fetched ${items.length} tools');
         return ApiResponse(isSuccess: true, data: items);
       }
 
       return ApiResponse(isSuccess: false, error: 'Failed to fetch tools (${response.statusCode})');
     } catch (e) {
-      print('❌ [listTools] error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
     }
   }
@@ -2594,7 +2337,6 @@ print("service Response body ${response.body}");
       };
 
       final url = Uri.parse('$baseUrl/api/tools/').replace(queryParameters: queryParams);
-      print('📡 [INVENTORY DIAGNOSTICS] GET Tools Catalog: $url');
 
       final response = await _authorizedRequest((accessToken) =>
           http.get(
@@ -2605,18 +2347,15 @@ print("service Response body ${response.body}");
             },
           )).timeout(const Duration(seconds: 15));
 
-      print('📡 [INVENTORY DIAGNOSTICS] Tools Catalog Status: ${response.statusCode}');
 
 
       if (response.statusCode == 200) {
-        print('📡 [INVENTORY DIAGNOSTICS] Tools Response: ${response.body}');
         final decoded = jsonDecode(response.body);
         List<dynamic> raw = [];
 
         if (decoded is List) {
           raw = decoded;
         } else if (decoded is Map) {
-          print('📡 Tools Response Keys: ${decoded.keys}');
           // Priority: data, results, tools, items
           final data = decoded['data'] ??
               decoded['results'] ??
@@ -2636,14 +2375,11 @@ print("service Response body ${response.body}");
         }
 
         final items = raw.map((e) => Tool.fromJson(e)).toList();
-        print('✅ Fetched ${items.length} tools');
         return ApiResponse(isSuccess: true, data: items);
       }
-      print('📡 Tools Catalog Failed: ${response.statusCode} - ${response.body}');
       return ApiResponse(isSuccess: false,
           error: 'Failed to fetch tools (${response.statusCode})');
     } catch (e) {
-      print('❌ getTools error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
     }
   }
@@ -2655,7 +2391,6 @@ print("service Response body ${response.body}");
   }) async {
     try {
       final url = Uri.parse('$baseUrl/api/tools/movement/request/');
-      print('📡 Requesting Tool Movement: $url');
 
       final response = await _authorizedRequest(
         (accessToken) => http.post(
@@ -2673,8 +2408,6 @@ print("service Response body ${response.body}");
         ),
       );
 
-      print('📡 Tool Movement Status: ${response.statusCode}');
-      print('📡 Tool Movement Status Body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
@@ -2700,11 +2433,9 @@ print("service Response body ${response.body}");
         } else {
           errorMsg = data['message'] ?? data['detail'] ?? errorMsg;
         }
-        print('❌ requestToolMovement error: $errorMsg');
       } catch (_) {}
       return ApiResponse(isSuccess: false, error: errorMsg);
     } catch (e) {
-      print('❌ requestToolMovement error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
     }
   }
@@ -2721,7 +2452,6 @@ print("service Response body ${response.body}");
       };
 
       final url = Uri.parse('$baseUrl/api/tools/my-stocks/').replace(queryParameters: queryParams);
-      print('📡 [INVENTORY DIAGNOSTICS] GET Tool Stocks: $url');
 
       final response = await _authorizedRequest(
         (accessToken) => http.get(
@@ -2733,8 +2463,6 @@ print("service Response body ${response.body}");
         ),
       );
 
-      print('📡 [INVENTORY DIAGNOSTICS] Tool Stocks Status: ${response.statusCode}');
-      print('📦 [INVENTORY DIAGNOSTICS] Tool Stocks Body: ${response.body}');
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
@@ -2764,7 +2492,6 @@ print("service Response body ${response.body}");
         }
 
         final items = raw.map((e) => ToolStock.fromJson(e)).toList();
-        print('✅ [INVENTORY DIAGNOSTICS] Parsed ${items.length} tool stocks');
         return ApiResponse(isSuccess: true, data: items);
       }
       String errorMsg = 'Tool stocks failed (${response.statusCode})';
@@ -2774,7 +2501,6 @@ print("service Response body ${response.body}");
       } catch (_) {}
       return ApiResponse(isSuccess: false, error: errorMsg);
     } catch (e) {
-      print('❌ [INVENTORY DIAGNOSTICS] getMyToolStocks error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
     }
   }
@@ -2783,7 +2509,6 @@ print("service Response body ${response.body}");
   Future<ApiResponse<List<ProductStock>>> getMyProductStocks() async {
     try {
       final url = Uri.parse('$baseUrl/api/product-inventory/my-stocks/');
-      print('📡 GET Product Stocks: $url');
 
       final response = await _authorizedRequest(
         (accessToken) => http.get(
@@ -2795,11 +2520,8 @@ print("service Response body ${response.body}");
         ),
       );
 
-      print('📡 Product Stocks Status: ${response.statusCode}');
-      print('📦 Product Stocks Body: ${response.body}');
 
       if (response.statusCode == 200) {
-        print('📦 [INVENTORY DIAGNOSTICS] Product Stocks Body: ${response.body}');
         final decoded = jsonDecode(response.body);
         List<dynamic> raw = [];
         if (decoded is List) {
@@ -2823,7 +2545,6 @@ print("service Response body ${response.body}");
         }
 
         final items = raw.map((e) => ProductStock.fromJson(e)).toList();
-        print('✅ [INVENTORY DIAGNOSTICS] Parsed ${items.length} product stocks');
         return ApiResponse(isSuccess: true, data: items);
       }
       String errorMsg = 'Product stocks failed (${response.statusCode})';
@@ -2833,7 +2554,6 @@ print("service Response body ${response.body}");
       } catch (_) {}
       return ApiResponse(isSuccess: false, error: errorMsg);
     } catch (e) {
-      print('❌ getMyProductStocks error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
     }
   }
@@ -2897,15 +2617,11 @@ print("service Response body ${response.body}");
         }
       }
 
-      print('📡 Creating Hub Service Request: $uri');
-      print('📡 Fields: ${request.fields}');
 
       final streamedResponse = await request.send().timeout(
           const Duration(seconds: 300));
       final response = await http.Response.fromStream(streamedResponse);
 
-      print('📡 Hub Service Request Status: ${response.statusCode}');
-      print('📡 Hub Service Request Body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final json = jsonDecode(response.body);
@@ -2922,7 +2638,6 @@ print("service Response body ${response.body}");
 
       return ApiResponse(isSuccess: false, error: errorMsg);
     } catch (e) {
-      print('❌ createHubServiceRequest error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
     }
   }
@@ -2955,7 +2670,6 @@ print("service Response body ${response.body}");
         "slot_change_reason_description": reasonDescription,
       };
 
-      print('📤 Slot Change Request Body: ${jsonEncode(bodyMap)}');
 
       final response = await http.post(
         Uri.parse('$baseUrl/api/request/slot-change/'),
@@ -2966,8 +2680,6 @@ print("service Response body ${response.body}");
         body: jsonEncode(bodyMap),
       );
 
-      print('📡 Slot Change Status: ${response.statusCode}');
-      print('📡 Slot Change Body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         return ApiResponse(isSuccess: true, data: jsonDecode(response.body));
@@ -2983,7 +2695,6 @@ print("service Response body ${response.body}");
       
       return ApiResponse(isSuccess: false, error: errorMsg);
     } catch (e) {
-      print('❌ createSlotChangeRequest error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
     }
   }
@@ -2996,8 +2707,6 @@ print("service Response body ${response.body}");
       }
 
       final url = Uri.parse('$baseUrl/api/request/delivery/verify-otp/$requestId/');
-      print('📡 [OTP DIAGNOSTICS] Calling Endpoint: $url');
-      print('📡 [OTP DIAGNOSTICS] Request ID: $requestId');
 
       final response = await http.post(
         url,
@@ -3008,8 +2717,6 @@ print("service Response body ${response.body}");
         body: jsonEncode({"otp": otp}),
       );
 
-      print('📡 [OTP DIAGNOSTICS] Status Code: ${response.statusCode}');
-      print('📡 [OTP DIAGNOSTICS] Raw Response: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         return ApiResponse(isSuccess: true, data: jsonDecode(response.body));
@@ -3025,7 +2732,6 @@ print("service Response body ${response.body}");
 
       return ApiResponse(isSuccess: false, error: errorMsg);
     } catch (e) {
-      print('❌ verifyRequestOtp error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
     }
   }
@@ -3043,7 +2749,6 @@ print("service Response body ${response.body}");
       }
 
       final url = Uri.parse('$baseUrl/api/request/tracking/$requestId/');
-      print('📡 Updating Hub Tracking Status: $url');
 
       final response = await http.post(
         url,
@@ -3058,8 +2763,6 @@ print("service Response body ${response.body}");
         }),
       );
 
-      print('📡 Hub Tracking Status Response: ${response.statusCode}');
-      print('📡 Hub Tracking Status Body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         return ApiResponse(isSuccess: true, data: jsonDecode(response.body));
@@ -3075,7 +2778,6 @@ print("service Response body ${response.body}");
 
       return ApiResponse(isSuccess: false, error: errorMsg);
     } catch (e) {
-      print('❌ updateHubServiceStatus error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
     }
   }
@@ -3105,8 +2807,6 @@ print("service Response body ${response.body}");
         }),
       );
 
-      print('📡 Cancellation Status: ${response.statusCode}');
-      print('📡 Cancellation Body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         return ApiResponse(isSuccess: true, data: jsonDecode(response.body));
@@ -3122,7 +2822,6 @@ print("service Response body ${response.body}");
       
       return ApiResponse(isSuccess: false, error: errorMsg);
     } catch (e) {
-      print('❌ createCancellationRequest error: $e');
       return ApiResponse(isSuccess: false, error: e.toString());
     }
   }
@@ -3140,7 +2839,6 @@ print("service Response body ${response.body}");
 
       final uri = Uri.parse(
           '$baseUrl/api/slots/available-slots/?lat=$lat&lng=$lng${agentId != null ? "&agent_id=$agentId" : ""}');
-      print('📡 Fetching Available Slots from: $uri');
 
       final response = await http.get(
         uri,
@@ -3150,8 +2848,6 @@ print("service Response body ${response.body}");
         },
       ).timeout(const Duration(seconds: 30));
 
-      print('📡 Get Slots Status: ${response.statusCode}');
-      print('📡 Get Slots Body: ${response.body}');
 
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
@@ -3196,7 +2892,6 @@ print("service Response body ${response.body}");
             'Failed to fetch slots (${response.statusCode})');
       }
     } catch (e) {
-      print('❌ Get Slots Error: $e');
       return AgentApiResult.failure('Error: $e');
     }
   }
@@ -3214,7 +2909,6 @@ print("service Response body ${response.body}");
     try {
       final token = await ApiService.getAccessToken();
       if (token == null) {
-        print('❌ Request WebSocket: No access token');
         _requestWsIsConnecting = false;
         return;
       }
@@ -3232,7 +2926,6 @@ print("service Response body ${response.body}");
       };
 
       final uri = Uri.parse('$wsBase/ws/requests/').replace(queryParameters: queryParams);
-      print('📡 Request WS Connecting: $uri');
 
       _requestWsChannel = WebSocketChannel.connect(uri);
       _requestWsSubscription = _requestWsChannel!.stream.listen(
@@ -3240,26 +2933,21 @@ print("service Response body ${response.body}");
           _requestWsReconnectAttempts = 0;
           _requestWsIsConnecting = false;
           if (_isDisposed) return;
-          print('📦 Request WS Message: $msg');
-          print('📢 Request WS Response Body: $msg');
           try {
             if (!_requestWsController.isClosed) {
               _requestWsController.add(jsonDecode(msg));
             }
           } catch (e) {
-            print('❌ Request WS parse error: $e');
           }
         },
         onError: (e) {
           _requestWsIsConnecting = false;
-          print('❌ Request WS error: $e');
           if (!_requestWsManualDisconnect) {
             _requestWsReconnect(startDate: startDate, endDate: endDate, page: page, size: size);
           }
         },
         onDone: () {
           _requestWsIsConnecting = false;
-          print('🔌 Request WS closed');
           if (!_requestWsManualDisconnect) {
             _requestWsReconnect(startDate: startDate, endDate: endDate, page: page, size: size);
           }
@@ -3267,7 +2955,6 @@ print("service Response body ${response.body}");
       );
     } catch (e) {
       _requestWsIsConnecting = false;
-      print('❌ Request WS connect error: $e');
       if (!_requestWsManualDisconnect) {
         _requestWsReconnect(startDate: startDate, endDate: endDate, page: page, size: size);
       }
@@ -3283,7 +2970,6 @@ print("service Response body ${response.body}");
     if (_isDisposed || _requestWsManualDisconnect) return;
     _requestWsReconnectAttempts++;
     final delay = Duration(seconds: (2 * _requestWsReconnectAttempts).clamp(5, 30));
-    print('🔄 Request WS reconnect in ${delay.inSeconds}s (attempt $_requestWsReconnectAttempts)...');
     Future.delayed(delay, () {
       if (!_requestWsIsConnecting && !_isDisposed && !_requestWsManualDisconnect) {
         connectRequestWebSocket(
@@ -3311,7 +2997,6 @@ print("service Response body ${response.body}");
       if (size != null) 'size': size,
     };
 
-    print('📤 Sending Request filter update: $filterMessage');
     _requestWsChannel!.sink.add(jsonEncode(filterMessage));
   }
 
