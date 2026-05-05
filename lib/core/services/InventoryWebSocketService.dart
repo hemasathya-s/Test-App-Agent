@@ -4,7 +4,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class InventoryWebSocketService {
-  static const String _wsUrl = 'wss://api.itfixer199.com/ws/movements/';
+  static const String _wsUrl = 'wss://api-test.itfixer199.com/ws/movements/';
   
   WebSocketChannel? _channel;
   bool _isConnecting = false;

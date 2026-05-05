@@ -112,7 +112,7 @@ class _ProductListPageState extends State<ProductListPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('This product is not required in the current order.', style: GoogleFonts.outfit()),
-          backgroundColor: Colors.orange,
+          backgroundColor: Colors.grey,
         ),
       );
       return;
@@ -128,15 +128,10 @@ class _ProductListPageState extends State<ProductListPage> {
             _selectionsByProduct.remove(productId);
           }
         } else {
-          // Check if we already reached the required quantity
+          // If already at limit, remove the first (oldest) selection to make room
           if (_selectionsByProduct[productId]!.length >= requiredQuantity) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('You can only select $requiredQuantity unit(s) for this product.', style: GoogleFonts.outfit()),
-                backgroundColor: Colors.black87,
-              ),
-            );
-            return;
+            final firstSelected = _selectionsByProduct[productId]!.first;
+            _selectionsByProduct[productId]!.remove(firstSelected);
           }
           _selectionsByProduct[productId]!.add(serial);
         }
@@ -311,11 +306,12 @@ class _ProductListPageState extends State<ProductListPage> {
                           ? null
                           : () {
                               final payload = _buildPayload();
-
-                              context.push('/checklist', extra: {
-                                'order': widget.order,
-                                'inventory': payload,
-                              });
+                              if(payload != null){
+                                context.push('/checklist', extra: {
+                                  'order': widget.order,
+                                  'inventory': payload,
+                                });
+                              }
                             },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.primaryColor,

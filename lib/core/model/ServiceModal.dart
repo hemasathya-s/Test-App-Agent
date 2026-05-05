@@ -233,7 +233,7 @@ class Service {
 
     // Build full URL if it's a relative path
     final String fullImageUrl = rawImageUrl.isNotEmpty && !rawImageUrl.startsWith('http')
-        ? 'https://api.itfixer199.com$rawImageUrl'
+        ? 'https://api-test.itfixer199.com$rawImageUrl'
         : rawImageUrl;
 
     // Extract price: base_price → price field → first pricing_model
@@ -440,7 +440,7 @@ class MediaFile {
   factory MediaFile.fromJson(Map<String, dynamic> json) {
     String rawUrl = json['image_url']?.toString() ?? '';
     final String fullUrl = rawUrl.isNotEmpty && !rawUrl.startsWith('http')
-        ? 'https://api.itfixer199.com$rawUrl'
+        ? 'https://api-test.itfixer199.com$rawUrl'
         : rawUrl;
 
     return MediaFile(

@@ -14,6 +14,7 @@ import '../features/dashboard/presentation/pages/AgentEditProfilePage.dart';
 import '../Model/AgentProfileResponse.dart';
 import '../features/dashboard/presentation/pages/ForceUpdateScreen.dart';
 import '../features/dashboard/presentation/pages/dashboard_shell.dart';
+import '../features/dashboard/presentation/pages/order_creation_page.dart';
 import '../features/inventory/presentation/pages/RequestInventoryPage.dart';
 import '../features/map/presentation/pages/service_area_screen.dart';
 import '../features/jobs/presentation/pages/new_job_request_screen.dart';
@@ -157,6 +158,10 @@ final router = GoRouter(
     GoRoute(
       path: '/orders',
       builder: (context, state) => const OrdersHistoryScreen(),
+    ),
+    GoRoute(
+      path: '/orders-create',
+      builder: (context, state) => const OrderCreationPage(),
     ),
     GoRoute(
       path: '/profile',

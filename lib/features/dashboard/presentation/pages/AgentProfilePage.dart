@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
@@ -201,6 +202,12 @@ class _AgentProfilePageState extends State<AgentProfilePage> {
               icon: Icons.description_outlined,
               title: "Terms and Condition",
               onTap: () => _launchURL(termsUrl ??""),
+            ),
+            _buildMenuItem(
+              context,
+              icon: HugeIcons.strokeRoundedShoppingCartCheckIn01,
+              title: "Order Creation",
+              onTap: () => context.push('/orders-create'),
             ),
             _buildMenuItem(
               context,

@@ -33,9 +33,9 @@ import 'package:http_parser/http_parser.dart' as http;
 // To avoid errors with MediaType
 
 class ApiService {
+  static const String baseUrl = 'https://api-test.itfixer199.com';
   // static const String baseUrl = 'https://api-test.itfixer199.com';
-  static const String baseUrl = 'https://api.itfixer199.com';
-  static const String wsBaseUrl = "wss://api.itfixer199.com";
+  static const String wsBaseUrl = "wss://api-test.itfixer199.com";
 
   /// Fetch global app settings like app version, play store urls, company details.
   static Future<Map<String, dynamic>?> getAppSettings() async {
@@ -731,6 +731,33 @@ class ApiService {
   //
   //   return [];
   // }
+
+  static Future<ApiResponse<bool>> createOrder(Map<String, dynamic> body) async {
+    try {
+      String url = "$baseUrl/api/order/public/order/";
+
+      final response = await _authorizedRequest(
+        (accessToken) => http.post(
+          Uri.parse(url),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $accessToken',
+          },
+          body: jsonEncode(body),
+        ),
+      );
+      print("Pass the Body ${body}");
+      print("Create Order Url $url");
+      print("Response Of Order Creation ${response.body}");
+      print("Response Of Order Status code ${response.statusCode}");
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return ApiResponse(isSuccess: true);
+      }
+      return ApiResponse(isSuccess: false, error: 'Failed to create order: ${response.statusCode}');
+    } catch (e) {
+      return ApiResponse(isSuccess: false, error: e.toString());
+    }
+  }
   
   static Future<ApiResponse<MyPossessionResponse>> getProductDetails(String productId, {int page = 1, int size = 10}) async {
     try {
@@ -853,19 +880,19 @@ static Future<Map<String,dynamic>> getRequestDates()async{
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final effectiveLat = lat ?? prefs.getDouble('user_latitude')?.toString();
-      final effectiveLng = lng ?? prefs.getDouble('user_longitude')?.toString();
+      final effectiveLat = (lat != null && lat.isNotEmpty)
+          ? lat
+          : prefs.getDouble('user_latitude')?.toString();
+      final effectiveLng = (lng != null && lng.isNotEmpty)
+          ? lng
+          : prefs.getDouble('user_longitude')?.toString();
 
       String url = "$baseUrl/api/product?include_attribute=true&include_brand=true&include_category=true&include_media=true&include_pricing=true&page=$page&size=$size";
-      if (effectiveLat != null && effectiveLng != null) {
-        url += "&lat=$effectiveLat&lng=$effectiveLng";
-      }
-      if (categoryId != null && categoryId.isNotEmpty) {
-        url += "&category_id=$categoryId";
-      }
-
+      if (effectiveLat != null && effectiveLat.isNotEmpty) url += "&lat=$effectiveLat";
+      if (effectiveLng != null && effectiveLng.isNotEmpty) url += "&lng=$effectiveLng";
+      if (categoryId != null && categoryId.isNotEmpty) url += "&category_id=$categoryId";
       final response = await http.get(Uri.parse(url));
-
+      print("Product List Url $url");
       if (response.statusCode == 200) {
         final Map<String, dynamic> jsonData = jsonDecode(response.body);
 
@@ -1214,10 +1241,11 @@ static Future<Map<String,dynamic>> getRequestDates()async{
 
   static Future<http.Response> _authorizedRequest(
     Future<http.Response> Function(String accessToken) request,
-  ) async {
+  ) async
+  {
     try {
       String? accessToken = await getAccessToken();
-
+      print("TOken Agent $accessToken");
       // If no token, try to refresh immediately
       if (accessToken == null || accessToken.isEmpty) {
         final refreshed = await _refreshAccessToken();
@@ -1325,7 +1353,7 @@ static Future<Map<String,dynamic>> getRequestDates()async{
 
   // ── WebSocket ───────────────────────────────────────────────────────────────
   // ── Product WebSocket ───────────────────────────────────────────────────────
-  static const String _productwsUrl = 'wss://api.itfixer199.com/ws/movements/';
+  static const String _productwsUrl = 'wss://api-test.itfixer199.com/ws/movements/';
   WebSocketChannel? _wsChannel;
   StreamSubscription? _wsSubscription;
   bool _wsIsConnecting = false;
@@ -1340,7 +1368,7 @@ static Future<Map<String,dynamic>> getRequestDates()async{
   int? _lastProdWsPage, _lastProdWsSize;
 
   // ── Tool WebSocket ──────────────────────────────────────────────────────────
-  static const String _toolWsUrl = 'wss://api.itfixer199.com/ws/tool-movements/';
+  static const String _toolWsUrl = 'wss://api-test.itfixer199.com/ws/tool-movements/';
   WebSocketChannel? _toolWsChannel;
   StreamSubscription? _toolWsSubscription;
   bool _toolWsIsConnecting = false;
@@ -2297,8 +2325,6 @@ static Future<Map<String,dynamic>> getRequestDates()async{
         'Authorization': 'Bearer $accessToken',
         'Accept': 'application/json',
       }).timeout(const Duration(seconds: 15));
-
-
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         List<dynamic> raw = [];

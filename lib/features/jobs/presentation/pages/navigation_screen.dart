@@ -753,11 +753,18 @@ class _NavigationScreenState extends ConsumerState<NavigationScreen>
                       _buildMainButton("START NAVIGATION", _startTracking, AppTheme.primaryColor)
                     else if (currentStatus == 'IN_TRANSIT')
                       _buildMainButton(isNearDestination ? "ARRIVED" : "MOVING TO LOCATION...", isNearDestination ? () => ApiService.updateJobStatus(currentOrderId!, 'IN_PROGRESS').then((s) => s.isSuccess ? setState(() => currentStatus = 'IN_PROGRESS') : null) : null, isNearDestination ? Colors.blue : Colors.grey)
-                    else if (currentStatus == 'IN_PROGRESS'&& isNearDestination)
-                        _buildMainButton("COMPLETE CHECKLIST", () {
-                          jobController.arriveAtLocation();
+                    else if (currentStatus == 'IN_PROGRESS')
+                      _buildMainButton("COMPLETE CHECKLIST", () {
+                        jobController.arriveAtLocation();
+                        final hasProduct = widget.order.items
+                                ?.any((item) => item.type == 'PRODUCT') ??
+                            false;
+                        if (hasProduct) {
+                          context.push('/product-serial', extra: widget.order);
+                        } else {
                           context.push('/checklist', extra: widget.order);
-                        }, Colors.orange)
+                        }
+                      }, Colors.orange)
                       else if (isCompleted)
                           _buildMainButton("COMPLETED", null, Colors.green),
                   ],

@@ -40,6 +40,7 @@ dependencies:
   video_player: ^2.10.1
   chewie: ^1.13.0
   video_compress: ^3.1.4
+  razorpay_flutter: ^1.4.4
 
 dev_dependencies:
   flutter_test:

@@ -50,7 +50,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
   final _accountNumberController = TextEditingController();
   final _ifscController = TextEditingController();
   final _upiIdController = TextEditingController();
- // final _alternateNumberController = TextEditingController();
+  // final _alternateNumberController = TextEditingController();
   final _vehicleNumberController = TextEditingController();
   final _rcBookNumberController  = TextEditingController();
   final _licenseNumberController = TextEditingController();
@@ -110,11 +110,11 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
     _accountNumberController.dispose();
     _ifscController.dispose();
     _upiIdController.dispose();
-   // _alternateNumberController.dispose();
+    // _alternateNumberController.dispose();
     _vehicleNumberController.dispose();
     _rcBookNumberController.dispose();
     _licenseNumberController.dispose();
-   // _dlExpiryController.dispose();
+    // _dlExpiryController.dispose();
     super.dispose();
   }
 
@@ -123,10 +123,10 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Discard Changes?', 
-          style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+        title: Text('Discard Changes?',
+            style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
         content: Text('You have unsaved information. Leaving now will discard your changes.',
-          style: GoogleFonts.outfit()),
+            style: GoogleFonts.outfit()),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -202,11 +202,11 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
 
     final XFile? picked = isImage
         ? await _picker.pickImage(
-            source: source,
-            imageQuality: 80,
-            maxWidth: 1024,
-            maxHeight: 1024,
-          )
+      source: source,
+      imageQuality: 80,
+      maxWidth: 1024,
+      maxHeight: 1024,
+    )
         : await _picker.pickVideo(source: source);
 
     if (picked != null) onPicked(File(picked.path));
@@ -381,7 +381,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
       upiId: _upiIdController.text.trim(),
       vehicleNumber: _vehicleNumberController.text.trim(),
       vehicleType: _vehicleType,
-      rcNumber: _rcBookNumberController.text.trim(),
+      rcNumber: _vehicleNumberController.text.trim(),
       licenseNumber: _licenseNumberController.text.trim(),
       // dlExpiryDate: _dlExpiryController.text.trim(),
     );
@@ -452,7 +452,7 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg, style: _labelStyle.copyWith(color: Colors.white)),
-        backgroundColor: Colors.black87,
+        backgroundColor: _orangeDark,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
@@ -484,138 +484,138 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
               }
             },
           ),
-        title: Text(
-          'Agent Registration',
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.w700,
-            fontSize: 20,
-            color: Colors.white,
+          title: Text(
+            'Agent Registration',
+            style: GoogleFonts.outfit(
+              fontWeight: FontWeight.w700,
+              fontSize: 20,
+              color: Colors.white,
+            ),
           ),
-        ),
-        centerTitle: true,
-        backgroundColor: _orange,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [_orangeDark, _orange],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+          centerTitle: true,
+          backgroundColor: _orange,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [_orangeDark, _orange],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
             ),
           ),
         ),
-      ),
-      body: CustomScrollView(
-        controller: _scrollController,
-        slivers: [
-          SliverToBoxAdapter(
-            child: Form(
-              key: _formKey,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
-                child: Column(
-                  children: [
-                    // ── Profile Image (Top Circle) ──────────────────
-                    Center(
-                      child: Stack(
-                        children: [
-                          Container(
-                            width: 110,
-                            height: 110,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 4),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.1),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                              color: Colors.grey[100],
-                            ),
-                            child: _profileImage != null
-                                ? ClipOval(
-                              child: Image.file(_profileImage!,
-                                  fit: BoxFit.cover),
-                            )
-                                : Icon(Icons.person_rounded,
-                                size: 60, color: Colors.grey[400]),
-                          ),
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: GestureDetector(
-                              onTap: () => _pickFile(
-                                isImage: true,
-                                onPicked: (f) =>
-                                    setState(() => _profileImage = f),
+        body: CustomScrollView(
+          controller: _scrollController,
+          slivers: [
+            SliverToBoxAdapter(
+              child: Form(
+                key: _formKey,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+                  child: Column(
+                    children: [
+                      // ── Profile Image (Top Circle) ──────────────────
+                      Center(
+                        child: Stack(
+                          children: [
+                            Container(
+                              width: 110,
+                              height: 110,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 4),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.1),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                                color: Colors.grey[100],
                               ),
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: const BoxDecoration(
-                                  color: _orange,
-                                  shape: BoxShape.circle,
+                              child: _profileImage != null
+                                  ? ClipOval(
+                                child: Image.file(_profileImage!,
+                                    fit: BoxFit.cover),
+                              )
+                                  : Icon(Icons.person_rounded,
+                                  size: 60, color: Colors.grey[400]),
+                            ),
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: GestureDetector(
+                                onTap: () => _pickFile(
+                                  isImage: true,
+                                  onPicked: (f) =>
+                                      setState(() => _profileImage = f),
                                 ),
-                                child: const Icon(
-                                  Icons.camera_alt_rounded,
-                                  color: Colors.white,
-                                  size: 20,
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: const BoxDecoration(
+                                    color: _orange,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.camera_alt_rounded,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    // ── 1. Basic Information ────────────────────────
-                    _sectionCard(
-                      icon: Icons.person_rounded,
-                      title: 'Basic Information',
-                      color: const Color(0xFF5C6BC0),
-                      children: [
-                        _field(
-                          fieldKey: _keyName,
-                          controller: _nameController,
-                          label: 'Full Name *',
-                          icon: Icons.badge_outlined,
-                          validator: (v) =>
-                          v!.isEmpty ? 'Name is required' : null,
-                        ),
-                        const SizedBox(height: 16),
-                        _field(
-                          fieldKey: _keyEmail,
-                          controller: _emailController,
-                          label: 'Email Address *',
-                          icon: Icons.email_outlined,
-                          keyboardType: TextInputType.emailAddress,
-                          validator: (v) {
-                            if (v!.isEmpty) return 'Email is required';
-                            if (!RegExp(r'^[\w-.]+@([\w-]+\.)+[\w]{2,4}$')
-                                .hasMatch(v)) return 'Enter a valid email';
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        _field(
-                          fieldKey: _keyMobile,
-                          controller: _mobileController,
-                          label: 'Mobile Number *',
-                          icon: Icons.phone_outlined,
-                          keyboardType: TextInputType.phone,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(10),
                           ],
-                          validator: (v) {
-                            if (v!.isEmpty) return 'Mobile number is required';
-                            if (v.length != 10) return 'Must be 10 digits';
-                            return null;
-                          },
                         ),
-                       /* const SizedBox(height: 16),
+                      ),
+                      const SizedBox(height: 24),
+                      // ── 1. Basic Information ────────────────────────
+                      _sectionCard(
+                        icon: Icons.person_rounded,
+                        title: 'Basic Information',
+                        color: const Color(0xFF5C6BC0),
+                        children: [
+                          _field(
+                            fieldKey: _keyName,
+                            controller: _nameController,
+                            label: 'Full Name *',
+                            icon: Icons.badge_outlined,
+                            validator: (v) =>
+                            v!.isEmpty ? 'Name is required' : null,
+                          ),
+                          const SizedBox(height: 16),
+                          _field(
+                            fieldKey: _keyEmail,
+                            controller: _emailController,
+                            label: 'Email Address *',
+                            icon: Icons.email_outlined,
+                            keyboardType: TextInputType.emailAddress,
+                            validator: (v) {
+                              if (v!.isEmpty) return 'Email is required';
+                              if (!RegExp(r'^[\w-.]+@([\w-]+\.)+[\w]{2,4}$')
+                                  .hasMatch(v)) return 'Enter a valid email';
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          _field(
+                            fieldKey: _keyMobile,
+                            controller: _mobileController,
+                            label: 'Mobile Number *',
+                            icon: Icons.phone_outlined,
+                            keyboardType: TextInputType.phone,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(10),
+                            ],
+                            validator: (v) {
+                              if (v!.isEmpty) return 'Mobile number is required';
+                              if (v.length != 10) return 'Must be 10 digits';
+                              return null;
+                            },
+                          ),
+                          /* const SizedBox(height: 16),
                         _field(
                           controller: _alternateNumberController,
                           label: 'Alternate Number (Optional)',
@@ -631,150 +631,155 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                             return null;
                           },
                         ), */
-                        const SizedBox(height: 16),
-                        _field(
-                          fieldKey: _keyPassword,
-                          controller: _passwordController,
-                          label: 'Password *',
-                          icon: Icons.lock_outline_rounded,
-                          obscureText: _obscurePassword,
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_outlined,
-                              color: Colors.grey[500],
-                              size: 20,
+                          const SizedBox(height: 16),
+                          _field(
+                            fieldKey: _keyPassword,
+                            controller: _passwordController,
+                            label: 'Password *',
+                            icon: Icons.lock_outline_rounded,
+                            obscureText: _obscurePassword,
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_off_outlined
+                                    : Icons.visibility_outlined,
+                                color: Colors.grey[500],
+                                size: 20,
+                              ),
+                              onPressed: () => setState(
+                                      () => _obscurePassword = !_obscurePassword),
                             ),
-                            onPressed: () => setState(
-                                    () => _obscurePassword = !_obscurePassword),
+                            inputFormatters: [LengthLimitingTextInputFormatter(10)],
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return 'Password is required';
+                              if (v.length != 10) return 'Password must be 10 characters';
+                              return null;
+                            },
                           ),
-                          inputFormatters: [LengthLimitingTextInputFormatter(10)],
-                          validator: (v) {
-                            if (v == null || v.isEmpty) return 'Password is required';
-                            if (v.length != 10) return 'Password must be 10 characters';
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        _field(
-                          fieldKey: _keyConfirmPass,
-                          controller: _confirmPasswordController,
-                          label: 'Confirm Password *',
-                          icon: Icons.lock_outline_rounded,
-                          obscureText: _obscureConfirm,
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscureConfirm
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_outlined,
-                              color: Colors.grey[500],
-                              size: 20,
+                          const SizedBox(height: 16),
+                          _field(
+                            fieldKey: _keyConfirmPass,
+                            controller: _confirmPasswordController,
+                            label: 'Confirm Password *',
+                            icon: Icons.lock_outline_rounded,
+                            obscureText: _obscureConfirm,
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscureConfirm
+                                    ? Icons.visibility_off_outlined
+                                    : Icons.visibility_outlined,
+                                color: Colors.grey[500],
+                                size: 20,
+                              ),
+                              onPressed: () => setState(
+                                      () => _obscureConfirm = !_obscureConfirm),
                             ),
-                            onPressed: () => setState(
-                                    () => _obscureConfirm = !_obscureConfirm),
+                            inputFormatters: [LengthLimitingTextInputFormatter(10)],
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return 'Please confirm password';
+                              if (v.length != 10) return 'Password must be 10 characters';
+                              if (v != _passwordController.text)
+                                return 'Passwords do not match';
+                              return null;
+                            },
                           ),
-                          inputFormatters: [LengthLimitingTextInputFormatter(10)],
-                          validator: (v) {
-                            if (v == null || v.isEmpty) return 'Please confirm password';
-                            if (v.length != 10) return 'Password must be 10 characters';
-                            if (v != _passwordController.text)
-                              return 'Passwords do not match';
-                            return null;
-                          },
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
 
-                    const SizedBox(height: 16),
+                      const SizedBox(height: 16),
 
-                    // ── 2. Vehicle Details ──────────────────────────
-                    _sectionCard(
-                      icon: Icons.directions_bike_rounded,
-                      title: 'Vehicle Details',
-                      color: Colors.orange.shade800,
-                      children: [
-                        _labelText('Vehicle Type *'),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            _typeChip(
-                              label: '2 Wheeler',
-                              icon: Icons.directions_bike_rounded,
-                              selected: _vehicleType == '2_WHEELER',
-                              onTap: () =>
-                                  setState(() => _vehicleType = '2_WHEELER'),
-                            ),
-                            const SizedBox(width: 12),
-                            _typeChip(
-                              label: '4 Wheeler',
-                              icon: Icons.directions_car_rounded,
-                              selected: _vehicleType == '4_WHEELER',
-                              onTap: () =>
-                                  setState(() => _vehicleType = '4_WHEELER'),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        _field(
-                          fieldKey: _keyVehicleNumber,
-                          controller: _vehicleNumberController,
-                          label: 'Vehicle Number *',
-                          icon: Icons.numbers_rounded,
-                          inputFormatters: [
-                            _UpperCaseTextFormatter(),
-                            LengthLimitingTextInputFormatter(12),
-                          ],
-                          validator: (v) {
-                            if (v == null || v.isEmpty) return 'Vehicle number is required';
-                            final reg = RegExp(r'^[A-Z]{2}\s?[0-9]{2}\s?[A-Z]{1,2}\s?[0-9]{4}$');
-                            if (!reg.hasMatch(v.trim())) {
-                              return 'Format: TN 01 AB 1234';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        _field(
-                          fieldKey: _keyRcBookNumber,
-                          controller: _rcBookNumberController,
-                          label: 'RC Book Number *',
-                          icon: Icons.article_outlined,
-                          inputFormatters: [
-                            _UpperCaseTextFormatter(),
-                            LengthLimitingTextInputFormatter(20),
-                          ],
-                          validator: (v) {
-                            if (v == null || v.isEmpty) return 'RC Book number is required';
-                            final reg = RegExp(r'^[A-Z]{2}[0-9]{2}[A-Z0-9]{4,12}$');
-                            if (!reg.hasMatch(v.trim())) {
-                              return 'Enter valid RC format (e.g. TN0120230001234)';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        _field(
-                          fieldKey: _keyLicenseNumber,
-                          controller: _licenseNumberController,
-                          label: 'License Number *',
-                          icon: Icons.badge_outlined,
-                          inputFormatters: [
-                            _UpperCaseTextFormatter(),
-                            LengthLimitingTextInputFormatter(20),
-                          ],
-                          validator: (v) {
-                            if (v == null || v.isEmpty) return 'License number is required';
-                            // Format: State(2) + RTO(2) + Year(4) + Number(7) = 15 chars
-                            final reg = RegExp(r'^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$');
-                            if (!reg.hasMatch(v.trim())) {
-                              return 'Format: TN0120190001234';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 20),
-                        /* const SizedBox(height: 16),
+                      // ── 2. Vehicle Details ──────────────────────────
+                      _sectionCard(
+                        icon: Icons.directions_bike_rounded,
+                        title: 'Vehicle Details',
+                        color: Colors.orange.shade800,
+                        children: [
+                          _labelText('Vehicle Type *'),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              _typeChip(
+                                label: '2 Wheeler',
+                                icon: Icons.directions_bike_rounded,
+                                selected: _vehicleType == '2_WHEELER',
+                                onTap: () =>
+                                    setState(() => _vehicleType = '2_WHEELER'),
+                              ),
+                              const SizedBox(width: 12),
+                              _typeChip(
+                                label: '4 Wheeler',
+                                icon: Icons.directions_car_rounded,
+                                selected: _vehicleType == '4_WHEELER',
+                                onTap: () =>
+                                    setState(() => _vehicleType = '4_WHEELER'),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          _field(
+                            fieldKey: _keyVehicleNumber,
+                            controller: _vehicleNumberController,
+                            label: 'Vehicle Number *',
+                            icon: Icons.numbers_rounded,
+                            inputFormatters: [
+                              _UpperCaseTextFormatter(),
+                              FilteringTextInputFormatter.allow(RegExp(r'[A-Z0-9 ]')),
+                              TextInputFormatter.withFunction((oldValue, newValue) {
+                                final hasSpace = newValue.text.contains(' ');
+                                final maxLength = hasSpace ? 13 : 10;
+                                if (newValue.text.length > maxLength) {
+                                  return oldValue; // reject, keep old value
+                                }
+                                return newValue;
+                              }),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          // _field(
+                          //   fieldKey: _keyRcBookNumber,
+                          //   controller: _rcBookNumberController,
+                          //   label: 'RC Book Number *',
+                          //   icon: Icons.article_outlined,
+                          //   inputFormatters: [
+                          //     _UpperCaseTextFormatter(),
+                          //     LengthLimitingTextInputFormatter(20),
+                          //   ],
+                          //   validator: (v) {
+                          //     if (v == null || v.isEmpty) return 'RC Book number is required';
+                          //     final reg = RegExp(r'^[A-Z]{2}[0-9]{2}[A-Z0-9]{4,12}$');
+                          //     if (!reg.hasMatch(v.trim())) {
+                          //       return 'Enter valid RC format (e.g. TN0120230001234)';
+                          //     }
+                          //     return null;
+                          //   },
+                          // ),
+                          // const SizedBox(height: 16),
+                          _field(
+                            fieldKey: _keyLicenseNumber,
+                            controller: _licenseNumberController,
+                            label: 'License Number *',
+                            icon: Icons.badge_outlined,
+                            inputFormatters: [
+                              _LicenseNumberFormatter(),
+                              LengthLimitingTextInputFormatter(18),
+                            ],
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return 'License number is required';
+                              // Standard format: SS RR YYYY NNNNNNN (15 chars total)
+                              // We strip spaces and hyphens before validation
+                              final stripped = v.replaceAll(RegExp(r'[\s-]'), '').toUpperCase();
+                              
+                              // Regex: State(2 letters) + RTO(2 alphanumeric) + Year(4 digits) + Serial(7 digits)
+                              final reg = RegExp(r'^[A-Z]{2}[A-Z0-9]{2}[0-9]{4}[0-9]{7}$');
+                              
+                              if (!reg.hasMatch(stripped)) {
+                                return 'Format: TN0120190001234';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 10),
+                          /* const SizedBox(height: 16),
                         GestureDetector(
                           onTap: _pickDlExpiry,
                           child: AbsorbPointer(
@@ -787,175 +792,178 @@ class _AgentRegistrationPageState extends State<AgentRegistrationPage> {
                             ),
                           ),
                         ), */
-                      ],
-                    ),
+                        ],
+                      ),
 
-                    const SizedBox(height: 16),
+                      const SizedBox(height: 16),
 
-                    // ── 3. Bank Details ─────────────────────────────
-                    _sectionCard(
-                      icon: Icons.account_balance_rounded,
-                      title: 'Bank Details',
-                      color: const Color(0xFF26A69A),
-                      children: [
-                        _labelText('Bank Name'),
-                        const SizedBox(height: 8),
-                        _field(
-                          fieldKey: _keyBankName,
-                          controller: _bankNameController,
-                          label: 'Bank Name',
-                          icon: Icons.business_rounded,
-                          validator: (v) =>
-                          v!.isEmpty ? 'Enter bank name' : null,
-                        ),
-                        const SizedBox(height: 16),
-                        _labelText('Account Number'),
-                        const SizedBox(height: 8),
-                        _field(
-                          fieldKey: _keyAccountNumber,
-                          controller: _accountNumberController,
-                          label: 'Account Number',
-                          icon: Icons.numbers_rounded,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly
-                          ],
-                          validator: (v) {
-                            if (v == null || v.isEmpty) return 'Enter account number';
-                            if (!RegExp(r'^[0-9]{9,18}$').hasMatch(v.trim())) {
-                              return 'Enter 9 to 18 numeric digits';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        _labelText('IFSC Code'),
-                        const SizedBox(height: 8),
-                        _field(
-                          fieldKey: _keyIfsc,
-                          controller: _ifscController,
-                          label: 'IFSC Code',
-                          icon: Icons.code_rounded,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.allow(
-                                RegExp(r'[A-Za-z0-9]')),
-                            LengthLimitingTextInputFormatter(11),
-                            _UpperCaseTextFormatter(),
-                          ],
-                          validator: (v) {
-                            if (v == null || v.isEmpty) return 'Enter IFSC code';
-                            final reg = RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$');
-                            if (!reg.hasMatch(v.toUpperCase().trim())) {
-                              return 'Format: SBIN0001234';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        _labelText('UPI ID'),
-                        const SizedBox(height: 8),
-                        _field(
-                          fieldKey: _keyUpiId,
-                          controller: _upiIdController,
-                          label: 'UPI ID (e.g. name@upi)',
-                          icon: Icons.account_balance_wallet_rounded,
-                          keyboardType: TextInputType.emailAddress,
-                          validator: (v) {
-                            if (v == null || v.isEmpty) return 'Enter UPI ID';
-                            final reg = RegExp(r'^[\w\.\-]{2,256}@[a-zA-Z]{2,64}$');
-                            if (!reg.hasMatch(v.trim())) {
-                              return 'Format: username@bankname';
-                            }
-                            return null;
-                          },
-                        ),
-
-
-                      ],
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // ── 4. Documents & KYC ──────────────────────────
-                    _sectionCard(
-                      icon: Icons.folder_rounded,
-                      title: 'Documents & KYC',
-                      color: _orange,
-                      children: [
-                        _uploadTile(
-                          label: 'Aadhaar Document *',
-                          subtitle: 'JPG / PNG — Front & back',
-                          icon: Icons.credit_card_rounded,
-                          file: _aadharDoc,
-                          isVideo: false,
-                          onTap: () => _pickFile(
-                            isImage: true,
-                            onPicked: (f) => setState(() => _aadharDoc = f),
+                      // ── 3. Bank Details ─────────────────────────────
+                      _sectionCard(
+                        icon: Icons.account_balance_rounded,
+                        title: 'Bank Details',
+                        color: const Color(0xFF26A69A),
+                        children: [
+                          _labelText('Bank Name'),
+                          const SizedBox(height: 8),
+                          _field(
+                            fieldKey: _keyBankName,
+                            controller: _bankNameController,
+                            label: 'Bank Name',
+                            icon: Icons.business_rounded,
+                            validator: (v) =>
+                            v!.isEmpty ? 'Enter bank name' : null,
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        _uploadTile(
-                          label: 'RC Book Image *',
-                          subtitle: 'JPG / PNG — Front page',
-                          icon: Icons.article_rounded,
-                          file: _rcBookImage,
-                          isVideo: false,
-                          onTap: () => _pickFile(
-                            isImage: true,
-                            onPicked: (f) => setState(() => _rcBookImage = f),
+                          const SizedBox(height: 16),
+                          _labelText('Account Number'),
+                          const SizedBox(height: 8),
+                          _field(
+                            fieldKey: _keyAccountNumber,
+                            controller: _accountNumberController,
+                            label: 'Account Number',
+                            icon: Icons.numbers_rounded,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              LengthLimitingTextInputFormatter(18), // ← ADD THIS
+                            ],
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return 'Enter account number';
+                              if (v.trim().length < 9) return 'Minimum 9 digits required';
+                              if (v.trim().length > 18) return 'Maximum 18 digits allowed';
+                              if (!RegExp(r'^[0-9]{9,18}$').hasMatch(v.trim())) {
+                                return 'Only digits allowed (9–18)';
+                              }
+                              return null;
+                            },
                           ),
-                        ),
+                          const SizedBox(height: 16),
+                          _labelText('IFSC Code'),
+                          const SizedBox(height: 8),
+                          _field(
+                            fieldKey: _keyIfsc,
+                            controller: _ifscController,
+                            label: 'IFSC Code',
+                            icon: Icons.code_rounded,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                  RegExp(r'[A-Za-z0-9]')),
+                              LengthLimitingTextInputFormatter(11),
+                              _UpperCaseTextFormatter(),
+                            ],
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return 'Enter IFSC code';
+                              final reg = RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$');
+                              if (!reg.hasMatch(v.toUpperCase().trim())) {
+                                return 'Format: SBIN0001234';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          _labelText('UPI ID'),
+                          const SizedBox(height: 8),
+                          _field(
+                            fieldKey: _keyUpiId,
+                            controller: _upiIdController,
+                            label: 'UPI ID (e.g. name@upi)',
+                            icon: Icons.account_balance_wallet_rounded,
+                            keyboardType: TextInputType.emailAddress,
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return 'Enter UPI ID';
+                              final reg = RegExp(r'^[\w\.\-]{2,256}@[a-zA-Z]{2,64}$');
+                              if (!reg.hasMatch(v.trim())) {
+                                return 'Format: username@bankname';
+                              }
+                              return null;
+                            },
+                          ),
 
-                        const SizedBox(height: 12),
-                        _uploadTile(
-                          label: 'Driving License Image *',
-                          subtitle: 'JPG / PNG — Front & back',
-                          icon: Icons.drive_eta_rounded,
-                          file: _licenseImage,
-                          isVideo: false,
-                          onTap: () => _pickFile(
-                            isImage: true,
-                            onPicked: (f) => setState(() => _licenseImage = f),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _uploadTile(
-                          label: 'PAN Card *',
-                          subtitle: 'JPG / PNG — Clear scan',
-                          icon: Icons.badge_rounded,
-                          file: _panCard,
-                          isVideo: false,
-                          onTap: () => _pickFile(
-                            isImage: true,
-                            onPicked: (f) => setState(() => _panCard = f),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _uploadTile(
-                          label: 'Video KYC (Optional)',
-                          subtitle: 'MP4 — Short selfie video',
-                          icon: Icons.videocam_rounded,
-                          file: _videoKyc,
-                          isVideo: true,
-                          onTap: () => _pickFile(
-                            isImage: false,
-                            onPicked: (f) => setState(() => _videoKyc = f),
-                          ),
-                        ),
-                      ],
-                    ),
 
-                    const SizedBox(height: 28),
+                        ],
+                      ),
 
-                    // ── Submit Button ───────────────────────────────
-                    _submitButton(),
-                  ],
+                      const SizedBox(height: 16),
+
+                      // ── 4. Documents & KYC ──────────────────────────
+                      _sectionCard(
+                        icon: Icons.folder_rounded,
+                        title: 'Documents & KYC',
+                        color: _orange,
+                        children: [
+                          _uploadTile(
+                            label: 'Aadhaar Document *',
+                            subtitle: 'JPG / PNG — Front & back',
+                            icon: Icons.credit_card_rounded,
+                            file: _aadharDoc,
+                            isVideo: false,
+                            onTap: () => _pickFile(
+                              isImage: true,
+                              onPicked: (f) => setState(() => _aadharDoc = f),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _uploadTile(
+                            label: 'RC Book Image *',
+                            subtitle: 'JPG / PNG — Front page',
+                            icon: Icons.article_rounded,
+                            file: _rcBookImage,
+                            isVideo: false,
+                            onTap: () => _pickFile(
+                              isImage: true,
+                              onPicked: (f) => setState(() => _rcBookImage = f),
+                            ),
+                          ),
+
+                          const SizedBox(height: 12),
+                          _uploadTile(
+                            label: 'Driving License Image *',
+                            subtitle: 'JPG / PNG — Front & back',
+                            icon: Icons.drive_eta_rounded,
+                            file: _licenseImage,
+                            isVideo: false,
+                            onTap: () => _pickFile(
+                              isImage: true,
+                              onPicked: (f) => setState(() => _licenseImage = f),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _uploadTile(
+                            label: 'PAN Card *',
+                            subtitle: 'JPG / PNG — Clear scan',
+                            icon: Icons.badge_rounded,
+                            file: _panCard,
+                            isVideo: false,
+                            onTap: () => _pickFile(
+                              isImage: true,
+                              onPicked: (f) => setState(() => _panCard = f),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _uploadTile(
+                            label: 'Video KYC (Optional)',
+                            subtitle: 'MP4 — Short selfie video',
+                            icon: Icons.videocam_rounded,
+                            file: _videoKyc,
+                            isVideo: true,
+                            onTap: () => _pickFile(
+                              isImage: false,
+                              onPicked: (f) => setState(() => _videoKyc = f),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 28),
+
+                      // ── Submit Button ───────────────────────────────
+                      _submitButton(),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
@@ -1303,5 +1311,23 @@ class _UpperCaseTextFormatter extends TextInputFormatter {
       TextEditingValue newValue,
       ) {
     return newValue.copyWith(text: newValue.text.toUpperCase());
+  }
+}
+
+class _LicenseNumberFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    String text = newValue.text.toUpperCase();
+    
+    // Only allow alphanumeric, spaces, and hyphens
+    text = text.replaceAll(RegExp(r'[^A-Z0-9\s-]'), '');
+    
+    return newValue.copyWith(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
   }
 }

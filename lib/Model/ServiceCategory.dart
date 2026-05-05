@@ -55,7 +55,7 @@ class ServiceCategory {
       if (url.startsWith('http')) {
         return url;
       }
-      return "https://api.itfixer199.com$url";
+      return "https://api-test.itfixer199.com$url";
     }
     return '';
   }
